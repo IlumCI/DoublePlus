@@ -17,7 +17,7 @@ import { TradesList } from "../components/TradesList";
 import { Button, EmptyState, Skeleton } from "../components/ui";
 import { client, v4Client } from "../lib/client";
 import { env } from "../lib/env";
-import { compact, fmtTokens, fmtUsd, fmtWei, fmtWeiUsd, shortAddr, timeAgo, usdRateOf } from "../lib/format";
+import { compact, fmtTokens, fmtUsd, fmtWei, fmtWeiUsd, shortAddr, usdRateOf } from "../lib/format";
 import { ensureSdkWallet, errorText, useWallet } from "../lib/useWallet";
 import { stockOf } from "../lib/v4/stocks";
 import { useUi } from "../store";
@@ -399,13 +399,6 @@ function InfoTab({ t, meta, extra }: { t: any; meta: any; extra: Extra | null })
     { label: "DexScreener", url: `https://dexscreener.com/search?q=${t.address}` },
   ].filter((l) => l.url && !isSelfLink(l.url));
 
-  const taxBps = extra?.taxBps ?? Number(t.feeTier);
-  const facts: { label: string; value: string }[] = [
-    { label: "Total supply", value: fmtTokens(t.totalSupply) },
-    { label: "Trade tax", value: isFinite(taxBps) ? `${(taxBps / 100).toFixed(taxBps % 100 ? 1 : 0)}%` : "—" },
-    { label: "Launched", value: timeAgo(t.createdAt) },
-  ];
-
   return (
     <div className="space-y-4">
       {meta.description ? (
@@ -413,7 +406,7 @@ function InfoTab({ t, meta, extra }: { t: any; meta: any; extra: Extra | null })
       ) : null}
 
       {links.length > 0 ? (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-4">
           {links.map((l) => (
             <a
               key={l.label + l.url}
@@ -431,47 +424,7 @@ function InfoTab({ t, meta, extra }: { t: any; meta: any; extra: Extra | null })
           ))}
         </div>
       ) : null}
-
-      <dl className="flex flex-wrap gap-x-8 gap-y-3">
-        {facts.map((f) => (
-          <div key={f.label}>
-            <dt className="text-[10px] uppercase tracking-wide text-ink-3">{f.label}</dt>
-            <dd className="mono mt-0.5 text-[13px] font-semibold text-ink">{f.value}</dd>
-          </div>
-        ))}
-      </dl>
-
-      <div className="space-y-2 border-t border-edge pt-3">
-        <CopyRow label="Creator" value={t.creator} />
-        <CopyRow label="Liquidity pool" value={t.pool} />
-      </div>
     </div>
   );
 }
 
-function CopyRow({ label, value }: { label: string; value: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <div className="flex items-center justify-between gap-3">
-      <div className="min-w-0">
-        <p className="text-[10px] uppercase tracking-wide text-ink-3">{label}</p>
-        <p className="mono truncate text-[12.5px] text-ink-2">{value}</p>
-      </div>
-      <button
-        onClick={() => {
-          navigator.clipboard.writeText(value).then(() => {
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1500);
-          });
-        }}
-        aria-label={`Copy ${label}`}
-        title={copied ? "Copied" : "Copy"}
-        className={`grid h-7 w-7 shrink-0 place-items-center rounded-md transition-colors ${
-          copied ? "text-up" : "text-ink-3 hover:text-ink"
-        }`}
-      >
-        <Icon name={copied ? "verified" : "copy"} size={14} />
-      </button>
-    </div>
-  );
-}
