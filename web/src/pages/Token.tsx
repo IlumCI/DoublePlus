@@ -107,7 +107,6 @@ export function TokenPage() {
           {/* Info header */}
           <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1.5 border-b border-edge px-4 py-2.5">
             <div className="flex items-center gap-2">
-              <span className="dot-live h-2 w-2 rounded-full bg-accent" />
               <span className="text-[13px] font-bold tracking-tight text-ink">Market cap</span>
             </div>
             <div className="flex items-center gap-x-5">
@@ -131,7 +130,6 @@ export function TokenPage() {
       {/* Recent trades */}
       <section className="mt-6">
         <div className="mb-2 flex items-center gap-2">
-          <span className="dot-live h-2 w-2 rounded-full bg-accent" />
           <h2 className="text-[14px] font-bold tracking-tight text-ink">Recent trades</h2>
         </div>
         <div className="overflow-hidden rounded-2xl border border-edge bg-panel">
