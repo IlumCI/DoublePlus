@@ -97,42 +97,42 @@ export function LaunchPage() {
   const selectedStock = STOCKS.find((s) => s.address === stock)!;
 
   return (
-    <div className="mx-auto max-w-xl px-4 py-10 sm:px-6">
-      <h1 className="text-[32px] font-bold leading-tight tracking-tight text-ink">Launch a token</h1>
-      <p className="mt-2 text-[15px] text-ink-2">
-        Free to launch. One transaction mints your token, opens a live Uniswap V4 market, and seeds
-        the full supply. Every trade rewards holders with the stock you choose.
+    <div className="mx-auto max-w-lg px-4 pb-16 pt-5 sm:px-5">
+      <h1 className="text-[18px] font-bold tracking-tight text-ink">Launch a token</h1>
+      <p className="mt-1 text-[12.5px] leading-relaxed text-ink-2">
+        One transaction mints your token, opens a live market and seeds the full supply. Every trade
+        rewards holders with the stock you pick.
       </p>
 
-      <form onSubmit={submit} className="mt-8 space-y-6 rounded-3xl border border-edge bg-panel p-6 shadow-[var(--shadow-card)]">
+      <form onSubmit={submit} className="mt-4 space-y-4 rounded-xl border border-edge bg-panel p-4">
         {/* Logo + identity */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <input ref={fileRef} type="file" accept="image/*" className="hidden"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) onLogoFile(f); }} />
           <button type="button" onClick={() => fileRef.current?.click()}
-            className="group grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-2xl border border-edge bg-panel-2 transition-colors hover:border-edge-2"
+            className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-lg border border-edge bg-panel-2 transition-colors hover:border-edge-2"
             aria-label="Upload logo">
             {logoData ? (
               <img src={logoData} alt="" className="h-full w-full object-cover" />
             ) : (
-              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" className="text-ink-3" aria-hidden>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" className="text-ink-3" aria-hidden>
                 <path d="M12 16V5m0 0l-4 4m4-4l4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
                 <path d="M4 17.5V19a1.5 1.5 0 001.5 1.5h13A1.5 1.5 0 0020 19v-1.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
               </svg>
             )}
           </button>
           <div>
-            <p className="text-[14px] font-semibold text-ink">Token logo</p>
-            <p className="mt-0.5 text-[13px] text-ink-3">
-              PNG or JPG, stored on-chain.{" "}
+            <p className="text-[13px] font-semibold text-ink">Logo</p>
+            <p className="mt-0.5 text-[11.5px] text-ink-3">
+              PNG / JPG.{" "}
               {logoData ? (
-                <button type="button" className="font-medium text-accent-2 underline underline-offset-2" onClick={() => setLogoData("")}>Remove</button>
+                <button type="button" className="font-medium text-accent underline underline-offset-2" onClick={() => setLogoData("")}>Remove</button>
               ) : null}
             </p>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-[1fr_150px]">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_130px]">
           <Field label="Token name">
             <input className={inputClass} value={form.name} onChange={set("name")} placeholder="My Token" required maxLength={48} />
           </Field>
@@ -142,62 +142,56 @@ export function LaunchPage() {
         </div>
 
         <Field label="Description">
-          <textarea className={`${inputClass} min-h-24 resize-y`} value={form.description} onChange={set("description")}
+          <textarea className={`${inputClass} min-h-20 resize-y`} value={form.description} onChange={set("description")}
             placeholder="What is this token about?" maxLength={500} />
         </Field>
 
         {/* Reward stock picker */}
         <div>
-          <label className="mb-1.5 block text-[13px] font-semibold text-ink">Holders earn</label>
-          <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+          <label className="mb-1.5 block text-[12.5px] font-medium text-ink">
+            Holders earn <span className="text-ink-3">· {selectedStock.symbol}</span>
+          </label>
+          <div className="grid grid-cols-5 gap-1.5">
             {STOCKS.map((s) => (
               <button
                 type="button"
                 key={s.address}
                 onClick={() => setStock(s.address)}
-                className={`rounded-xl border px-2 py-2.5 text-center transition-all ${
-                  stock === s.address
-                    ? "border-accent bg-accent/[0.06] ring-1 ring-accent/40"
-                    : "border-edge bg-panel hover:border-edge-2"
+                title={s.name}
+                className={`rounded-lg border py-2 text-center text-[12px] font-bold transition-colors ${
+                  stock === s.address ? "border-accent bg-accent/10 text-accent" : "border-edge text-ink-2 hover:border-edge-2 hover:text-ink"
                 }`}
               >
-                <span className="block text-[13px] font-bold text-ink">{s.symbol}</span>
-                <span className="block truncate text-[10px] text-ink-3">{s.name}</span>
+                {s.symbol}
               </button>
             ))}
           </div>
-          <p className="mt-2 text-[12px] text-ink-3">
-            Holders of your token auto-earn <span className="font-semibold text-ink-2">{selectedStock.name} ({selectedStock.symbol})</span> from every trade, by how much they hold.
-          </p>
         </div>
 
         {/* Tax slider */}
         <div>
           <div className="mb-2 flex items-baseline justify-between">
-            <label className="text-[13px] font-semibold text-ink">Trade tax</label>
-            <span className="tnum text-[15px] font-bold text-accent-2">{taxPct}%</span>
+            <label className="text-[12.5px] font-medium text-ink">Trade tax</label>
+            <span className="tnum text-[13px] font-bold text-accent">{taxPct}%</span>
           </div>
           <input type="range" min={0} max={10} step={1} value={taxPct} onChange={(e) => setTaxPct(Number(e.target.value))}
             className="w-full accent-[color:var(--color-accent)]" />
-          <p className="mt-2 text-[12px] text-ink-3">
-            Split 4 ways: creator, holder stock rewards, buyback &amp; burn, protocol.
-          </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
-          <Field label="Twitter / X"><input className={inputClass} value={form.twitter} onChange={set("twitter")} placeholder="x.com/…" /></Field>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <Field label="X"><input className={inputClass} value={form.twitter} onChange={set("twitter")} placeholder="x.com/…" /></Field>
           <Field label="Telegram"><input className={inputClass} value={form.telegram} onChange={set("telegram")} placeholder="t.me/…" /></Field>
           <Field label="Website"><input className={inputClass} value={form.website} onChange={set("website")} placeholder="https://" /></Field>
         </div>
 
-        <dl className="space-y-2.5 border-t border-edge pt-5 text-[14px]">
+        <dl className="space-y-1.5 border-t border-edge pt-3 text-[12px]">
           <Row label="Starting market cap" value="$5,000" />
           <Row label="Supply" value="1,000,000,000" />
-          <Row label="Anti-whale" value="2% max wallet · 2% max tx" />
+          <Row label="Anti-whale" value="2% max wallet · tx" />
         </dl>
 
         <button type="submit" disabled={busy}
-          className="w-full rounded-full bg-accent py-4 text-[16px] font-semibold text-white transition-colors hover:bg-accent-2 disabled:cursor-not-allowed disabled:bg-panel-2 disabled:text-ink-3">
+          className="h-11 w-full rounded-lg bg-accent text-[14px] font-semibold text-white transition-colors hover:bg-accent-2 disabled:cursor-not-allowed disabled:bg-panel-2 disabled:text-ink-3">
           {busy ? "Confirm in wallet…" : isConnected ? "Launch token" : "Connect wallet to launch"}
         </button>
       </form>
@@ -208,8 +202,8 @@ export function LaunchPage() {
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between">
-      <dt className="text-ink-2">{label}</dt>
-      <dd className="font-semibold text-ink">{value}</dd>
+      <dt className="text-ink-3">{label}</dt>
+      <dd className="tnum font-medium text-ink-2">{value}</dd>
     </div>
   );
 }
