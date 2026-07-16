@@ -229,9 +229,6 @@ export function TradePanel({ token }: { token: TokenSummary }) {
         </button>
       )}
 
-      <p className="text-center text-[10.5px] text-ink-3">
-        {taxBps > 0 ? `${(taxBps / 100).toFixed(taxBps % 100 ? 1 : 0)}% trade tax · split to holders, creator, buyback & protocol` : "No trade tax"}
-      </p>
     </div>
   );
 }
