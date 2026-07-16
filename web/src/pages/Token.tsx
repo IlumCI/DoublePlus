@@ -91,12 +91,12 @@ export function TokenPage() {
             <CaChip address={t.address as Address} />
             {rewardStock ? <RewardPill stock={extra!.stock} /> : null}
           </div>
-          <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            {meta.website ? <LinkPill href={String(meta.website)}>Website</LinkPill> : null}
-            {env.explorerUrl ? <LinkPill href={`${env.explorerUrl.replace(/\/$/, "")}/token/${t.address}`}>Scan</LinkPill> : null}
-            <LinkPill href={`https://dexscreener.com/search?q=${t.address}`}>DexScreener</LinkPill>
-          </div>
         </div>
+      </section>
+
+      {/* About — description, links, facts, creator & pool */}
+      <section className="mt-4 overflow-hidden rounded-2xl border border-edge bg-panel">
+        <InfoTab t={t} meta={meta} extra={extra} />
       </section>
 
       <div className="mt-3 space-y-2.5">
@@ -129,11 +129,6 @@ export function TokenPage() {
         <div>
           <TradePanel token={t} />
         </div>
-      </section>
-
-      {/* About — always visible, its own container */}
-      <section className="mt-6 overflow-hidden rounded-2xl border border-edge bg-panel">
-        <InfoTab t={t} meta={meta} extra={extra} />
       </section>
 
       {/* Detail — trades / holders */}
@@ -198,21 +193,6 @@ function HeadStat({ label, node, accent }: { label: string; node: React.ReactNod
       <p className="text-[9px] uppercase tracking-wide text-ink-3">{label}</p>
       <p className={`mono text-[13px] font-bold leading-tight ${accent ? "text-accent" : "text-ink"}`}>{node}</p>
     </div>
-  );
-}
-
-/** A small outlined link pill (Website / Scan / DexScreener). */
-function LinkPill({ href, children }: { href: string; children: React.ReactNode }) {
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noreferrer"
-      className="inline-flex items-center gap-1 rounded-md border border-edge bg-panel-2 px-2 py-0.5 text-[11px] font-medium text-ink-2 transition-colors hover:border-edge-2 hover:text-ink"
-    >
-      {children}
-      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" aria-hidden><path d="M7 17L17 7M9 7h8v8" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-    </a>
   );
 }
 
@@ -409,13 +389,14 @@ function InfoTab({ t, meta, extra }: { t: any; meta: any; extra: Extra | null })
       return false;
     }
   };
+  const explorer = env.explorerUrl ? env.explorerUrl.replace(/\/$/, "") : "";
   const links: { label: string; url?: string }[] = [
     { label: "Website", url: meta.website },
     { label: "X", url: meta.twitter },
     { label: "Telegram", url: meta.telegram },
     ...(meta.links ?? []),
-    // Every token gets a DexScreener link automatically via its pool.
-    { label: "DexScreener", url: `https://dexscreener.com/robinhood/${t.pool}` },
+    explorer ? { label: "Scan", url: `${explorer}/token/${t.address}` } : { label: "Scan" },
+    { label: "DexScreener", url: `https://dexscreener.com/search?q=${t.address}` },
   ].filter((l) => l.url && !isSelfLink(l.url));
 
   const taxBps = extra?.taxBps ?? Number(t.feeTier);
