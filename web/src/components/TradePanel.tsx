@@ -10,8 +10,6 @@ import { useUi } from "../store";
 
 type Side = "buy" | "sell";
 
-const FEE = 0.01; // fixed 1%, paid to the creator
-
 // Quick-buy amounts in native currency, launchpad style.
 const BUY_PRESETS = ["0.01", "0.05", "0.1", "0.5"];
 
@@ -57,17 +55,20 @@ export function TradePanel({ token }: { token: TokenSummary }) {
     }
   }, [amount]);
 
+  const taxBps = Number(token.feeTier) || 0;
+  const feeRate = taxBps / 10000;
+
   const estimate = useMemo(() => {
     if (!parsedAmount || parsedAmount === 0n) return null;
     const price = Number(token.priceWei) / 1e18;
     if (price <= 0) return null;
     if (side === "buy") {
       const nativeIn = Number(parsedAmount) / 1e18;
-      return `~ ${compact((nativeIn * (1 - FEE)) / price)} ${token.symbol}`;
+      return `~ ${compact((nativeIn * (1 - feeRate)) / price)} ${token.symbol}`;
     }
     const tokensIn = Number(parsedAmount) / 1e18;
-    return `~ ${(tokensIn * price * (1 - FEE)).toFixed(6)} ${env.nativeSymbol}`;
-  }, [parsedAmount, side, token.priceWei, token.symbol]);
+    return `~ ${(tokensIn * price * (1 - feeRate)).toFixed(6)} ${env.nativeSymbol}`;
+  }, [parsedAmount, side, token.priceWei, token.symbol, feeRate]);
 
   const setPct = (pct: number) => {
     if (side === "sell" && tokenBalance != null) {
@@ -106,18 +107,20 @@ export function TradePanel({ token }: { token: TokenSummary }) {
     ((side === "buy" && nativeBalance != null && parsedAmount > nativeBalance) ||
       (side === "sell" && tokenBalance != null && parsedAmount > tokenBalance));
 
+  const balance = side === "buy" ? nativeBalance : tokenBalance;
+
   return (
-    <div className="flex h-fit flex-col gap-4 rounded-xl border border-edge bg-panel p-4 shadow-[var(--shadow-card)]">
-      <div className="grid grid-cols-2 rounded-full bg-panel-2 p-1">
+    <div className="flex h-fit flex-col gap-3 rounded-xl border border-edge bg-panel p-3">
+      {/* Buy / Sell toggle */}
+      <div className="grid grid-cols-2 gap-1">
         {(["buy", "sell"] as Side[]).map((s) => (
           <button
             key={s}
-            onClick={() => {
-              setSide(s);
-              setAmount("");
-            }}
-            className={`h-9 rounded-full text-sm font-semibold capitalize transition-colors ${
-              side === s ? (s === "buy" ? "bg-up text-white" : "bg-down text-white") : "text-ink-2 hover:text-ink"
+            onClick={() => { setSide(s); setAmount(""); }}
+            className={`h-8 rounded-lg text-[13px] font-semibold capitalize transition-colors ${
+              side === s
+                ? s === "buy" ? "bg-up text-white" : "bg-down text-white"
+                : "bg-panel-2 text-ink-2 hover:text-ink"
             }`}
           >
             {s}
@@ -125,20 +128,12 @@ export function TradePanel({ token }: { token: TokenSummary }) {
         ))}
       </div>
 
-      <div>
-        <div className="mb-1.5 flex items-baseline justify-between text-xs">
-          <span className="font-medium text-ink-2">
-            {side === "buy" ? `Amount (${env.nativeSymbol})` : `Amount (${token.symbol})`}
-          </span>
+      {/* Amount */}
+      <div className="rounded-lg border border-edge bg-panel-2/40 px-3 py-2.5">
+        <div className="mb-1 flex items-baseline justify-between text-[10.5px]">
+          <span className="text-ink-3">{side === "buy" ? env.nativeSymbol : token.symbol}</span>
           <button className="tnum text-ink-3 transition-colors hover:text-ink" onClick={() => setPct(100)}>
-            Balance{" "}
-            {side === "buy"
-              ? nativeBalance != null
-                ? fmtWei(nativeBalance)
-                : "0"
-              : tokenBalance != null
-                ? fmtWei(tokenBalance)
-                : "0"}
+            Bal {balance != null ? fmtWei(balance) : "0"}
           </button>
         </div>
         <input
@@ -146,41 +141,34 @@ export function TradePanel({ token }: { token: TokenSummary }) {
           onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))}
           placeholder="0.0"
           inputMode="decimal"
-          className="mono w-full rounded-lg border border-edge bg-panel px-3.5 py-3 text-lg text-ink outline-none transition-colors placeholder:text-ink-3 focus:border-edge-2"
+          className="mono w-full bg-transparent text-[18px] text-ink outline-none placeholder:text-ink-3"
         />
-        <div className="mt-2 grid grid-cols-4 gap-1.5">
-          {side === "buy"
-            ? BUY_PRESETS.map((v) => (
-                <button
-                  key={v}
-                  onClick={() => setAmount(v)}
-                  className="tnum h-8 rounded-full border border-edge text-xs font-medium text-ink-2 transition-colors hover:border-edge-2 hover:text-ink"
-                >
-                  {v}
-                </button>
-              ))
-            : [25, 50, 75, 100].map((pct) => (
-                <button
-                  key={pct}
-                  onClick={() => setPct(pct)}
-                  className="h-8 rounded-full border border-edge text-xs font-medium text-ink-2 transition-colors hover:border-edge-2 hover:text-ink"
-                >
-                  {pct === 100 ? "Max" : `${pct}%`}
-                </button>
-              ))}
-        </div>
       </div>
 
-      <div className="flex items-center justify-between text-xs">
+      {/* Presets */}
+      <div className="grid grid-cols-4 gap-1">
+        {(side === "buy" ? BUY_PRESETS : ["25", "50", "75", "Max"]).map((v, i) => (
+          <button
+            key={v}
+            onClick={() => (side === "buy" ? setAmount(v) : setPct([25, 50, 75, 100][i]))}
+            className="tnum h-7 rounded-md border border-edge text-[11px] font-medium text-ink-2 transition-colors hover:border-edge-2 hover:text-ink"
+          >
+            {v}
+          </button>
+        ))}
+      </div>
+
+      {/* Estimate */}
+      <div className="flex items-center justify-between text-[11px]">
         <span className="text-ink-3">You receive</span>
-        <span className="tnum font-semibold text-ink">{estimate ?? "-"}</span>
+        <span className="tnum font-semibold text-ink">{estimate ?? "—"}</span>
       </div>
 
       {isConnected ? (
         <button
           onClick={submit}
           disabled={busy || !parsedAmount || parsedAmount === 0n || Boolean(insufficientFunds)}
-          className={`h-12 rounded-full text-[15px] font-semibold transition-colors disabled:cursor-not-allowed disabled:bg-panel-2 disabled:text-ink-3 ${
+          className={`h-11 rounded-lg text-[14px] font-semibold transition-colors disabled:cursor-not-allowed disabled:bg-panel-2 disabled:text-ink-3 ${
             side === "buy" ? "bg-up text-white hover:brightness-110" : "bg-down text-white hover:brightness-105"
           }`}
         >
@@ -195,13 +183,15 @@ export function TradePanel({ token }: { token: TokenSummary }) {
       ) : (
         <button
           onClick={connectFirst}
-          className="h-12 rounded-full bg-accent text-[15px] font-semibold text-white transition-colors hover:bg-accent-2"
+          className="h-11 rounded-lg bg-accent text-[14px] font-semibold text-white transition-colors hover:bg-accent-2"
         >
           Connect Wallet
         </button>
       )}
 
-      <p className="text-center text-[11px] text-ink-3">1% trading fee, paid to the token creator</p>
+      <p className="text-center text-[10.5px] text-ink-3">
+        {taxBps > 0 ? `${(taxBps / 100).toFixed(taxBps % 100 ? 1 : 0)}% trade tax · split to holders, creator, buyback & protocol` : "No trade tax"}
+      </p>
     </div>
   );
 }
