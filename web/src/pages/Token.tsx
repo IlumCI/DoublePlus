@@ -94,8 +94,8 @@ export function TokenPage() {
         </div>
       </section>
 
-      {/* About — description, links, facts, creator & pool */}
-      <section className="mt-4 overflow-hidden rounded-2xl border border-edge bg-panel">
+      {/* About — description, links, facts, creator & pool (no container) */}
+      <section className="mt-4">
         <InfoTab t={t} meta={meta} extra={extra} />
       </section>
 
@@ -400,30 +400,17 @@ function InfoTab({ t, meta, extra }: { t: any; meta: any; extra: Extra | null })
   ].filter((l) => l.url && !isSelfLink(l.url));
 
   const taxBps = extra?.taxBps ?? Number(t.feeTier);
-  const rewardStock = extra ? stockOf(extra.stock) : undefined;
   const facts: { label: string; value: string }[] = [
     { label: "Total supply", value: fmtTokens(t.totalSupply) },
     { label: "Trade tax", value: isFinite(taxBps) ? `${(taxBps / 100).toFixed(taxBps % 100 ? 1 : 0)}%` : "—" },
-    { label: "Holders earn", value: rewardStock ? rewardStock.symbol : "—" },
     { label: "Launched", value: timeAgo(t.createdAt) },
   ];
 
   return (
-    <div className="space-y-4 p-3">
+    <div className="space-y-4">
       {meta.description ? (
         <p className="text-[13px] leading-6 text-ink-2">{meta.description}</p>
-      ) : (
-        <p className="text-[13px] italic leading-6 text-ink-3">No description provided.</p>
-      )}
-
-      <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-edge bg-edge">
-        {facts.map((f) => (
-          <div key={f.label} className="bg-panel-2/40 px-3 py-2.5">
-            <dt className="text-[10px] uppercase tracking-wide text-ink-3">{f.label}</dt>
-            <dd className="mono mt-0.5 text-[13px] font-semibold text-ink">{f.value}</dd>
-          </div>
-        ))}
-      </dl>
+      ) : null}
 
       {links.length > 0 ? (
         <div className="flex flex-wrap gap-2">
@@ -434,7 +421,7 @@ function InfoTab({ t, meta, extra }: { t: any; meta: any; extra: Extra | null })
               target="_blank"
               rel="noreferrer"
               title={l.label}
-              className="flex items-center gap-2 rounded-md border border-edge bg-panel px-2.5 py-1.5 text-[12px] font-medium text-ink-2 transition-colors hover:border-edge-2 hover:text-ink"
+              className="flex items-center gap-1.5 text-[12px] font-medium text-ink-2 transition-colors hover:text-ink"
             >
               <span className="grid h-4 w-4 place-items-center text-ink-2">
                 {socialIcons[l.label] ?? socialIcons.Website}
@@ -445,7 +432,16 @@ function InfoTab({ t, meta, extra }: { t: any; meta: any; extra: Extra | null })
         </div>
       ) : null}
 
-      <div className="space-y-2">
+      <dl className="flex flex-wrap gap-x-8 gap-y-3">
+        {facts.map((f) => (
+          <div key={f.label}>
+            <dt className="text-[10px] uppercase tracking-wide text-ink-3">{f.label}</dt>
+            <dd className="mono mt-0.5 text-[13px] font-semibold text-ink">{f.value}</dd>
+          </div>
+        ))}
+      </dl>
+
+      <div className="space-y-2 border-t border-edge pt-3">
         <CopyRow label="Creator" value={t.creator} />
         <CopyRow label="Liquidity pool" value={t.pool} />
       </div>
@@ -456,10 +452,10 @@ function InfoTab({ t, meta, extra }: { t: any; meta: any; extra: Extra | null })
 function CopyRow({ label, value }: { label: string; value: string }) {
   const [copied, setCopied] = useState(false);
   return (
-    <div className="flex items-center justify-between gap-3 rounded-lg border border-edge bg-panel-2/40 px-3.5 py-2.5">
+    <div className="flex items-center justify-between gap-3">
       <div className="min-w-0">
         <p className="text-[10px] uppercase tracking-wide text-ink-3">{label}</p>
-        <p className="mono truncate text-[13px] text-ink">{value}</p>
+        <p className="mono truncate text-[12.5px] text-ink-2">{value}</p>
       </div>
       <button
         onClick={() => {
@@ -470,11 +466,11 @@ function CopyRow({ label, value }: { label: string; value: string }) {
         }}
         aria-label={`Copy ${label}`}
         title={copied ? "Copied" : "Copy"}
-        className={`grid h-8 w-8 shrink-0 place-items-center rounded-md border transition-colors ${
-          copied ? "border-up/40 bg-up/10 text-up" : "border-edge text-ink-2 hover:border-edge-2 hover:text-ink"
+        className={`grid h-7 w-7 shrink-0 place-items-center rounded-md transition-colors ${
+          copied ? "text-up" : "text-ink-3 hover:text-ink"
         }`}
       >
-        <Icon name={copied ? "verified" : "copy"} size={15} />
+        <Icon name={copied ? "verified" : "copy"} size={14} />
       </button>
     </div>
   );
