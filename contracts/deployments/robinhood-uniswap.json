@@ -1,0 +1,10 @@
+{
+  "network": "robinhood",
+  "chainId": 4663,
+  "deployer": "0x7817F4e44a658410C4ADA6a9226ef3d51e5Ea846",
+  "timestamp": "2026-07-14T14:12:06.311Z",
+  "weth": "0xa9A2619dF7F241629fD768e353B14B84F1DC7001",
+  "factory": "0xc6104E5fcFEf77dF39d80df8c2cf6A30E6dE7bE4",
+  "swapRouter": "0xa87C6792Cb989E621171c2c1497375E6C76147e8",
+  "positionManager": "0xA8800647124F0a986d329e5Aedd672C7B97b46D4"
+}

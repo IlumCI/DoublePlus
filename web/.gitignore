@@ -1,0 +1,7 @@
+.vercel
+.env*
+tsconfig.tsbuildinfo
+*.tsbuildinfo
+
+# TradingView Advanced Charts library (served, not redistributed in-repo)
+public/charting_library/

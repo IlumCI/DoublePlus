@@ -1,0 +1,17 @@
+{
+  "network": "robinhood",
+  "chainId": 4663,
+  "deployer": "0x7817F4e44a658410C4ADA6a9226ef3d51e5Ea846",
+  "protocolAdmin": "0x0315eCb53F64b7A4bA56bb8A4DAB0D96F0856b60",
+  "timestamp": "2026-07-15T16:31:23.428Z",
+  "contracts": {
+    "tokenDeployer": "0xeADD8E92B6706583A955b076E394eA5c68F39cD4",
+    "factory": "0x475c9219e17cdB25324C12206200B24be681b929"
+  },
+  "uniswap": {
+    "factory": "0x1f7d7550B1b028f7571E69A784071F0205FD2EfA",
+    "positionManager": "0x73991a25C818Bf1f1128dEAaB1492D45638DE0D3",
+    "swapRouter": "0xCaf681a66D020601342297493863E78C959E5cb2",
+    "weth": "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73"
+  }
+}
