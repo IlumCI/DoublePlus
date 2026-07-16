@@ -9,7 +9,6 @@ const TVChart = lazy(() =>
   import("../components/TVChart").then((m) => ({ default: m.TVChart })),
 );
 import { AnimatedNumber } from "../components/AnimatedNumber";
-import { HoldersList } from "../components/HoldersList";
 import { Icon } from "../components/Icon";
 import { TokenLogo } from "../components/TokenLogo";
 import { TradePanel } from "../components/TradePanel";
@@ -22,7 +21,6 @@ import { ensureSdkWallet, errorText, useWallet } from "../lib/useWallet";
 import { stockOf } from "../lib/v4/stocks";
 import { useUi } from "../store";
 
-type Tab = "trades" | "holders";
 
 /** V4 reward/fee facts for a token, read from the hook + token in one pass. */
 interface Extra {
@@ -35,7 +33,6 @@ interface Extra {
 export function TokenPage() {
   const { address } = useParams<{ address: string }>();
   const token = useToken(client, address as Address | undefined);
-  const [tab, setTab] = useState<Tab>("trades");
   const [extra, setExtra] = useState<Extra | null>(null);
 
   useEffect(() => {
@@ -131,31 +128,14 @@ export function TokenPage() {
         </div>
       </section>
 
-      {/* Detail — trades / holders */}
+      {/* Recent trades */}
       <section className="mt-6">
-        <div className="flex items-center gap-7 border-b border-edge">
-          {(
-            [
-              ["trades", "Trades"],
-              ["holders", "Holders"],
-            ] as [Tab, string][]
-          ).map(([key, label]) => (
-            <button
-              key={key}
-              onClick={() => setTab(key)}
-              className={`relative -mb-px pb-3 text-[14px] transition-colors ${
-                tab === key ? "font-semibold text-ink" : "text-ink-2 hover:text-ink"
-              }`}
-            >
-              {label}
-              {tab === key ? <span className="absolute inset-x-0 -bottom-px h-[2px] bg-accent" /> : null}
-            </button>
-          ))}
+        <div className="mb-2 flex items-center gap-2">
+          <span className="dot-live h-2 w-2 rounded-full bg-accent" />
+          <h2 className="text-[14px] font-bold tracking-tight text-ink">Recent trades</h2>
         </div>
-
-        <div className="mt-2 overflow-hidden rounded-2xl border border-edge bg-panel">
-          {tab === "trades" ? <TradesList token={t.address as Address} symbol={t.symbol} /> : null}
-          {tab === "holders" ? <HoldersList token={t} /> : null}
+        <div className="overflow-hidden rounded-2xl border border-edge bg-panel">
+          <TradesList token={t.address as Address} symbol={t.symbol} />
         </div>
       </section>
     </div>
