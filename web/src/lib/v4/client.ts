@@ -435,7 +435,7 @@ export class V4Client {
   // Writes
   // ---------------------------------------------------------------------
 
-  async buyToken(token: Address, valueWei: bigint): Promise<`0x${string}`> {
+  async buyToken(token: Address, valueWei: bigint, minOut: bigint = 0n): Promise<`0x${string}`> {
     const wc = this.requireWallet();
     return wc.writeContract({
       account: this.account(),
@@ -443,12 +443,12 @@ export class V4Client {
       address: this.v4.router,
       abi: routerAbi,
       functionName: "buy",
-      args: [token, 0n],
+      args: [token, minOut],
       value: valueWei,
     });
   }
 
-  async sellToken(token: Address, amount: bigint): Promise<`0x${string}`> {
+  async sellToken(token: Address, amount: bigint, minOut: bigint = 0n): Promise<`0x${string}`> {
     const wc = this.requireWallet();
     const account = this.account();
     const allowance = (await this.publicClient.readContract({
@@ -474,7 +474,7 @@ export class V4Client {
       address: this.v4.router,
       abi: routerAbi,
       functionName: "sell",
-      args: [token, amount, 0n],
+      args: [token, amount, minOut],
     });
   }
 

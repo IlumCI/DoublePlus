@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { formatEther, parseEther } from "viem";
 import { launchTokenAbi, type Address, type TokenSummary } from "@launchpad/sdk";
 
-import { client } from "../lib/client";
+import { client, v4Client } from "../lib/client";
 import { env } from "../lib/env";
 import { fmtWei, compact } from "../lib/format";
 import { ensureSdkWallet, errorText, useWallet } from "../lib/useWallet";
@@ -19,6 +19,7 @@ export function TradePanel({ token }: { token: TokenSummary }) {
 
   const [side, setSide] = useState<Side>("buy");
   const [amount, setAmount] = useState("");
+  const [slip, setSlip] = useState(5); // % slippage tolerance
   const [busy, setBusy] = useState(false);
   const [nativeBalance, setNativeBalance] = useState<bigint | null>(null);
   const [tokenBalance, setTokenBalance] = useState<bigint | null>(null);
@@ -86,10 +87,21 @@ export function TradePanel({ token }: { token: TokenSummary }) {
       if (!(await ensureSdkWallet())) {
         throw new Error("Wallet session expired. Reconnect your wallet and try again.");
       }
+      // Min output from the current-price estimate, less fee and slippage.
+      const price = Number(token.priceWei);
+      const slipMul = Math.max(0, 1 - slip / 100) * (1 - feeRate);
+      let minOut = 0n;
+      if (price > 0) {
+        const out =
+          side === "buy"
+            ? (Number(parsedAmount) * 1e18) / price // token wei
+            : (Number(parsedAmount) * price) / 1e18; // weth wei
+        minOut = BigInt(Math.max(0, Math.floor(out * slipMul)));
+      }
       const hash =
         side === "buy"
-          ? await client.buyToken(token.address as Address, parsedAmount)
-          : await client.sellToken(token.address as Address, parsedAmount);
+          ? await v4Client.buyToken(token.address as Address, parsedAmount, minOut)
+          : await v4Client.sellToken(token.address as Address, parsedAmount, minOut);
       pushToast({ kind: "info", title: `${side === "buy" ? "Buy" : "Sell"} submitted`, txHash: hash });
       await client.publicClient.waitForTransactionReceipt({ hash });
       pushToast({ kind: "success", title: `${side === "buy" ? "Buy" : "Sell"} confirmed`, txHash: hash });
@@ -162,6 +174,34 @@ export function TradePanel({ token }: { token: TokenSummary }) {
       <div className="flex items-center justify-between text-[11px]">
         <span className="text-ink-3">You receive</span>
         <span className="tnum font-semibold text-ink">{estimate ?? "—"}</span>
+      </div>
+
+      {/* Slippage */}
+      <div className="flex items-center justify-between text-[11px]">
+        <span className="text-ink-3">Slippage</span>
+        <div className="flex items-center gap-1">
+          {[1, 5, 10].map((p) => (
+            <button
+              key={p}
+              onClick={() => setSlip(p)}
+              className={`tnum rounded px-1.5 py-0.5 transition-colors ${slip === p ? "bg-accent/15 font-semibold text-accent" : "text-ink-3 hover:text-ink"}`}
+            >
+              {p}%
+            </button>
+          ))}
+          <span className="flex items-center rounded bg-panel-2 pr-1">
+            <input
+              value={String(slip)}
+              onChange={(e) => {
+                const v = Number(e.target.value.replace(/[^0-9.]/g, ""));
+                if (!isNaN(v)) setSlip(Math.min(50, v));
+              }}
+              inputMode="decimal"
+              className="mono w-7 bg-transparent py-0.5 text-right text-ink outline-none"
+            />
+            <span className="text-ink-3">%</span>
+          </span>
+        </div>
       </div>
 
       {isConnected ? (
