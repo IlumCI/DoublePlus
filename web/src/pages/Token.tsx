@@ -281,11 +281,7 @@ function RewardsStrip({ token, extra }: { token: TokenSummary; extra: Extra | nu
           <Button variant="primary" disabled={busy !== null} onClick={() => run("claim")}>
             {busy === "claim" ? "Claiming" : `Claim ${stock.symbol}`}
           </Button>
-        ) : (
-          <Button variant="ghost" disabled={busy !== null} onClick={() => run("harvest")}>
-            {busy === "harvest" ? "Distributing" : "Distribute"}
-          </Button>
-        )}
+        ) : null}
       </div>
     </div>
   );
