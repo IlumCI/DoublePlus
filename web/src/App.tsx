@@ -5,14 +5,12 @@ import { WagmiProvider } from "wagmi";
 
 import { Header } from "./components/Header";
 import { NavBar } from "./components/NavBar";
-import { Ticker } from "./components/Ticker";
 import { Skeleton, Toasts } from "./components/ui";
 import { wagmiConfig } from "./lib/wagmi";
 import { Explore } from "./pages/Explore";
 
 const TokenPage = lazy(() => import("./pages/Token").then((m) => ({ default: m.TokenPage })));
 const LaunchPage = lazy(() => import("./pages/Launch").then((m) => ({ default: m.LaunchPage })));
-const MyCoinsPage = lazy(() => import("./pages/MyCoins").then((m) => ({ default: m.MyCoinsPage })));
 const AdminPage = lazy(() => import("./pages/Admin").then((m) => ({ default: m.AdminPage })));
 const DocsPage = lazy(() => import("./pages/Docs").then((m) => ({ default: m.DocsPage })));
 
@@ -38,14 +36,12 @@ export default function App() {
         <BrowserRouter>
           <div className="flex min-h-screen flex-col bg-bg">
             <Header />
-            <Ticker />
             <NavBar />
             <main className="flex-1">
               <Suspense fallback={<PageFallback />}>
                 <Routes>
                   <Route path="/" element={<Explore />} />
                   <Route path="/launch" element={<LaunchPage />} />
-                  <Route path="/mine" element={<MyCoinsPage />} />
                   <Route path="/token/:address" element={<TokenPage />} />
                   <Route path="/docs" element={<DocsPage />} />
                   {/* Hidden operations console; access enforced on-chain by role. */}
