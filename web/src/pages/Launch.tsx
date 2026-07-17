@@ -13,8 +13,8 @@ const LAUNCHED_TOPIC = keccak256(toHex("Launched(address,address,address,uint16,
 
 /**
  * One-step V4 launch. The creator picks the tokenized stock holders will earn
- * and the trade tax (0-10%); supply, the WETH pool, the anti-whale caps and
- * the 50/25/25 fee split are fixed protocol rules.
+ * and the trade tax (0-10%); supply, the WETH pool and the 50/25/25 fee split
+ * are fixed protocol rules.
  */
 export function LaunchPage() {
   const { isConnected, connectFirst } = useWallet();
@@ -189,7 +189,6 @@ export function LaunchPage() {
         <dl className="space-y-1.5 border-t border-edge pt-3 text-[12px]">
           <Row label="Starting market cap" value="$5,000" />
           <Row label="Supply" value="1,000,000,000" />
-          <Row label="Anti-whale" value="2% max wallet" />
         </dl>
 
         <button type="submit" disabled={busy}

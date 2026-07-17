@@ -152,11 +152,6 @@ contract QuiverFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         emit LaunchesPausedSet(paused);
     }
 
-    /// @notice Graduation: lift (or restore) a token's anti-whale caps.
-    function setTokenLimits(address token, bool active) external onlyOwner {
-        QuiverToken(payable(token)).setLimitsActive(active);
-    }
-
     // ---------------------------------------------------------------------
     // Launch
     // ---------------------------------------------------------------------
@@ -323,10 +318,6 @@ contract QuiverFactory is Ownable, ReentrancyGuard, IUnlockCallback {
     /// @dev This is a deliberate, disclosed admin power: it lets the owner pull
     ///      pooled liquidity, so the "locked liquidity" guarantee does NOT apply
     ///      to markets launched by a factory that exposes it.
-    /// @dev If the token's anti-whale limits are still active, `recipient` must be
-    ///      able to hold the returned token amount, or the max-wallet cap will
-    ///      revert the transfer. Lift the token's limits first (`setTokenLimits`)
-    ///      when unwinding a large position to a normal wallet.
     function unwindPosition(address token, uint16 liquidityBps, address recipient)
         external
         onlyOwner

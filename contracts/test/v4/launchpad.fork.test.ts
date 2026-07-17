@@ -120,7 +120,7 @@ describe("Quiver V4 launchpad (fork)", function () {
     return;
   }
 
-  it("launches, taxes buys, enforces the 2% wallet cap, and harvests", async () => {
+  it("launches, taxes buys, and harvests", async () => {
     const [admin, trader] = await ethers.getSigners();
     const { hook, factory, router, hookAddr } = await deploy(admin.address, admin.address);
 
@@ -139,13 +139,7 @@ describe("Quiver V4 launchpad (fork)", function () {
     await (await router.connect(trader).swapExactIn(key, buyZeroForOne, ethers.parseEther("0.004"), trader.address)).wait();
     const traderBal = await erc20.balanceOf(trader.address);
     expect(traderBal).to.be.greaterThan(0n);
-    expect(traderBal).to.be.lessThanOrEqual(await erc20.maxWalletAmount());
     expect(await hook.tokenFees(token)).to.be.greaterThan(0n);
-
-    await weth.deposit({ value: ethers.parseEther("5") });
-    await expect(
-      router.connect(trader).swapExactIn(key, buyZeroForOne, ethers.parseEther("5"), trader.address),
-    ).to.be.reverted;
 
     const supplyBefore = await erc20.totalSupply();
     await (await hook.harvest(token)).wait();
@@ -170,7 +164,6 @@ describe("Quiver V4 launchpad (fork)", function () {
     await (await router.connect(trader).buy(token, 0, { value: ethers.parseEther("0.003") })).wait();
     const bought = await erc20.balanceOf(trader.address);
     expect(bought, "received tokens for ETH").to.be.greaterThan(0n);
-    expect(bought).to.be.lessThanOrEqual(await erc20.maxWalletAmount());
 
     // Sell half back for ETH.
     await (await erc20.connect(trader).approve(await router.getAddress(), ethers.MaxUint256)).wait();
@@ -261,9 +254,6 @@ describe("Quiver V4 launchpad (fork)", function () {
 
     // Non-owner cannot unwind.
     await expect(factory.connect(trader).unwindPosition(token, 10_000, trader.address)).to.be.reverted;
-
-    // Lift the anti-whale limits so the recipient can hold the unwound token bag.
-    await (await factory.setTokenLimits(token, false)).wait();
 
     const wethC = new ethers.Contract(WETH, WETH_ABI, admin);
     const tokBefore = await erc20.balanceOf(recipient.address);

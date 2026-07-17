@@ -45,19 +45,12 @@ contract QuiverToken is ERC20 {
     /// @notice Lifetime rewards distributed to holders, in reward units.
     uint256 public totalRewardsDistributed;
 
-    // --- Anti-whale limit (active until the factory lifts it) ---
-    /// @notice Max tokens a non-exempt wallet may hold (2% of supply).
-    uint256 public immutable maxWalletAmount;
-    /// @notice Whether the anti-whale caps are enforced.
-    bool public limitsActive;
-
     string private _metadataURI;
 
     event HookSet(address indexed hook);
     event ExcludedSet(address indexed account, bool excluded);
     event RewardsDistributed(uint256 amount);
     event RewardsClaimed(address indexed holder, uint256 amount);
-    event LimitsActiveSet(bool active);
 
     error OnlyFactory();
     error OnlyHook();
@@ -83,13 +76,8 @@ contract QuiverToken is ERC20 {
         rewardToken = rewardToken_;
         _metadataURI = metadataURI_;
 
-        // Anti-whale cap: 2% max wallet, active at launch.
-        maxWalletAmount = (supply_ * 2) / 100;
-        limitsActive = true;
-
-        // Exclude system endpoints from dividends (and from the caps) up front.
-        // The supply recipient (the factory) must be excluded before it is
-        // minted the whole supply, or the max-wallet cap would block the mint.
+        // Exclude system endpoints (zero, self, and the supply recipient) from
+        // dividends up front, so rewards only ever flow to real holders.
         excluded[address(0)] = true;
         excluded[address(this)] = true;
         excluded[supplyRecipient_] = true;
@@ -122,14 +110,6 @@ contract QuiverToken is ERC20 {
         for (uint256 i; i < excludedAddrs.length; ++i) {
             _setExcluded(excludedAddrs[i], true);
         }
-    }
-
-    /// @notice Lift or restore the anti-whale caps (graduation). Factory-gated,
-    ///         so the protocol admin controls it exactly like the v3 launchpad.
-    function setLimitsActive(bool active) external {
-        if (msg.sender != _factory) revert OnlyFactory();
-        limitsActive = active;
-        emit LimitsActiveSet(active);
     }
 
     // ---------------------------------------------------------------------
@@ -222,14 +202,6 @@ contract QuiverToken is ERC20 {
     ///      balance, keeps `eligibleSupply` in sync with participation, and
     ///      rebases each side's reward debt to its new balance.
     function _update(address from, address to, uint256 value) internal override {
-        // Anti-whale max-wallet cap. Exempt parties (pool, PoolManager, hook,
-        // factory) bypass so liquidity and protocol flows are never blocked.
-        if (limitsActive) {
-            if (to != address(0) && !excluded[to]) {
-                require(balanceOf(to) + value <= maxWalletAmount, "max wallet");
-            }
-        }
-
         bool fromEligible = from != address(0) && !excluded[from];
         bool toEligible = to != address(0) && !excluded[to];
 

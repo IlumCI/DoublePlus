@@ -59,8 +59,5 @@ export function errorText(err: unknown): string {
   const short = raw.split("\n")[0];
   if (/user rejected/i.test(raw)) return "Transaction rejected in wallet.";
   if (/No wallet connected/i.test(raw)) return "Wallet session expired. Reconnect your wallet and try again.";
-  if (/MaxTransactionExceeded/.test(raw)) return "Trade exceeds the max transaction limit for this token.";
-  if (/MaxWalletExceeded/.test(raw)) return "This buy would exceed the max wallet limit for this token.";
-  if (/BuyCooldownActive/.test(raw)) return "Buy cooldown is active for your wallet. Wait a moment and retry.";
   return short.length > 200 ? short.slice(0, 200) + "..." : short;
 }

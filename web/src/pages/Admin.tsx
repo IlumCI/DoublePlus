@@ -18,7 +18,7 @@ import { useUi } from "../store";
  * Operations console for the protocol owner. Access is enforced on-chain by the
  * factory's Ownable owner: any other wallet reads a 403 and can call nothing.
  * Actions here are direct transactions to the factory (pause launches, lift a
- * token's anti-whale limits) and the hook (distribute a token's accrued fees).
+ * launches) and the hook (distribute a token's accrued fees).
  */
 export function AdminPage() {
   const { address, isConnected, connectFirst } = useWallet();
@@ -109,7 +109,7 @@ export function AdminPage() {
     return walletClient.writeContract(request as never);
   };
 
-  // Per-token owner actions: distribute accrued fees, or lift the launch caps.
+  // Per-token owner action: distribute a token's accrued fees.
   const tokenActions = (t: { address: string; symbol: string }) => (
     <div className="flex justify-end gap-1.5">
       <button
@@ -118,16 +118,6 @@ export function AdminPage() {
         className="rounded-md border border-edge bg-panel px-2.5 py-1 text-[11px] font-semibold text-ink-2 transition-colors hover:border-edge-2 hover:text-ink disabled:opacity-50"
       >
         Distribute
-      </button>
-      <button
-        disabled={busyAction !== null}
-        onClick={() => {
-          if (window.confirm(`Lift the anti-whale limit for ${t.symbol}? This removes the 2% max wallet cap permanently.`))
-            runTx("Lift limits", () => writeFactory("setTokenLimits", [t.address, false]));
-        }}
-        className="rounded-md border border-edge bg-panel px-2.5 py-1 text-[11px] font-semibold text-ink-2 transition-colors hover:border-edge-2 hover:text-ink disabled:opacity-50"
-      >
-        Lift limits
       </button>
     </div>
   );
@@ -216,7 +206,7 @@ export function AdminPage() {
         <div className="border-b border-edge px-4 py-3">
           <h2 className="text-[13px] font-semibold text-ink">Manage a token by address</h2>
           <p className="mt-0.5 text-[11px] text-ink-3">
-            Paste a token contract address to distribute its accrued fees or lift its anti-whale limits.
+            Paste a token contract address to distribute its accrued fees.
           </p>
         </div>
         <div className="space-y-3 p-4">
