@@ -17,7 +17,7 @@ import { TradesList } from "../components/TradesList";
 import { Button, EmptyState, Skeleton } from "../components/ui";
 import { client, v4Client } from "../lib/client";
 import { env } from "../lib/env";
-import { compact, fmtTokens, fmtUsd, fmtWei, fmtWeiUsd, shortAddr, usdRateOf } from "../lib/format";
+import { compact, fmtTokens, fmtUsd, fmtWei, fmtWeiUsd, shortAddr, timeAgo, usdRateOf } from "../lib/format";
 import { ensureSdkWallet, errorText, useWallet } from "../lib/useWallet";
 import { stockOf } from "../lib/v4/stocks";
 import { useUi } from "../store";
@@ -397,6 +397,23 @@ function InfoTab({ t, meta, extra }: { t: any; meta: any; extra: Extra | null })
           ))}
         </div>
       ) : null}
+
+      <p className="text-[12px] text-ink-3">
+        Created by{" "}
+        {explorer ? (
+          <a
+            href={`${explorer}/address/${t.creator}`}
+            target="_blank"
+            rel="noreferrer"
+            className="mono font-medium text-ink-2 underline underline-offset-2 transition-colors hover:text-ink"
+          >
+            {shortAddr(t.creator)}
+          </a>
+        ) : (
+          <span className="mono font-medium text-ink-2">{shortAddr(t.creator)}</span>
+        )}
+        {t.createdAt ? <span> · launched {timeAgo(t.createdAt)}</span> : null}
+      </p>
     </div>
   );
 }
