@@ -3,6 +3,10 @@ import type { Address } from "@launchpad/sdk";
 
 import { makeDatafeed } from "../lib/tvDatafeed";
 
+// The TradingView Advanced Charts library is served from jsDelivr (mirroring the
+// public charting-library repo) so it isn't re-bundled into every app deploy.
+const TV_BASE = "https://cdn.jsdelivr.net/gh/opengrid1/hltradingviewtest@main/charting_library/charting_library/";
+
 // Load the TradingView Advanced Charts standalone bundle once.
 let tvScript: Promise<void> | null = null;
 function loadTradingView(): Promise<void> {
@@ -10,7 +14,7 @@ function loadTradingView(): Promise<void> {
   if (tvScript) return tvScript;
   tvScript = new Promise((resolve, reject) => {
     const s = document.createElement("script");
-    s.src = "/charting_library/charting_library.standalone.js";
+    s.src = `${TV_BASE}charting_library.standalone.js`;
     s.async = true;
     s.onload = () => resolve();
     s.onerror = () => reject(new Error("Failed to load TradingView library"));
@@ -36,7 +40,7 @@ export function TVChart({ token, symbol }: { token: Address; symbol: string }) {
           datafeed: makeDatafeed(token, symbol),
           symbol,
           interval: "5",
-          library_path: "/charting_library/",
+          library_path: TV_BASE,
           locale: "en",
           timezone: "Etc/UTC",
           autosize: true,
