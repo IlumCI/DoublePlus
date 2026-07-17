@@ -10,6 +10,7 @@ const TVChart = lazy(() =>
 );
 import { AnimatedNumber } from "../components/AnimatedNumber";
 import { Icon } from "../components/Icon";
+import { StockLogo } from "../components/StockLogo";
 import { TokenLogo } from "../components/TokenLogo";
 import { TradePanel } from "../components/TradePanel";
 import { TradesList } from "../components/TradesList";
@@ -181,8 +182,9 @@ function RewardPill({ stock }: { stock: Address }) {
   return (
     <span
       title={`Holders earn ${s.name} (${s.symbol})`}
-      className="flex shrink-0 items-center gap-1 rounded-full border border-accent/30 bg-accent/[0.07] px-2 py-0.5 text-[11px] font-semibold text-accent-2"
+      className="flex shrink-0 items-center gap-1.5 rounded-full border border-accent/30 bg-accent/[0.07] py-0.5 pl-0.5 pr-2 text-[11px] font-semibold text-accent-2"
     >
+      <StockLogo symbol={s.symbol} size={16} />
       Earns {s.symbol}
     </span>
   );

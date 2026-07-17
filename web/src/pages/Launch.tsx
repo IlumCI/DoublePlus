@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { keccak256, toHex } from "viem";
 
+import { StockLogo } from "../components/StockLogo";
 import { Field, inputClass } from "../components/ui";
 import { client } from "../lib/client";
 import { STOCKS } from "../lib/v4/stocks";
@@ -158,10 +159,11 @@ export function LaunchPage() {
                 key={s.address}
                 onClick={() => setStock(s.address)}
                 title={s.name}
-                className={`rounded-lg border py-2 text-center text-[12px] font-bold transition-colors ${
+                className={`flex flex-col items-center gap-1 rounded-lg border py-2 text-[11px] font-bold transition-colors ${
                   stock === s.address ? "border-accent bg-accent/10 text-accent" : "border-edge text-ink-2 hover:border-edge-2 hover:text-ink"
                 }`}
               >
+                <StockLogo symbol={s.symbol} size={22} />
                 {s.symbol}
               </button>
             ))}
