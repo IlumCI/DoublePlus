@@ -10,6 +10,7 @@ const TVChart = lazy(() =>
 );
 import { AnimatedNumber } from "../components/AnimatedNumber";
 import { Icon } from "../components/Icon";
+import { ShareMenu } from "../components/ShareMenu";
 import { StockLogo } from "../components/StockLogo";
 import { TokenLogo } from "../components/TokenLogo";
 import { TradePanel } from "../components/TradePanel";
@@ -87,6 +88,7 @@ export function TokenPage() {
             {rewardStock ? <RewardPill stock={extra!.stock} /> : null}
           </div>
         </div>
+        <ShareMenu address={t.address as Address} symbol={t.symbol} name={t.name} />
       </section>
 
       {/* About — description, links, facts, creator & pool (no container) */}
