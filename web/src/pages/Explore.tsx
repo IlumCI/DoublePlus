@@ -92,7 +92,7 @@ export function Explore() {
               key={s.id}
               onClick={() => setSort(s.id)}
               className={`rounded-md px-3 py-1 text-[12.5px] font-medium transition-colors ${
-                sort === s.id ? "bg-accent text-ink" : "text-ink-2 hover:text-ink"
+                sort === s.id ? "bg-accent text-accent-fg" : "text-ink-2 hover:text-ink"
               }`}
             >
               {s.label}
@@ -178,7 +178,7 @@ function TokenCard({ t, row }: { t: TokenSummary; row?: boolean }) {
           {x ? <PillLink href={x}>X</PillLink> : null}
           {web ? <PillLink href={web}>Web</PillLink> : null}
           {scan ? <PillLink href={scan}>Scan</PillLink> : null}
-          <Link to={to} className="rounded-full border border-accent/50 px-4 py-1.5 text-[10.5px] font-semibold text-accent-ink transition-colors hover:bg-accent hover:text-ink">
+          <Link to={to} className="rounded-full border border-accent/50 px-4 py-1.5 text-[10.5px] font-semibold text-accent-ink transition-colors hover:bg-accent hover:text-accent-fg">
             Trade
           </Link>
         </div>
@@ -237,7 +237,7 @@ function ViewButton({ active, onClick, label, children }: { active: boolean; onC
       onClick={onClick}
       aria-label={label}
       title={label}
-      className={`grid h-7 w-7 place-items-center rounded-md transition-colors ${active ? "bg-accent text-ink" : "text-ink-3 hover:text-ink"}`}
+      className={`grid h-7 w-7 place-items-center rounded-md transition-colors ${active ? "bg-accent text-accent-fg" : "text-ink-3 hover:text-ink"}`}
     >
       <svg width="16" height="16" viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.6">
         {children}
@@ -275,7 +275,7 @@ function Empty({ q }: { q: string }) {
         {q ? "Try another name, symbol or address." : "Be the first to open a market — holders earn a real tokenized stock on every trade."}
       </p>
       {!q ? (
-        <Link to="/launch" className="mt-6 flex items-center gap-2 rounded-xl bg-accent px-5 py-3 text-[14.5px] font-semibold text-ink transition-colors hover:bg-accent-2">
+        <Link to="/launch" className="mt-6 flex items-center gap-2 rounded-xl bg-accent px-5 py-3 text-[14.5px] font-semibold text-accent-fg transition-colors hover:bg-accent-2">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
             <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>

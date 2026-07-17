@@ -33,7 +33,7 @@ export function Header() {
             <button
               onClick={connectFirst}
               disabled={isPending}
-              className="rounded-lg bg-accent px-3.5 py-1.5 text-[12.5px] font-semibold text-ink transition-colors hover:bg-accent-2 disabled:opacity-60"
+              className="rounded-lg bg-accent px-3.5 py-1.5 text-[12.5px] font-semibold text-accent-fg transition-colors hover:bg-accent-2 disabled:opacity-60"
             >
               {isPending ? "Connecting…" : "Connect"}
             </button>

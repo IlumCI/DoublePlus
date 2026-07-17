@@ -1,40 +1,42 @@
 @import "tailwindcss";
 
 @theme {
-  /* Cream light theme — warm paper ground, near-white cards, soft warm borders,
-     with a bright lime accent for buttons/CTAs. */
-  --color-bg: #f3eddd;        /* super cream */
-  --color-panel: #fbf7ec;     /* card surface (near-white cream) */
-  --color-panel-2: #ece4d1;   /* inset / chip surface */
-  --color-edge: #e2d9c2;      /* hairline border */
-  --color-edge-2: #cfc3a6;    /* stronger border / hover */
+  /* Dark theme with a lime accent — near-black ground, dark cards, hairline
+     borders, and a bright lime for buttons/CTAs and emphasis. */
+  --color-bg: #0b0d10;
+  --color-panel: #14161a;
+  --color-panel-2: #1c1f25;
+  --color-edge: #262a31;
+  --color-edge-2: #333842;
 
-  --color-ink: #201e17;       /* near-black warm — primary text */
-  --color-ink-2: #5b5647;     /* muted text */
-  --color-ink-3: #8b8471;     /* faint text */
+  --color-ink: #eceef1;
+  --color-ink-2: #9298a2;
+  --color-ink-3: #646a74;
 
-  /* Lime primary. `accent` is the bright button/CTA fill (use DARK text on it);
-     `accent-ink` is the readable deep-lime used for text/emphasis on cream. */
+  /* Lime primary. `accent` is the bright button/CTA fill (use `accent-fg` — a
+     near-black — as text ON it); `accent-ink` is lime used for text/emphasis,
+     which reads bright and clear on the dark ground. */
   --color-accent: #a3e635;    /* bright lime — button backgrounds */
   --color-accent-2: #84cc16;  /* darker lime — hover */
-  --color-accent-ink: #4d7c0f;/* deep lime — readable as text on cream */
+  --color-accent-ink: #a3e635;/* lime — text/emphasis on dark */
+  --color-accent-fg: #0d1206; /* near-black — text on lime buttons */
 
   /* Gains / losses */
-  --color-up: #16a34a;
-  --color-down: #dc2626;
+  --color-up: #21c45d;
+  --color-down: #ef584d;
 
   --font-sans: "Inter", "Inter Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
   --font-mono: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace;
 
-  --shadow-card: 0 1px 2px rgba(60, 50, 20, 0.06);
-  --shadow-card-hover: 0 10px 30px -12px rgba(60, 50, 20, 0.18);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-card-hover: 0 8px 24px -12px rgba(0, 0, 0, 0.6);
   --shadow-btn: none;
 }
 
 html {
   background: var(--color-bg);
-  color-scheme: light;
+  color-scheme: dark;
 }
 
 body {
@@ -74,20 +76,20 @@ body {
 }
 
 ::selection {
-  background: rgba(163, 230, 53, 0.4);
-  color: #201e17;
+  background: rgba(163, 230, 53, 0.28);
+  color: #eceef1;
 }
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: #cfc3a6 transparent;
+  scrollbar-color: #2c313a transparent;
 }
 *::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 *::-webkit-scrollbar-thumb {
-  background: #cfc3a6;
+  background: #2c313a;
   border-radius: 4px;
 }
 *::-webkit-scrollbar-track {

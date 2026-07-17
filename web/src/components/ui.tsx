@@ -52,7 +52,7 @@ export function Button({
   type?: "button" | "submit";
 }) {
   const variants: Record<string, string> = {
-    primary: "bg-accent text-ink hover:bg-accent-2 disabled:bg-panel-2 disabled:text-ink-3",
+    primary: "bg-accent text-accent-fg hover:bg-accent-2 disabled:bg-panel-2 disabled:text-ink-3",
     dark: "bg-ink text-bg hover:opacity-90 disabled:bg-panel-2 disabled:text-ink-3",
     ghost:
       "bg-panel border border-edge text-ink hover:border-edge-2 hover:bg-panel-2/60 disabled:text-ink-3",

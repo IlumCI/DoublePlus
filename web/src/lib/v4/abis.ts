@@ -45,6 +45,8 @@ export const factoryAbi = [
   { type: "function", name: "setLaunchesPaused", stateMutability: "nonpayable", inputs: [{ type: "bool" }], outputs: [] },
   { type: "function", name: "setTokenLimits", stateMutability: "nonpayable", inputs: [{ type: "address" }, { type: "bool" }], outputs: [] },
   { type: "function", name: "setNativeUsdPrice", stateMutability: "nonpayable", inputs: [{ type: "uint256" }], outputs: [] },
+  { type: "function", name: "nativeUsdPrice8", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "unwindPosition", stateMutability: "nonpayable", inputs: [{ type: "address" }, { type: "uint16" }, { type: "address" }], outputs: [{ type: "uint256" }, { type: "uint256" }] },
 ] as const;
 
 export const tokenAbi = [
@@ -80,6 +82,7 @@ export const hookAbi = [
   { type: "function", name: "claimCreatorFees", stateMutability: "nonpayable", inputs: [{ type: "address" }], outputs: [{ type: "uint256" }] },
   { type: "function", name: "harvest", stateMutability: "nonpayable", inputs: [{ type: "address" }], outputs: [] },
   { type: "function", name: "protocolTreasury", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
+  { type: "function", name: "setProtocolTreasury", stateMutability: "nonpayable", inputs: [{ type: "address" }], outputs: [] },
 ] as const;
 
 export const routerAbi = [

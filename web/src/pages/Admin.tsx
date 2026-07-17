@@ -71,6 +71,9 @@ export function AdminPage() {
 
   const { data: tokens, loading: tokensLoading } = useTokens(client, { sort: "volume", limit: 50 });
 
+  const [priceInput, setPriceInput] = useState("");
+  const [treasuryInput, setTreasuryInput] = useState("");
+
   // "Manage by address" lookup: paste any launched token's contract address.
   const [lookupInput, setLookupInput] = useState("");
   const trimmedLookup = lookupInput.trim();
@@ -97,19 +100,23 @@ export function AdminPage() {
     }
   };
 
-  const writeFactory = async (functionName: string, args: unknown[]) => {
+  const writeContract = async (to: `0x${string}`, abi: unknown, functionName: string, args: unknown[]) => {
     if (!walletClient) throw new Error("Connect a wallet first");
     const { request } = await v4Client.publicClient.simulateContract({
       account: address,
-      address: v4Client.v4.factory,
-      abi: factoryAbi,
+      address: to,
+      abi: abi as never,
       functionName: functionName as never,
       args: args as never,
     });
     return walletClient.writeContract(request as never);
   };
+  const writeFactory = (functionName: string, args: unknown[]) =>
+    writeContract(v4Client.v4.factory, factoryAbi, functionName, args);
+  const writeHook = (functionName: string, args: unknown[]) =>
+    writeContract(v4Client.v4.hook, hookAbi, functionName, args);
 
-  // Per-token owner action: distribute a token's accrued fees.
+  // Per-token owner actions: distribute accrued fees, or unwind pooled liquidity.
   const tokenActions = (t: { address: string; symbol: string }) => (
     <div className="flex justify-end gap-1.5">
       <button
@@ -118,6 +125,30 @@ export function AdminPage() {
         className="rounded-md border border-edge bg-panel px-2.5 py-1 text-[11px] font-semibold text-ink-2 transition-colors hover:border-edge-2 hover:text-ink disabled:opacity-50"
       >
         Distribute
+      </button>
+      <button
+        disabled={busyAction !== null}
+        onClick={() => {
+          const pctStr = window.prompt(`Unwind what % of ${t.symbol}'s liquidity? (1–100)`, "100");
+          if (!pctStr) return;
+          const pct = Number(pctStr);
+          if (!Number.isFinite(pct) || pct <= 0 || pct > 100) {
+            pushToast({ kind: "error", title: "Invalid percent", body: "Enter a number from 1 to 100." });
+            return;
+          }
+          const recipient = (window.prompt("Send unwound token + WETH to which address?", address ?? "") ?? "").trim();
+          if (!isAddress(recipient)) {
+            pushToast({ kind: "error", title: "Invalid address", body: "Enter a valid recipient address." });
+            return;
+          }
+          if (!window.confirm(`Unwind ${pct}% of ${t.symbol}'s liquidity to ${shortAddr(recipient)}? This pulls pooled liquidity — it is not reversible.`)) return;
+          runTx("Unwind liquidity", () =>
+            writeFactory("unwindPosition", [t.address, Math.round(pct * 100), recipient]),
+          );
+        }}
+        className="rounded-md border border-down/40 bg-down/5 px-2.5 py-1 text-[11px] font-semibold text-down transition-colors hover:bg-down/10 disabled:opacity-50"
+      >
+        Unwind LP
       </button>
     </div>
   );
@@ -178,7 +209,7 @@ export function AdminPage() {
               writeFactory("setLaunchesPaused", [!paused.data]), () => paused.refetch())
           }
           className={`rounded-md px-3 py-1.5 text-[12px] font-bold uppercase tracking-wide transition-colors disabled:opacity-50 ${
-            paused.data ? "bg-accent text-ink hover:bg-accent-2" : "bg-down/10 text-down hover:bg-down/20"
+            paused.data ? "bg-accent text-accent-fg hover:bg-accent-2" : "bg-down/10 text-down hover:bg-down/20"
           }`}
         >
           {paused.data ? "Resume launches" : "Pause launches"}
@@ -201,12 +232,73 @@ export function AdminPage() {
         <p className="mt-1.5 font-mono text-[12px] text-ink-2">{s ? s.treasury : "—"}</p>
       </div>
 
+      {/* Protocol settings */}
+      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="rounded-xl border border-edge bg-panel p-4">
+          <h2 className="text-[13px] font-semibold text-ink">Native / USD price</h2>
+          <p className="mt-0.5 text-[11px] text-ink-3">Sizes the pool at launch. Enter USD per ETH (e.g. 3000).</p>
+          <div className="mt-2.5 flex gap-2">
+            <input
+              value={priceInput}
+              onChange={(e) => setPriceInput(e.target.value)}
+              placeholder="3000"
+              inputMode="decimal"
+              className="h-9 w-full rounded-lg border border-edge bg-panel-2/40 px-3 text-[12.5px] text-ink placeholder:text-ink-3 focus:border-edge-2 focus:outline-none"
+            />
+            <button
+              disabled={busyAction !== null || !priceInput}
+              onClick={() => {
+                const usd = Number(priceInput);
+                if (!Number.isFinite(usd) || usd <= 0) {
+                  pushToast({ kind: "error", title: "Invalid price", body: "Enter USD per ETH, e.g. 3000." });
+                  return;
+                }
+                const price8 = BigInt(Math.round(usd * 1e8));
+                runTx("Set native price", () => writeFactory("setNativeUsdPrice", [price8]), () => { stats.refetch(); setPriceInput(""); });
+              }}
+              className="shrink-0 rounded-lg bg-accent px-3 text-[12.5px] font-semibold text-accent-fg transition-colors hover:bg-accent-2 disabled:opacity-50"
+            >
+              Set
+            </button>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-edge bg-panel p-4">
+          <h2 className="text-[13px] font-semibold text-ink">Protocol treasury</h2>
+          <p className="mt-0.5 text-[11px] text-ink-3">Where the protocol's 25% WETH share is sent.</p>
+          <div className="mt-2.5 flex gap-2">
+            <input
+              value={treasuryInput}
+              onChange={(e) => setTreasuryInput(e.target.value)}
+              placeholder="0x…"
+              spellCheck={false}
+              autoComplete="off"
+              className="h-9 w-full rounded-lg border border-edge bg-panel-2/40 px-3 font-mono text-[12px] text-ink placeholder:text-ink-3 focus:border-edge-2 focus:outline-none"
+            />
+            <button
+              disabled={busyAction !== null || !treasuryInput}
+              onClick={() => {
+                const to = treasuryInput.trim();
+                if (!isAddress(to)) {
+                  pushToast({ kind: "error", title: "Invalid address", body: "Enter a valid treasury address." });
+                  return;
+                }
+                runTx("Set treasury", () => writeHook("setProtocolTreasury", [to]), () => { stats.refetch(); setTreasuryInput(""); });
+              }}
+              className="shrink-0 rounded-lg bg-accent px-3 text-[12.5px] font-semibold text-accent-fg transition-colors hover:bg-accent-2 disabled:opacity-50"
+            >
+              Set
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* Manage by address */}
       <div className="mt-3 overflow-hidden rounded-xl border border-edge bg-panel">
         <div className="border-b border-edge px-4 py-3">
           <h2 className="text-[13px] font-semibold text-ink">Manage a token by address</h2>
           <p className="mt-0.5 text-[11px] text-ink-3">
-            Paste a token contract address to distribute its accrued fees.
+            Paste a token contract address to distribute its accrued fees or unwind its liquidity.
           </p>
         </div>
         <div className="space-y-3 p-4">

@@ -192,7 +192,7 @@ export function LaunchPage() {
         </dl>
 
         <button type="submit" disabled={busy}
-          className="h-11 w-full rounded-lg bg-accent text-[14px] font-semibold text-ink transition-colors hover:bg-accent-2 disabled:cursor-not-allowed disabled:bg-panel-2 disabled:text-ink-3">
+          className="h-11 w-full rounded-lg bg-accent text-[14px] font-semibold text-accent-fg transition-colors hover:bg-accent-2 disabled:cursor-not-allowed disabled:bg-panel-2 disabled:text-ink-3">
           {busy ? "Confirm in wallet…" : isConnected ? "Launch token" : "Connect wallet to launch"}
         </button>
       </form>

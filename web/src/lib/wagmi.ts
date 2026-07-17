@@ -59,9 +59,9 @@ export function openWalletModal(): Promise<void> {
           url: BRAND.url,
           icons: [`${BRAND.url}/icon.png`],
         },
-        themeMode: "light",
+        themeMode: "dark",
         themeVariables: {
-          "--w3m-accent": "#4d7c0f",
+          "--w3m-accent": "#a3e635",
           "--w3m-border-radius-master": "2px",
         },
         features: { analytics: false, email: false, socials: [] },

@@ -223,7 +223,7 @@ export function TradePanel({ token }: { token: TokenSummary }) {
       ) : (
         <button
           onClick={connectFirst}
-          className="h-11 rounded-lg bg-accent text-[14px] font-semibold text-ink transition-colors hover:bg-accent-2"
+          className="h-11 rounded-lg bg-accent text-[14px] font-semibold text-accent-fg transition-colors hover:bg-accent-2"
         >
           Connect Wallet
         </button>

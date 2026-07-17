@@ -182,7 +182,7 @@ export function PriceChart({ token }: { token: Address }) {
             key={iv}
             onClick={() => setInterval(iv)}
             className={`shrink-0 rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${
-              interval === iv ? "bg-accent text-ink" : "text-ink-3 hover:text-ink"
+              interval === iv ? "bg-accent text-accent-fg" : "text-ink-3 hover:text-ink"
             }`}
           >
             {intervalLabels[iv]}
