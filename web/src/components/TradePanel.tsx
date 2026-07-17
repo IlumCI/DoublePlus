@@ -184,7 +184,7 @@ export function TradePanel({ token }: { token: TokenSummary }) {
             <button
               key={p}
               onClick={() => setSlip(p)}
-              className={`tnum rounded px-1.5 py-0.5 transition-colors ${slip === p ? "bg-accent/15 font-semibold text-accent" : "text-ink-3 hover:text-ink"}`}
+              className={`tnum rounded px-1.5 py-0.5 transition-colors ${slip === p ? "bg-accent/15 font-semibold text-accent-ink" : "text-ink-3 hover:text-ink"}`}
             >
               {p}%
             </button>
@@ -223,7 +223,7 @@ export function TradePanel({ token }: { token: TokenSummary }) {
       ) : (
         <button
           onClick={connectFirst}
-          className="h-11 rounded-lg bg-accent text-[14px] font-semibold text-white transition-colors hover:bg-accent-2"
+          className="h-11 rounded-lg bg-accent text-[14px] font-semibold text-ink transition-colors hover:bg-accent-2"
         >
           Connect Wallet
         </button>

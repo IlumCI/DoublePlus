@@ -127,7 +127,7 @@ export function LaunchPage() {
             <p className="mt-0.5 text-[11.5px] text-ink-3">
               PNG / JPG.{" "}
               {logoData ? (
-                <button type="button" className="font-medium text-accent underline underline-offset-2" onClick={() => setLogoData("")}>Remove</button>
+                <button type="button" className="font-medium text-accent-ink underline underline-offset-2" onClick={() => setLogoData("")}>Remove</button>
               ) : null}
             </p>
           </div>
@@ -160,7 +160,7 @@ export function LaunchPage() {
                 onClick={() => setStock(s.address)}
                 title={s.name}
                 className={`flex flex-col items-center gap-1 rounded-lg border py-2 text-[11px] font-bold transition-colors ${
-                  stock === s.address ? "border-accent bg-accent/10 text-accent" : "border-edge text-ink-2 hover:border-edge-2 hover:text-ink"
+                  stock === s.address ? "border-accent bg-accent/10 text-accent-ink" : "border-edge text-ink-2 hover:border-edge-2 hover:text-ink"
                 }`}
               >
                 <StockLogo address={s.address} symbol={s.symbol} size={22} />
@@ -174,7 +174,7 @@ export function LaunchPage() {
         <div>
           <div className="mb-2 flex items-baseline justify-between">
             <label className="text-[12.5px] font-medium text-ink">Trade tax</label>
-            <span className="tnum text-[13px] font-bold text-accent">{taxPct}%</span>
+            <span className="tnum text-[13px] font-bold text-accent-ink">{taxPct}%</span>
           </div>
           <input type="range" min={0} max={10} step={1} value={taxPct} onChange={(e) => setTaxPct(Number(e.target.value))}
             className="w-full accent-[color:var(--color-accent)]" />
@@ -193,7 +193,7 @@ export function LaunchPage() {
         </dl>
 
         <button type="submit" disabled={busy}
-          className="h-11 w-full rounded-lg bg-accent text-[14px] font-semibold text-white transition-colors hover:bg-accent-2 disabled:cursor-not-allowed disabled:bg-panel-2 disabled:text-ink-3">
+          className="h-11 w-full rounded-lg bg-accent text-[14px] font-semibold text-ink transition-colors hover:bg-accent-2 disabled:cursor-not-allowed disabled:bg-panel-2 disabled:text-ink-3">
           {busy ? "Confirm in wallet…" : isConnected ? "Launch token" : "Connect wallet to launch"}
         </button>
       </form>

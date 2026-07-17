@@ -87,7 +87,7 @@ export function TokenPage() {
         <div className="min-w-0 flex-1">
           <h1 className="truncate text-[20px] font-extrabold leading-tight tracking-tight text-ink sm:text-[24px]">{t.name}</h1>
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-            <span className="mono rounded-md bg-panel-2 px-2 py-0.5 text-[11px] font-semibold text-accent/80">${t.symbol}</span>
+            <span className="mono rounded-md bg-panel-2 px-2 py-0.5 text-[11px] font-semibold text-accent-ink/80">${t.symbol}</span>
             <CaChip address={t.address as Address} />
             {rewardStock ? <RewardPill stock={extra!.stock} /> : null}
           </div>
@@ -173,7 +173,7 @@ function HeadStat({ label, node, accent }: { label: string; node: React.ReactNod
   return (
     <div className="text-right">
       <p className="text-[9px] uppercase tracking-wide text-ink-3">{label}</p>
-      <p className={`mono text-[13px] font-bold leading-tight ${accent ? "text-accent" : "text-ink"}`}>{node}</p>
+      <p className={`mono text-[13px] font-bold leading-tight ${accent ? "text-accent-ink" : "text-ink"}`}>{node}</p>
     </div>
   );
 }
@@ -185,7 +185,7 @@ function RewardPill({ stock }: { stock: Address }) {
   return (
     <span
       title={`Holders earn ${s.name} (${s.symbol})`}
-      className="flex shrink-0 items-center gap-1.5 rounded-full border border-accent/30 bg-accent/[0.07] py-0.5 pl-0.5 pr-2 text-[11px] font-semibold text-accent-2"
+      className="flex shrink-0 items-center gap-1.5 rounded-full border border-accent/30 bg-accent/[0.07] py-0.5 pl-0.5 pr-2 text-[11px] font-semibold text-accent-ink"
     >
       <StockLogo address={s.address} symbol={s.symbol} size={16} />
       Earns {s.symbol}

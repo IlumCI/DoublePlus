@@ -163,7 +163,7 @@ export function AdminPage() {
         <p className="mt-2 text-sm text-ink-2">
           This wallet is not the protocol owner. Only the owner can manage the protocol.
         </p>
-        <Link to="/" className="mt-6 inline-block text-sm font-medium text-accent-2 underline underline-offset-2">
+        <Link to="/" className="mt-6 inline-block text-sm font-medium text-accent-ink underline underline-offset-2">
           Back to Markets
         </Link>
       </div>
@@ -188,7 +188,7 @@ export function AdminPage() {
               writeFactory("setLaunchesPaused", [!paused.data]), () => paused.refetch())
           }
           className={`rounded-md px-3 py-1.5 text-[12px] font-bold uppercase tracking-wide transition-colors disabled:opacity-50 ${
-            paused.data ? "bg-accent text-white hover:bg-accent-2" : "bg-down/10 text-down hover:bg-down/20"
+            paused.data ? "bg-accent text-ink hover:bg-accent-2" : "bg-down/10 text-down hover:bg-down/20"
           }`}
         >
           {paused.data ? "Resume launches" : "Pause launches"}
@@ -301,7 +301,7 @@ function Figure({ label, value, accent }: { label: string; value: string; accent
   return (
     <div className="bg-panel px-3 py-2.5">
       <dt className="text-[10px] uppercase tracking-wide text-ink-3">{label}</dt>
-      <dd className={`mt-0.5 font-mono text-[14px] font-bold ${accent ? "text-accent-2" : "text-ink"}`}>{value}</dd>
+      <dd className={`mt-0.5 font-mono text-[14px] font-bold ${accent ? "text-accent-ink" : "text-ink"}`}>{value}</dd>
     </div>
   );
 }

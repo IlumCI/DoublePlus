@@ -92,7 +92,7 @@ export function Explore() {
               key={s.id}
               onClick={() => setSort(s.id)}
               className={`rounded-md px-3 py-1 text-[12.5px] font-medium transition-colors ${
-                sort === s.id ? "bg-accent text-white" : "text-ink-2 hover:text-ink"
+                sort === s.id ? "bg-accent text-ink" : "text-ink-2 hover:text-ink"
               }`}
             >
               {s.label}
@@ -158,7 +158,7 @@ function TokenCard({ t, row }: { t: TokenSummary; row?: boolean }) {
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <Link to={to} className="truncate text-[12.5px] font-bold leading-tight text-ink">{t.name}</Link>
-              <span className="mono text-[12px] font-semibold text-accent/75">${t.symbol}</span>
+              <span className="mono text-[12px] font-semibold text-accent-ink/75">${t.symbol}</span>
               <span className="rounded bg-panel-2 px-1.5 py-0.5 text-[10px] font-medium text-ink-3">{age}</span>
             </div>
             <p className="mono mt-1 truncate text-[10.5px] text-ink-3">{shortAddr(t.creator)}</p>
@@ -167,7 +167,7 @@ function TokenCard({ t, row }: { t: TokenSummary; row?: boolean }) {
 
         <div className="mt-3">
           <p className="text-[9.5px] uppercase tracking-wide text-ink-3">Market cap</p>
-          <p className="mono text-[13.5px] font-bold leading-tight text-accent">{fmtUsd(t.marketCapUsd)}</p>
+          <p className="mono text-[13.5px] font-bold leading-tight text-accent-ink">{fmtUsd(t.marketCapUsd)}</p>
         </div>
         <div className="mt-2.5">
           <p className="text-[9.5px] uppercase tracking-wide text-ink-3">Volume</p>
@@ -178,7 +178,7 @@ function TokenCard({ t, row }: { t: TokenSummary; row?: boolean }) {
           {x ? <PillLink href={x}>X</PillLink> : null}
           {web ? <PillLink href={web}>Web</PillLink> : null}
           {scan ? <PillLink href={scan}>Scan</PillLink> : null}
-          <Link to={to} className="rounded-full border border-accent/50 px-4 py-1.5 text-[10.5px] font-semibold text-accent transition-colors hover:bg-accent hover:text-white">
+          <Link to={to} className="rounded-full border border-accent/50 px-4 py-1.5 text-[10.5px] font-semibold text-accent-ink transition-colors hover:bg-accent hover:text-ink">
             Trade
           </Link>
         </div>
@@ -204,11 +204,11 @@ function TokenCard({ t, row }: { t: TokenSummary; row?: boolean }) {
       <div className="p-2.5">
         <div className="flex items-baseline gap-1.5">
           <p className="min-w-0 truncate text-[12px] font-bold leading-tight text-ink">{t.name}</p>
-          <span className="mono shrink-0 text-[10.5px] font-semibold text-accent/75">${t.symbol}</span>
+          <span className="mono shrink-0 text-[10.5px] font-semibold text-accent-ink/75">${t.symbol}</span>
         </div>
         <div className="mt-1.5 flex items-center justify-between gap-2">
           <span className="text-[9.5px] uppercase tracking-wide text-ink-3">Market cap</span>
-          <span className="mono text-[13.5px] font-bold text-accent">{fmtUsd(t.marketCapUsd)}</span>
+          <span className="mono text-[13.5px] font-bold text-accent-ink">{fmtUsd(t.marketCapUsd)}</span>
         </div>
         <p className="mono mt-1 truncate text-[10.5px] text-ink-3">{fmtNative(t.volumeTotalWei, 3)} vol</p>
       </div>
@@ -237,7 +237,7 @@ function ViewButton({ active, onClick, label, children }: { active: boolean; onC
       onClick={onClick}
       aria-label={label}
       title={label}
-      className={`grid h-7 w-7 place-items-center rounded-md transition-colors ${active ? "bg-accent text-white" : "text-ink-3 hover:text-ink"}`}
+      className={`grid h-7 w-7 place-items-center rounded-md transition-colors ${active ? "bg-accent text-ink" : "text-ink-3 hover:text-ink"}`}
     >
       <svg width="16" height="16" viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.6">
         {children}
@@ -265,7 +265,7 @@ function CardSkeleton() {
 function Empty({ q }: { q: string }) {
   return (
     <div className="flex flex-col items-center px-6 py-24 text-center">
-      <span className="grid h-16 w-16 place-items-center rounded-full bg-accent/10 text-accent">
+      <span className="grid h-16 w-16 place-items-center rounded-full bg-accent/10 text-accent-ink">
         <Icon name={q ? "search" : "launch"} size={28} />
       </span>
       <p className="mt-5 text-[19px] font-bold text-ink">
@@ -275,7 +275,7 @@ function Empty({ q }: { q: string }) {
         {q ? "Try another name, symbol or address." : "Be the first to open a market — holders earn a real tokenized stock on every trade."}
       </p>
       {!q ? (
-        <Link to="/launch" className="mt-6 flex items-center gap-2 rounded-xl bg-accent px-5 py-3 text-[14.5px] font-semibold text-white transition-colors hover:bg-accent-2">
+        <Link to="/launch" className="mt-6 flex items-center gap-2 rounded-xl bg-accent px-5 py-3 text-[14.5px] font-semibold text-ink transition-colors hover:bg-accent-2">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
             <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>

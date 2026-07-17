@@ -22,7 +22,7 @@ export function NavBar() {
             end={t.end}
             className={({ isActive }) =>
               `flex flex-1 flex-col items-center gap-0.5 border-b-2 py-2 text-[10px] font-medium transition-colors sm:flex-none sm:flex-row sm:gap-1.5 sm:py-2.5 sm:text-[11.5px] ${
-                isActive ? "border-accent text-accent" : "border-transparent text-ink-2 hover:text-ink"
+                isActive ? "border-accent text-accent-ink" : "border-transparent text-ink-2 hover:text-ink"
               }`
             }
           >
