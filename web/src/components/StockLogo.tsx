@@ -2,8 +2,8 @@ import { useState } from "react";
 
 import { stockLogo } from "../lib/v4/stocks";
 
-/** A stock's logo, falling back to its ticker initials if the image fails. */
-export function StockLogo({ symbol, size = 20, className = "" }: { symbol: string; size?: number; className?: string }) {
+/** A stock's official Robinhood logo, falling back to its ticker initials. */
+export function StockLogo({ address, symbol, size = 20, className = "" }: { address: string; symbol: string; size?: number; className?: string }) {
   const [failed, setFailed] = useState(false);
   if (failed) {
     return (
@@ -17,11 +17,11 @@ export function StockLogo({ symbol, size = 20, className = "" }: { symbol: strin
   }
   return (
     <img
-      src={stockLogo(symbol)}
+      src={stockLogo(address)}
       alt={symbol}
       loading="lazy"
       onError={() => setFailed(true)}
-      className={`shrink-0 rounded-full bg-white object-contain ${className}`}
+      className={`shrink-0 rounded-full object-cover ${className}`}
       style={{ height: size, width: size }}
     />
   );

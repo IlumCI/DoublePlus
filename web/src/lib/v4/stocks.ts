@@ -24,7 +24,7 @@ export function stockOf(address: string): Stock | undefined {
   return STOCKS.find((s) => s.address.toLowerCase() === address.toLowerCase());
 }
 
-/** Logo image URL for a stock ticker (falls back to initials on error in UI). */
-export function stockLogo(symbol: string): string {
-  return `https://financialmodelingprep.com/image-stock/${symbol.toUpperCase()}.png`;
+/** Official Robinhood on-chain logo for a stock token, by its contract address. */
+export function stockLogo(address: string): string {
+  return `https://cdn.robinhood.com/ncw_assets/logos/${address.toLowerCase()}.png`;
 }

@@ -163,7 +163,7 @@ export function LaunchPage() {
                   stock === s.address ? "border-accent bg-accent/10 text-accent" : "border-edge text-ink-2 hover:border-edge-2 hover:text-ink"
                 }`}
               >
-                <StockLogo symbol={s.symbol} size={22} />
+                <StockLogo address={s.address} symbol={s.symbol} size={22} />
                 {s.symbol}
               </button>
             ))}
