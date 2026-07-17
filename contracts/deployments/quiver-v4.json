@@ -2,8 +2,9 @@
   "network": "robinhood",
   "chainId": 4663,
   "deployer": "0x7817F4e44a658410C4ADA6a9226ef3d51e5Ea846",
-  "admin": "0x0315eCb53F64b7A4bA56bb8A4DAB0D96F0856b60",
-  "treasury": "0x0315eCb53F64b7A4bA56bb8A4DAB0D96F0856b60",
+  "protocolAdmin": "0x0315ecb53f64b7a4ba56bb8a4dab0d96f0856b60",
+  "treasury": "0x0315ecb53f64b7a4ba56bb8a4dab0d96f0856b60",
+  "renounced": true,
   "wethUsdPrice8": "300000000000",
   "v4": {
     "poolManager": "0x8366a39cc670b4001a1121b8f6a443a643e40951",
@@ -11,10 +12,10 @@
     "usdg": "0x5fc5360d0400a0fd4f2af552add042d716f1d168"
   },
   "contracts": {
-    "create2Deployer": "0xC16176e6F47d34a1f9178efB10A7B554F7165c34",
-    "hook": "0xd7978e0b3f1D39b0d42f47Eaf1147796aB9B8044",
-    "factory": "0xd14C7f4daFE5517EF78289f1c055628Ab7c64663",
-    "router": "0xB66c81023139768ca93236C271C5093Be1cAdeBA"
+    "create2Deployer": "0x83a6Ec6b844bc7D1Cea783C2BF9A9C67C627E65e",
+    "hook": "0xD7bDA7629Db314f9810724bDf3c8ce8057d88044",
+    "factory": "0xb7D9111c574f96D1e818a23b6692D1BEdE834663",
+    "router": "0x6af9C2C0F57Cee9f15142abBE77373d4B4884B64"
   },
   "stocks": [
     {
