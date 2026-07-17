@@ -188,6 +188,10 @@ export class V4Client {
   }
 
   private async loadTrades(token: Address): Promise<TradeRecord[]> {
+    // Ensure the token's core is loaded — a caller may reach trades/candles
+    // without having listed tokens first (e.g. a serverless endpoint hit cold,
+    // or a deep link straight to a token page).
+    await this.loadCores();
     const core = this.cores.get(token.toLowerCase());
     if (!core) return [];
     const cached = this.tradesCache.get(token.toLowerCase());
