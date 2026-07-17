@@ -105,16 +105,33 @@ contract QuiverFactory is Ownable, ReentrancyGuard, IUnlockCallback {
     error InvalidParams();
     error StockNotListed();
     error BadVanity();
+    error NotProtocolAdmin();
+
+    /// @notice Permanent protocol administrator. This is the ONLY privilege that
+    ///         survives `renounceOwnership()`: it gates `unwindPosition` and is
+    ///         completely independent of Ownable's `owner()`. Immutable and set
+    ///         once at deployment — the deployer holds it only if it is passed in
+    ///         explicitly. Token creators can never be it.
+    address public immutable protocolAdmin;
+
+    /// @dev Access control for the post-renounce LP recovery function.
+    modifier onlyProtocolAdmin() {
+        if (msg.sender != protocolAdmin) revert NotProtocolAdmin();
+        _;
+    }
 
     constructor(
-        address admin_,
+        address owner_,
+        address protocolAdmin_,
         IPoolManager poolManager_,
         QuiverHook hook_,
         address weth_,
         uint256 nativeUsdPrice8_
-    ) Ownable(admin_) {
+    ) Ownable(owner_) {
         require(nativeUsdPrice8_ > 0, "price=0");
         require(weth_ != address(0), "weth=0");
+        require(protocolAdmin_ != address(0), "admin=0");
+        protocolAdmin = protocolAdmin_;
         poolManager = poolManager_;
         hook = hook_;
         weth = weth_;
@@ -314,13 +331,14 @@ contract QuiverFactory is Ownable, ReentrancyGuard, IUnlockCallback {
     // ---------------------------------------------------------------------
 
     /// @notice Remove `liquidityBps` of a token's factory-held liquidity and send
-    ///         the returned token + WETH to `recipient`. Owner only.
-    /// @dev This is a deliberate, disclosed admin power: it lets the owner pull
-    ///      pooled liquidity, so the "locked liquidity" guarantee does NOT apply
-    ///      to markets launched by a factory that exposes it.
+    ///         the returned token + WETH to `recipient`. Callable ONLY by the
+    ///         immutable `protocolAdmin` — it does not use `owner()`, so it keeps
+    ///         working after ownership is renounced. This is the sole surviving
+    ///         admin power; a disclosed liquidity-recovery lever, so the "locked
+    ///         liquidity" guarantee does not apply to markets from this factory.
     function unwindPosition(address token, uint16 liquidityBps, address recipient)
         external
-        onlyOwner
+        onlyProtocolAdmin
         nonReentrant
         returns (uint256 tokenAmount, uint256 wethAmount)
     {

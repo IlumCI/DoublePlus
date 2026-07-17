@@ -26,13 +26,15 @@ export function AdminPage() {
   const pushToast = useUi((s) => s.pushToast);
   const [busyAction, setBusyAction] = useState<string | null>(null);
 
+  // Access is the immutable protocolAdmin — the only surviving privilege once
+  // ownership is renounced (it gates the LP unwind). Not owner().
   const owner = useQuery({
-    queryKey: ["v4-owner"],
+    queryKey: ["v4-protocol-admin"],
     queryFn: () =>
       v4Client.publicClient.readContract({
         address: v4Client.v4.factory,
         abi: factoryAbi,
-        functionName: "owner",
+        functionName: "protocolAdmin",
       }),
   });
   const isAdmin =
@@ -57,22 +59,8 @@ export function AdminPage() {
     enabled: isAdmin,
   });
 
-  const paused = useQuery({
-    queryKey: ["v4-launches-paused"],
-    queryFn: () =>
-      v4Client.publicClient.readContract({
-        address: v4Client.v4.factory,
-        abi: factoryAbi,
-        functionName: "launchesPaused",
-      }),
-    refetchInterval: 20_000,
-    enabled: isAdmin,
-  });
-
   const { data: tokens, loading: tokensLoading } = useTokens(client, { sort: "volume", limit: 50 });
 
-  const [priceInput, setPriceInput] = useState("");
-  const [treasuryInput, setTreasuryInput] = useState("");
   const [unwind, setUnwind] = useState<{ address: string; symbol: string } | null>(null);
   const [unwindPct, setUnwindPct] = useState("100");
   const [unwindTo, setUnwindTo] = useState("");
@@ -116,8 +104,6 @@ export function AdminPage() {
   };
   const writeFactory = (functionName: string, args: unknown[]) =>
     writeContract(v4Client.v4.factory, factoryAbi, functionName, args);
-  const writeHook = (functionName: string, args: unknown[]) =>
-    writeContract(v4Client.v4.hook, hookAbi, functionName, args);
 
   const submitUnwind = () => {
     if (!unwind) return;
@@ -189,7 +175,7 @@ export function AdminPage() {
         <p className="text-5xl font-bold text-down">403</p>
         <h1 className="mt-3 text-xl font-bold text-ink">Unauthorized</h1>
         <p className="mt-2 text-sm text-ink-2">
-          This wallet is not the protocol owner. Only the owner can manage the protocol.
+          This wallet is not the protocol admin. Only the protocol admin can recover liquidity.
         </p>
         <Link to="/" className="mt-6 inline-block text-sm font-medium text-accent-ink underline underline-offset-2">
           Back to Markets
@@ -207,27 +193,15 @@ export function AdminPage() {
         <div className="flex items-center gap-2">
           <span className="h-1.5 w-1.5 rounded-full bg-accent" />
           <h1 className="text-[15px] font-bold tracking-tight text-ink">Operations</h1>
-          <span className="rounded bg-panel-2 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-ink-3">owner</span>
+          <span className="rounded bg-panel-2 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-ink-3">protocol admin</span>
         </div>
-        <button
-          disabled={busyAction !== null}
-          onClick={() =>
-            runTx(paused.data ? "Resume launches" : "Pause launches", () =>
-              writeFactory("setLaunchesPaused", [!paused.data]), () => paused.refetch())
-          }
-          className={`rounded-md px-3 py-1.5 text-[12px] font-bold uppercase tracking-wide transition-colors disabled:opacity-50 ${
-            paused.data ? "bg-accent text-accent-fg hover:bg-accent-2" : "bg-down/10 text-down hover:bg-down/20"
-          }`}
-        >
-          {paused.data ? "Resume launches" : "Pause launches"}
-        </button>
+        <p className="text-[11px] text-ink-3">Ownership renounced · LP recovery only</p>
       </div>
 
       {/* Figures strip */}
-      <div className="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-edge bg-edge sm:grid-cols-3">
+      <div className="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-edge bg-edge">
         <Figure label="Tokens launched" value={s ? compact(s.totalTokens) : "—"} />
         <Figure label="Treasury balance" value={s ? `${fmtWei(s.treasuryWeth)} WETH` : "—"} accent />
-        <Figure label="Launches" value={paused.data ? "Paused" : "Open"} />
       </div>
 
       {/* Protocol treasury */}
@@ -237,67 +211,6 @@ export function AdminPage() {
           The protocol's 25% share of every trade's tax is sent here as WETH on each distribution.
         </p>
         <p className="mt-1.5 font-mono text-[12px] text-ink-2">{s ? s.treasury : "—"}</p>
-      </div>
-
-      {/* Protocol settings */}
-      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div className="rounded-xl border border-edge bg-panel p-4">
-          <h2 className="text-[13px] font-semibold text-ink">Native / USD price</h2>
-          <p className="mt-0.5 text-[11px] text-ink-3">Sizes the pool at launch. Enter USD per ETH (e.g. 3000).</p>
-          <div className="mt-2.5 flex gap-2">
-            <input
-              value={priceInput}
-              onChange={(e) => setPriceInput(e.target.value)}
-              placeholder="3000"
-              inputMode="decimal"
-              className="h-9 w-full rounded-lg border border-edge bg-panel-2/40 px-3 text-[12.5px] text-ink placeholder:text-ink-3 focus:border-edge-2 focus:outline-none"
-            />
-            <button
-              disabled={busyAction !== null || !priceInput}
-              onClick={() => {
-                const usd = Number(priceInput);
-                if (!Number.isFinite(usd) || usd <= 0) {
-                  pushToast({ kind: "error", title: "Invalid price", body: "Enter USD per ETH, e.g. 3000." });
-                  return;
-                }
-                const price8 = BigInt(Math.round(usd * 1e8));
-                runTx("Set native price", () => writeFactory("setNativeUsdPrice", [price8]), () => { stats.refetch(); setPriceInput(""); });
-              }}
-              className="shrink-0 rounded-lg bg-accent px-3 text-[12.5px] font-semibold text-accent-fg transition-colors hover:bg-accent-2 disabled:opacity-50"
-            >
-              Set
-            </button>
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-edge bg-panel p-4">
-          <h2 className="text-[13px] font-semibold text-ink">Protocol treasury</h2>
-          <p className="mt-0.5 text-[11px] text-ink-3">Where the protocol's 25% WETH share is sent.</p>
-          <div className="mt-2.5 flex gap-2">
-            <input
-              value={treasuryInput}
-              onChange={(e) => setTreasuryInput(e.target.value)}
-              placeholder="0x…"
-              spellCheck={false}
-              autoComplete="off"
-              className="h-9 w-full rounded-lg border border-edge bg-panel-2/40 px-3 font-mono text-[12px] text-ink placeholder:text-ink-3 focus:border-edge-2 focus:outline-none"
-            />
-            <button
-              disabled={busyAction !== null || !treasuryInput}
-              onClick={() => {
-                const to = treasuryInput.trim();
-                if (!isAddress(to)) {
-                  pushToast({ kind: "error", title: "Invalid address", body: "Enter a valid treasury address." });
-                  return;
-                }
-                runTx("Set treasury", () => writeHook("setProtocolTreasury", [to]), () => { stats.refetch(); setTreasuryInput(""); });
-              }}
-              className="shrink-0 rounded-lg bg-accent px-3 text-[12.5px] font-semibold text-accent-fg transition-colors hover:bg-accent-2 disabled:opacity-50"
-            >
-              Set
-            </button>
-          </div>
-        </div>
       </div>
 
       {/* Manage by address */}

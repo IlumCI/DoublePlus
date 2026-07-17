@@ -32,7 +32,7 @@ const usdgNvdaKey = {
   hooks: ethers.ZeroAddress,
 };
 
-async function deploy(adminAddr: string, treasury: string) {
+async function deploy(adminAddr: string, treasury: string, protocolAdmin?: string) {
   const Deployer = await ethers.getContractFactory("HookDeployer");
   const deployer = await Deployer.deploy();
   await deployer.waitForDeployment();
@@ -62,7 +62,7 @@ async function deploy(adminAddr: string, treasury: string) {
   const hook = await ethers.getContractAt("QuiverHook", hookAddr);
 
   const Factory = await ethers.getContractFactory("QuiverFactory");
-  const factory = await Factory.deploy(adminAddr, POOL_MANAGER, hookAddr, WETH, 3000n * 10n ** 8n);
+  const factory = await Factory.deploy(adminAddr, protocolAdmin ?? adminAddr, POOL_MANAGER, hookAddr, WETH, 3000n * 10n ** 8n);
   await factory.waitForDeployment();
   await (await hook.setFactory(await factory.getAddress())).wait();
 
@@ -264,5 +264,42 @@ describe("Quiver V4 launchpad (fork)", function () {
     expect(await erc20.balanceOf(recipient.address), "recipient got tokens").to.be.greaterThan(tokBefore);
     expect(await wethC.balanceOf(recipient.address), "recipient got WETH").to.be.greaterThan(wethBefore);
     expect((await factory.positions(token)).liquidity, "liquidity drained").to.equal(0n);
+  });
+
+  it("renounces ownership yet keeps the protocolAdmin LP unwind working", async () => {
+    const [deployer, trader, padmin] = await ethers.getSigners();
+    // Owner = deployer (setup only); protocolAdmin = a separate wallet.
+    const { factory, router, hookAddr } = await deploy(deployer.address, deployer.address, padmin.address);
+    await (await factory.listStock(NVDA, usdgNvdaKey)).wait();
+
+    // Renounce ownership — every owner-only function must now be dead.
+    await (await factory.renounceOwnership()).wait();
+    expect(await factory.owner()).to.equal(ethers.ZeroAddress);
+    await expect(factory.setLaunchesPaused(true)).to.be.reverted;
+    await expect(factory.listStock(NVDA, usdgNvdaKey)).to.be.reverted;
+    await expect(factory.setNativeUsdPrice(1n)).to.be.reverted;
+
+    // Launching still works after renounce (permissionless), stock already listed.
+    await (await launchToken(factory, deployer, { name: "Renounce", symbol: "RNC", metadataURI: "", stock: NVDA, taxBps: 500 })).wait();
+    const token = await factory.allTokens(0);
+    const erc20 = await ethers.getContractAt("QuiverToken", token);
+
+    const { key, buyZeroForOne } = poolKeyFor(token, hookAddr);
+    const weth = new ethers.Contract(WETH, WETH_ABI, trader);
+    await (await weth.deposit({ value: ethers.parseEther("1") })).wait();
+    await (await weth.approve(await router.getAddress(), ethers.MaxUint256)).wait();
+    await (await router.connect(trader).swapExactIn(key, buyZeroForOne, ethers.parseEther("0.01"), trader.address)).wait();
+
+    // Unwind reverts for the ex-owner, a trader, and the creator — only the admin.
+    await expect(factory.connect(deployer).unwindPosition(token, 10_000, deployer.address)).to.be.revertedWithCustomError(factory, "NotProtocolAdmin");
+    await expect(factory.connect(trader).unwindPosition(token, 10_000, trader.address)).to.be.revertedWithCustomError(factory, "NotProtocolAdmin");
+
+    // protocolAdmin CAN unwind, even with ownership renounced.
+    const wethC = new ethers.Contract(WETH, WETH_ABI, deployer);
+    const wethBefore = await wethC.balanceOf(padmin.address);
+    await (await factory.connect(padmin).unwindPosition(token, 10_000, padmin.address)).wait();
+    expect(await erc20.balanceOf(padmin.address), "admin got tokens").to.be.greaterThan(0n);
+    expect(await wethC.balanceOf(padmin.address), "admin got WETH").to.be.greaterThan(wethBefore);
+    expect((await factory.positions(token)).liquidity).to.equal(0n);
   });
 });

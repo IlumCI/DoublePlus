@@ -29,13 +29,19 @@ async function main() {
   const [signer] = await ethers.getSigners();
   const cfg: Cfg = JSON.parse(readFileSync(join(__dirname, "../config/v4-stocks.json"), "utf8"));
 
-  const admin = process.env.PROTOCOL_ADMIN ?? signer.address; // final owner
-  const treasury = process.env.TREASURY ?? admin; // protocol fee sink (WETH)
+  // The deployer owns the contracts only during setup (listing stocks, wiring
+  // routes); ownership is renounced at the end. The immutable protocolAdmin is
+  // the ONLY privilege that survives renounce (it gates the Factory LP unwind).
+  const protocolAdmin = process.env.PROTOCOL_ADMIN;
+  if (!protocolAdmin) throw new Error("Set PROTOCOL_ADMIN — the immutable protocol admin (LP unwind role).");
+  const treasury = process.env.TREASURY ?? protocolAdmin; // protocol fee sink (WETH)
   const price8 = BigInt(process.env.WETH_USD_PRICE8 ?? String(3000n * 10n ** 8n));
   const vanity = process.env.VANITY !== "0"; // factory address ends in 4663
+  const renounce = process.env.RENOUNCE === "1"; // renounce owner after setup
 
-  console.log("deployer:", signer.address);
-  console.log("final admin:", admin, "| treasury:", treasury, "| WETH/USD(8):", price8.toString());
+  console.log("deployer (setup owner):", signer.address);
+  console.log("protocolAdmin:", protocolAdmin, "| treasury:", treasury, "| WETH/USD(8):", price8.toString());
+  console.log("renounce after setup:", renounce);
 
   // 1. CREATE2 deployer used to place the hook (flags) and factory (vanity).
   const Deployer = await ethers.getContractFactory("HookDeployer");
@@ -60,8 +66,8 @@ async function main() {
   // 3. Factory — vanity address ending 4663.
   const Factory = await ethers.getContractFactory("QuiverFactory");
   const facArgs = ethers.AbiCoder.defaultAbiCoder().encode(
-    ["address", "address", "address", "address", "uint256"],
-    [signer.address, POOL_MANAGER, hookAddr, cfg.weth, price8],
+    ["address", "address", "address", "address", "address", "uint256"],
+    [signer.address, protocolAdmin, POOL_MANAGER, hookAddr, cfg.weth, price8],
   );
   const facInit = ethers.concat([Factory.bytecode, facArgs]);
   console.log(vanity ? "mining factory vanity …4663…" : "deploying factory…");
@@ -99,19 +105,24 @@ async function main() {
     console.log("listed stock:", s.symbol);
   }
 
-  // 6. Hand ownership to the real protocol admin (distinct from deployer).
-  if (admin.toLowerCase() !== signer.address.toLowerCase()) {
-    await (await hook.transferOwnership(admin)).wait();
-    await (await factory.transferOwnership(admin)).wait();
-    console.log("ownership -> admin");
+  // 6. Renounce ownership on both contracts. Every owner-only function is then
+  //    permanently disabled; only the Factory's protocolAdmin-gated LP unwind
+  //    survives. Gated behind RENOUNCE=1 so a deploy can be checked first.
+  if (renounce) {
+    await (await hook.renounceOwnership()).wait();
+    await (await factory.renounceOwnership()).wait();
+    console.log("ownership renounced — protocolAdmin retains only LP unwind");
+  } else {
+    console.log("ownership NOT renounced (owner =", signer.address, "); set RENOUNCE=1 to renounce");
   }
 
   const out = {
     network: network.name,
     chainId: 4663,
     deployer: signer.address,
-    admin,
+    protocolAdmin,
     treasury,
+    renounced: renounce,
     wethUsdPrice8: price8.toString(),
     v4: { poolManager: POOL_MANAGER, weth: cfg.weth, usdg: cfg.usdg },
     contracts: { create2Deployer: c2Addr, hook: hookAddr, factory: facAddr },
@@ -121,7 +132,7 @@ async function main() {
   writeFileSync(path, JSON.stringify(out, null, 2));
   console.log("saved", path);
   console.log("\nverify with:\n  npx hardhat verify --network robinhood", hookAddr, POOL_MANAGER, signer.address, treasury, cfg.weth);
-  console.log("  npx hardhat verify --network robinhood", facAddr, signer.address, POOL_MANAGER, hookAddr, cfg.weth, price8.toString());
+  console.log("  npx hardhat verify --network robinhood", facAddr, signer.address, protocolAdmin, POOL_MANAGER, hookAddr, cfg.weth, price8.toString());
 }
 
 main().catch((e) => {
