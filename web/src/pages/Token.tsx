@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { useToken } from "@launchpad/sdk/react";
 import type { Address, TokenSummary } from "@launchpad/sdk";
 
@@ -76,11 +76,8 @@ export function TokenPage() {
 
   return (
     <div className="rise mx-auto max-w-6xl px-4 pb-24 sm:px-8">
-      {/* Back */}
-      <Link to="/" className="inline-flex items-center gap-1 pt-6 text-[12.5px] font-medium text-ink-2 transition-colors hover:text-ink">← Back</Link>
-
       {/* Identity */}
-      <section className="mt-3 flex items-start gap-3">
+      <section className="mt-6 flex items-start gap-3">
         <TokenLogo token={t} size={48} />
         <div className="min-w-0 flex-1">
           <h1 className="truncate text-[20px] font-extrabold leading-tight tracking-tight text-ink sm:text-[24px]">{t.name}</h1>
