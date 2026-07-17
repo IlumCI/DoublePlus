@@ -4,6 +4,7 @@ import { useTokens } from "@launchpad/sdk/react";
 import type { TokenSummary } from "@launchpad/sdk";
 
 import { Icon } from "../components/Icon";
+import { QuiverMark } from "../components/QuiverMark";
 import { client } from "../lib/client";
 import { env } from "../lib/env";
 import { fmtNative, fmtUsd, shortAddr, timeAgo } from "../lib/format";
@@ -128,8 +129,9 @@ export function Explore() {
 }
 
 function TokenCard({ t, row }: { t: TokenSummary; row?: boolean }) {
+  const [imgFailed, setImgFailed] = useState(false);
   const logo = t.metadata?.logo;
-  const ok = logo && /^(https?:|ipfs:|data:)/.test(String(logo));
+  const ok = !imgFailed && logo && /^(https?:|ipfs:|data:)/.test(String(logo));
   const src = ok
     ? String(logo).startsWith("ipfs://") ? `https://ipfs.io/ipfs/${String(logo).slice(7)}` : String(logo)
     : null;
@@ -144,12 +146,12 @@ function TokenCard({ t, row }: { t: TokenSummary; row?: boolean }) {
       <div className="rounded-xl border border-edge bg-panel p-3.5">
         <div className="flex gap-3">
           <Link to={to} className="shrink-0">
-            <span className="grid h-12 w-12 place-items-center overflow-hidden rounded-lg border border-edge bg-panel-2 text-[12px] font-bold text-ink-3">
+            <span className="grid h-12 w-12 place-items-center overflow-hidden rounded-lg border border-edge bg-panel-2">
               {src ? (
                 <img src={src} alt="" loading="lazy" className="h-full w-full object-cover"
-                  onError={(e) => ((e.target as HTMLImageElement).style.display = "none")} />
+                  onError={() => setImgFailed(true)} />
               ) : (
-                t.symbol.slice(0, 3).toUpperCase()
+                <QuiverMark />
               )}
             </span>
           </Link>
@@ -190,11 +192,9 @@ function TokenCard({ t, row }: { t: TokenSummary; row?: boolean }) {
       <div className="relative aspect-square w-full bg-panel-2">
         {src ? (
           <img src={src} alt="" loading="lazy" className="h-full w-full object-cover"
-            onError={(e) => ((e.target as HTMLImageElement).style.display = "none")} />
+            onError={() => setImgFailed(true)} />
         ) : (
-          <span className="grid h-full w-full place-items-center text-[24px] font-extrabold text-ink-3">
-            {t.symbol.slice(0, 3).toUpperCase()}
-          </span>
+          <QuiverMark />
         )}
         <span className="absolute right-1.5 top-1.5 rounded-md bg-black/55 px-1.5 py-0.5 text-[10px] font-medium text-white backdrop-blur-sm">
           {age}
