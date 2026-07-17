@@ -1,0 +1,30 @@
+name: Keeper — harvest rewards
+
+on:
+  schedule:
+    # Every 30 minutes. GitHub cron is best-effort and can be delayed a few min.
+    - cron: "*/30 * * * *"
+  workflow_dispatch: {} # allow manual runs from the Actions tab
+
+concurrency:
+  group: quiver-keeper
+  cancel-in-progress: false
+
+jobs:
+  harvest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install keeper deps
+        working-directory: keeper
+        run: npm install --no-audit --no-fund
+      - name: Harvest active tokens
+        working-directory: keeper
+        env:
+          KEEPER_PRIVATE_KEY: ${{ secrets.KEEPER_PRIVATE_KEY }}
+          ROBINHOOD_RPC_URL: https://rpc.mainnet.chain.robinhood.com
+        run: node keeper.mjs

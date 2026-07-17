@@ -81,26 +81,21 @@ async function main() {
   const factory = await ethers.getContractAt("QuiverFactory", facAddr);
   console.log("factory:", facAddr);
 
+  // Uniswap V4 PoolKeys REQUIRE currency0 < currency1. Sort every key we build,
+  // or its poolId points at a non-existent pool and swaps revert PoolNotInitialized.
+  const poolKey = (a: string, b: string, fee: number, tickSpacing: number) => {
+    const [currency0, currency1] = a.toLowerCase() < b.toLowerCase() ? [a, b] : [b, a];
+    return { currency0, currency1, fee, tickSpacing, hooks: ethers.ZeroAddress };
+  };
+
   // 4. Wire the hook and the WETH->USDG reward hop.
   await (await hook.setFactory(facAddr)).wait();
-  const wethUsdgKey = {
-    currency0: cfg.weth, // WETH < USDG
-    currency1: cfg.usdg,
-    fee: cfg.wethUsdgPool.fee,
-    tickSpacing: cfg.wethUsdgPool.tickSpacing,
-    hooks: ethers.ZeroAddress,
-  };
+  const wethUsdgKey = poolKey(cfg.weth, cfg.usdg, cfg.wethUsdgPool.fee, cfg.wethUsdgPool.tickSpacing);
   await (await hook.setQuoteRoute(cfg.usdg, wethUsdgKey)).wait();
 
-  // 5. List every stock with its USDG pool (currency0 = USDG < stock).
+  // 5. List every stock with its sorted USDG/stock pool key.
   for (const s of cfg.stocks) {
-    const stockKey = {
-      currency0: cfg.usdg,
-      currency1: s.address,
-      fee: s.fee,
-      tickSpacing: s.tickSpacing,
-      hooks: ethers.ZeroAddress,
-    };
+    const stockKey = poolKey(cfg.usdg, s.address, s.fee, s.tickSpacing);
     await (await factory.listStock(s.address, stockKey)).wait();
     console.log("listed stock:", s.symbol);
   }
