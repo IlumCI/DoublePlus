@@ -117,6 +117,13 @@ export function TokenPage() {
               <HeadStat label="Mcap" accent node={<AnimatedNumber value={Number(t.marketCapUsd)} format={(n) => fmtUsd(n)} className="tnum" />} />
               <HeadStat label="Volume" node={<span className="tnum">{fmtWeiUsd(t.volumeTotalWei, usdRate)}</span>} />
               <HeadStat label="Holders" node={<span className="tnum">{compact(t.holderCount)}</span>} />
+              {extra && rewardStock ? (
+                <HeadStat
+                  label={`${rewardStock.symbol} to holders`}
+                  accent
+                  node={<span className="tnum">{fmtTokens(extra.totalRewards.toString())}</span>}
+                />
+              ) : null}
             </div>
           </div>
           {/* Chart */}
