@@ -4,7 +4,7 @@ import { getChainId, getWalletClient, switchChain } from "wagmi/actions";
 
 import { client } from "./client";
 import { chain } from "./env";
-import { wagmiConfig } from "./wagmi";
+import { loadWalletConnect, wagmiConfig } from "./wagmi";
 import { useUi } from "../store";
 
 /**
@@ -39,26 +39,28 @@ export function useWallet() {
     if (walletClient) client.connectWallet(walletClient);
   }, [walletClient]);
 
-  const connectFirst = () => {
+  const connectFirst = async () => {
     // Prefer a browser-injected wallet (MetaMask, Rabby, Coinbase extension,
     // discovered via EIP-6963): it connects instantly with no extra download.
-    // Fall back to WalletConnect, which lazy-loads its QR modal on demand.
     const injectedConnector = connectors.find(
       (c) => c.type === "injected" && c.id !== "coinbaseWalletSDK",
     );
-    const preferred =
-      injectedConnector ??
-      connectors.find((c) => c.id === "walletConnect") ??
-      connectors[0];
-    if (!preferred) {
-      pushToast({
-        kind: "error",
-        title: "No wallet found",
-        body: "Install MetaMask or a Robinhood Chain compatible wallet.",
-      });
+    if (injectedConnector) {
+      connect({ connector: injectedConnector });
       return;
     }
-    connect({ connector: preferred });
+    // No browser wallet present: lazily fetch WalletConnect (its ~1.3 MB SDK is
+    // kept off first paint) and open the QR modal for a mobile connection.
+    const wc = await loadWalletConnect();
+    if (wc) {
+      connect({ connector: wc });
+      return;
+    }
+    pushToast({
+      kind: "error",
+      title: "No wallet found",
+      body: "Install MetaMask or a Robinhood Chain compatible wallet.",
+    });
   };
 
   return { address, isConnected, chainId, connectors, connect, connectFirst, disconnect, isPending };

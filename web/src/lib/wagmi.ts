@@ -1,41 +1,49 @@
-import { createConfig, http, type Config } from "wagmi";
-import { injected, walletConnect } from "wagmi/connectors";
+import { createConfig, http, type Config, type CreateConnectorFn } from "wagmi";
+import { injected } from "wagmi/connectors";
 
-import { BRAND } from "./brand";
 import { chain, env } from "./env";
 
-const projectId = env.walletConnectProjectId;
-
 /**
- * Wallet configuration built on wagmi's native connectors instead of a
- * heavyweight modal SDK. EIP-6963 discovery (on by default) surfaces every
- * injected browser wallet, so desktop users connect instantly with zero
- * extra download. The WalletConnect and Coinbase SDKs are code-split by the
- * connectors themselves and only fetched the first time a visitor actually
- * chooses that path, keeping ~3 MB of wallet code off the first paint.
- * Coinbase and other extensions are picked up by EIP-6963 injected discovery;
- * Coinbase mobile connects over WalletConnect, so no extra SDK is bundled.
+ * The eager wallet config ships ONLY the injected connector (EIP-6963). It is a
+ * few KB and connects every browser-extension / in-app wallet instantly with no
+ * extra download. WalletConnect — ~1.3 MB of SDK — is deliberately NOT imported
+ * here; it is built on demand by `loadWalletConnect()` the first time a visitor
+ * needs a mobile / QR connection, so none of it touches the first paint. We use
+ * wagmi's own connectors rather than Reown/AppKit precisely to keep this weight
+ * off production load.
  */
-const connectors = [
-  injected({ shimDisconnect: true }),
-  ...(projectId
-    ? [
-        walletConnect({
-          projectId,
-          showQrModal: true,
-          metadata: {
-            name: BRAND.name,
-            description: BRAND.description,
-            url: BRAND.url,
-            icons: [`${BRAND.url}/icon.png`],
-          },
-        }),
-      ]
-    : []),
-];
-
 export const wagmiConfig: Config = createConfig({
   chains: [chain],
-  connectors,
+  connectors: [injected({ shimDisconnect: true })],
   transports: { [chain.id]: http(env.rpcUrl, { batch: { wait: 16 } }) },
 });
+
+let wcPromise: Promise<CreateConnectorFn | null> | null = null;
+
+/**
+ * Lazily build the WalletConnect connector, dynamically importing its SDK so it
+ * is fetched only when actually used. Returns a `CreateConnectorFn` that wagmi's
+ * `connect({ connector })` sets up automatically, or null when no project id is
+ * configured. Memoized so repeated calls reuse the same connector.
+ */
+export function loadWalletConnect(): Promise<CreateConnectorFn | null> {
+  if (!env.walletConnectProjectId) return Promise.resolve(null);
+  if (wcPromise) return wcPromise;
+  wcPromise = (async () => {
+    const [{ walletConnect }, { BRAND }] = await Promise.all([
+      import("wagmi/connectors"),
+      import("./brand"),
+    ]);
+    return walletConnect({
+      projectId: env.walletConnectProjectId,
+      showQrModal: true,
+      metadata: {
+        name: BRAND.name,
+        description: BRAND.description,
+        url: BRAND.url,
+        icons: [`${BRAND.url}/icon.png`],
+      },
+    });
+  })();
+  return wcPromise;
+}
