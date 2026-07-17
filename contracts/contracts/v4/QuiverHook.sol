@@ -27,14 +27,13 @@ import {IQuiverToken} from "./interfaces/IQuiverToken.sol";
 ///         at launch) that the hook skims in `afterSwap` — so the fee is
 ///         collected on ALL trades through the pool, not just those routed via
 ///         the app. Skimmed fees accrue per token; anyone can then call
-///         `harvest`, which normalises everything to WETH and splits it four
-///         ways (25/25/25/25):
+///         `harvest`, which normalises everything to WETH and splits it
+///         50/25/25:
 ///
-///           1. creator  — claimable WETH, withdrawn on demand
-///           2. holders  — buys the creator's chosen stock (WETH -> USDG ->
+///           1. holders  — 50%: buys the creator's chosen stock (WETH -> USDG ->
 ///                         stock) and distributes it to holders by holdings
-///           3. buyback  — buys the launched token and burns it
-///           4. protocol — WETH sent to the protocol treasury
+///           2. creator  — 25%: claimable WETH, withdrawn on demand
+///           3. protocol — 25%: WETH sent to the protocol treasury
 ///
 ///         All swaps the hook performs run through the PoolManager's own
 ///         `unlock`, so the hook is its own router and needs no external one.
@@ -84,7 +83,7 @@ contract QuiverHook is BaseHook, Ownable, ReentrancyGuard, IUnlockCallback {
 
     event PoolRegistered(address indexed token, PoolId indexed id, address stock, uint16 taxBps);
     event FeeAccrued(address indexed token, bool weth, uint256 amount);
-    event Harvested(address indexed token, uint256 toCreator, uint256 toHolders, uint256 toBuyback, uint256 toProtocol);
+    event Harvested(address indexed token, uint256 toCreator, uint256 toHolders, uint256 toProtocol);
     event CreatorClaimed(address indexed token, address indexed creator, uint256 amount);
     event ProtocolTreasurySet(address indexed treasury);
     event QuoteRouteSet(address indexed quote);
@@ -223,22 +222,22 @@ contract QuiverHook is BaseHook, Ownable, ReentrancyGuard, IUnlockCallback {
     ///         swaps. Convenient, but sandwichable — prefer `harvestBounded` from
     ///         a keeper that can compute expected outputs.
     function harvest(address token) external nonReentrant {
-        _harvest(token, 0, 0, 0);
+        _harvest(token, 0, 0);
     }
 
     /// @notice Harvest with slippage floors on the internal swaps, so a sandwich
-    ///         attacker can't skim the holder/buyback quarters. `minWeth` bounds
-    ///         the token->WETH fee conversion, `minStock` the holder stock buy,
-    ///         `minToken` the buyback; zero disables that bound. A keeper computes
-    ///         these off-chain from the live pool price.
-    function harvestBounded(address token, uint256 minWeth, uint256 minStock, uint256 minToken)
+    ///         attacker can't skim the holder share. `minWeth` bounds the
+    ///         token->WETH fee conversion, `minStock` the holder stock buy; zero
+    ///         disables that bound. A keeper computes these off-chain from the
+    ///         live pool price.
+    function harvestBounded(address token, uint256 minWeth, uint256 minStock)
         external
         nonReentrant
     {
-        _harvest(token, minWeth, minStock, minToken);
+        _harvest(token, minWeth, minStock);
     }
 
-    function _harvest(address token, uint256 minWeth, uint256 minStock, uint256 minToken) private {
+    function _harvest(address token, uint256 minWeth, uint256 minStock) private {
         PoolConfig storage c = _config[_poolOf[token]];
         if (!c.registered) revert NotRegistered();
 
@@ -252,27 +251,26 @@ contract QuiverHook is BaseHook, Ownable, ReentrancyGuard, IUnlockCallback {
 
         uint256 total = wethFees[token];
         if (total == 0) {
-            emit Harvested(token, 0, 0, 0, 0);
+            emit Harvested(token, 0, 0, 0);
             return;
         }
         wethFees[token] = 0;
 
-        uint256 q = total / 4;
-        uint256 toProtocol = total - (q * 3); // dust rounds into protocol
-        uint256 toHolders = q;
+        // Split 50/25/25: holders 50%, creator 25%, protocol 25% (dust to protocol).
+        uint256 toHolders = total / 2;
+        uint256 toCreator = total / 4;
+        uint256 toProtocol = total - toHolders - toCreator;
 
-        // 2. creator — claimable WETH
-        creatorClaimable[token] += q;
+        // 1. creator — claimable WETH
+        creatorClaimable[token] += toCreator;
 
-        // 3. holders — buy stock (WETH -> USDG -> stock) and distribute. If the
-        //    stock route isn't configured/liquid, fold this quarter into the
-        //    protocol share so no WETH is stranded.
-        // Only route the holder quarter into stock if there are eligible holders
-        // to receive it — otherwise the reward would be stranded in the token, so
-        // fold it into the protocol share instead.
+        // 2. holders — buy stock (WETH -> USDG -> stock) and distribute. If the
+        //    stock route isn't configured/liquid, or there are no eligible holders
+        //    to receive it, fold this share into the protocol share so no WETH is
+        //    stranded.
         bool holderPaid;
-        if (q > 0 && c.stock != address(0) && quote != address(0) && IQuiverToken(token).eligibleSupply() > 0) {
-            uint256 usdgOut = _swap(_quoteKey, _wethSide(_quoteKey), q, 0);
+        if (toHolders > 0 && c.stock != address(0) && quote != address(0) && IQuiverToken(token).eligibleSupply() > 0) {
+            uint256 usdgOut = _swap(_quoteKey, _wethSide(_quoteKey), toHolders, 0);
             if (usdgOut > 0) {
                 uint256 stockOut = _swap(c.stockKey, Currency.wrap(quote), usdgOut, minStock);
                 if (stockOut > 0) {
@@ -283,22 +281,16 @@ contract QuiverHook is BaseHook, Ownable, ReentrancyGuard, IUnlockCallback {
             }
         }
         if (!holderPaid) {
+            toProtocol += toHolders;
             toHolders = 0;
-            toProtocol += q;
         }
 
-        // 4. buyback&burn — buy the launched token with WETH and burn it
-        if (q > 0) {
-            uint256 tokenOut = _swap(c.poolKey, _wethSide(c.poolKey), q, minToken);
-            if (tokenOut > 0) IQuiverToken(token).burn(tokenOut);
-        }
-
-        // 5. protocol — WETH to treasury
+        // 3. protocol — WETH to treasury
         if (toProtocol > 0) {
             IERC20(WETH).safeTransfer(protocolTreasury, toProtocol);
         }
 
-        emit Harvested(token, q, toHolders, q, toProtocol);
+        emit Harvested(token, toCreator, toHolders, toProtocol);
     }
 
     /// @notice Creator withdraws their accrued WETH fees.

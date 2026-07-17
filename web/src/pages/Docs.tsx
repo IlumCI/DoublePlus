@@ -30,7 +30,7 @@ export function DocsPage() {
         <Facts
           rows={[
             ["Total supply", "1,000,000,000 (fixed)"],
-            ["Starting market cap", "$2,000 (fixed)"],
+            ["Starting market cap", "$5,000 (fixed)"],
             ["Upfront liquidity", "None required"],
           ]}
         />
@@ -38,17 +38,17 @@ export function DocsPage() {
 
       <Section title="Trading and fees">
         <p>
-          Every buy and sell through {BRAND.name} pays a flat 1% fee. It is not pushed on each trade;
-          it accrues inside the protocol and splits 80% to the token creator and 20% to the
-          platform. The creator claims their share anytime from their token's page, straight to
-          their wallet. Trades executed directly against the pool (bots, aggregators) pay the
-          pool's 1% Uniswap fee instead.
+          Every buy and sell through a {BRAND.name} pool pays the token's trade tax — a rate the
+          creator picks at launch, from 0% to 10%. The tax is skimmed on the pool itself, so it
+          applies to every trade, including ones routed directly by bots or aggregators. Accrued
+          tax is realised on each distribution and split three ways.
         </p>
         <Facts
           rows={[
-            ["Trading fee", "1% fixed"],
-            ["Creator share", "80%, claimable"],
-            ["Platform share", "20%"],
+            ["Trade tax", "0–10%, set by creator"],
+            ["Holders", "50% — paid as the creator's chosen stock"],
+            ["Creator", "25% — WETH, claimable"],
+            ["Protocol", "25% — WETH"],
           ]}
         />
       </Section>

@@ -506,8 +506,8 @@ export class V4Client {
     });
   }
 
-  /** Realize accrued tax into creator fees, holder stock rewards, buyback and
-   *  protocol. Permissionless — anyone can trigger it for a token. */
+  /** Realize accrued tax into holder stock rewards, creator fees and protocol
+   *  (50/25/25). Permissionless — anyone can trigger it for a token. */
   async harvest(token: Address): Promise<`0x${string}`> {
     const wc = this.requireWallet();
     return wc.writeContract({

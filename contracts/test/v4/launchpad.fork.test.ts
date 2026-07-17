@@ -150,7 +150,8 @@ describe("Quiver V4 launchpad (fork)", function () {
     const supplyBefore = await erc20.totalSupply();
     await (await hook.harvest(token)).wait();
     expect(await hook.creatorClaimable(token)).to.be.greaterThan(0n);
-    expect(await erc20.totalSupply()).to.be.lessThan(supplyBefore);
+    // No buyback&burn anymore — harvest splits 50/25/25, supply is unchanged.
+    expect(await erc20.totalSupply()).to.equal(supplyBefore);
   });
 
   it("trades via QuiverRouter with native ETH (buy and sell)", async () => {
