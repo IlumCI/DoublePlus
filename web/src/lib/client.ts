@@ -6,15 +6,15 @@ import { V4Client, type V4Addresses } from "./v4/client";
 
 /** Deployed Quiver V4 launchpad on Robinhood Chain (immutable). */
 const V4: V4Addresses = {
-  factory: "0x548a942b6bc50944Ca7F147eA9aAE94AFd4a4663",
-  hook: "0x08A27f842C32B9246B68a76734D60eeBc4d38044",
-  router: "0x379ADE181d8e1dE59e5FDAeb46B0492ce4BbaC9f",
+  factory: "0xd14C7f4daFE5517EF78289f1c055628Ab7c64663",
+  hook: "0xd7978e0b3f1D39b0d42f47Eaf1147796aB9B8044",
+  router: "0xB66c81023139768ca93236C271C5093Be1cAdeBA",
   poolManager: "0x8366a39cc670b4001a1121b8f6a443a643e40951",
   weth: "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73",
   usdg: "0x5fc5360d0400a0fd4f2af552add042d716f1d168",
 };
 
-const V4_START_BLOCK = 11248000n;
+const V4_START_BLOCK = 11942000n;
 
 // One or more RPC endpoints (comma-separated in VITE_RPC_URL). Each is retried
 // on transient failures (429 rate-limits, 5xx) with backoff, and viem's
