@@ -22,7 +22,7 @@ contract TestRouter is IUnlockCallback {
     struct Data {
         PoolKey key;
         bool zeroForOne;
-        uint256 amountIn;
+        int256 amountSpecified; // negative = exact-input, positive = exact-output
         address payer;
         address recipient;
     }
@@ -36,9 +36,19 @@ contract TestRouter is IUnlockCallback {
         returns (uint256 amountOut)
     {
         bytes memory res = poolManager.unlock(
-            abi.encode(Data(key, zeroForOne, amountIn, msg.sender, recipient))
+            abi.encode(Data(key, zeroForOne, -int256(amountIn), msg.sender, recipient))
         );
         amountOut = abi.decode(res, (uint256));
+    }
+
+    function swapExactOut(PoolKey calldata key, bool zeroForOne, uint256 amountOut, address recipient)
+        external
+        returns (uint256 taken)
+    {
+        bytes memory res = poolManager.unlock(
+            abi.encode(Data(key, zeroForOne, int256(amountOut), msg.sender, recipient))
+        );
+        taken = abi.decode(res, (uint256));
     }
 
     function unlockCallback(bytes calldata raw) external override returns (bytes memory) {
@@ -49,27 +59,28 @@ contract TestRouter is IUnlockCallback {
             d.key,
             SwapParams({
                 zeroForOne: d.zeroForOne,
-                amountSpecified: -int256(d.amountIn),
+                amountSpecified: d.amountSpecified,
                 sqrtPriceLimitX96: d.zeroForOne ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1
             }),
             ""
         );
 
-        Currency inC = d.zeroForOne ? d.key.currency0 : d.key.currency1;
-        Currency outC = d.zeroForOne ? d.key.currency1 : d.key.currency0;
-        int128 inDelta = d.zeroForOne ? delta.amount0() : delta.amount1();
-        int128 outDelta = d.zeroForOne ? delta.amount1() : delta.amount0();
+        // Generic settle: pay any currency we owe, take any we're owed. Works for
+        // exact-input and exact-output, and absorbs the hook's fee delta.
+        uint256 out0 = _resolve(d.key.currency0, delta.amount0(), d.payer, d.recipient);
+        uint256 out1 = _resolve(d.key.currency1, delta.amount1(), d.payer, d.recipient);
+        return abi.encode(out0 + out1);
+    }
 
-        // Pay input: pull from payer, settle to PoolManager.
-        uint256 owed = uint256(uint128(-inDelta));
-        poolManager.sync(inC);
-        IERC20(Currency.unwrap(inC)).safeTransferFrom(d.payer, address(poolManager), owed);
-        poolManager.settle();
-
-        // Take output to the recipient.
-        uint256 out = uint256(uint128(outDelta));
-        poolManager.take(outC, d.recipient, out);
-
-        return abi.encode(out);
+    function _resolve(Currency c, int128 amount, address payer, address recipient) internal returns (uint256 taken) {
+        if (amount < 0) {
+            uint256 owed = uint256(uint128(-amount));
+            poolManager.sync(c);
+            IERC20(Currency.unwrap(c)).safeTransferFrom(payer, address(poolManager), owed);
+            poolManager.settle();
+        } else if (amount > 0) {
+            taken = uint256(uint128(amount));
+            poolManager.take(c, recipient, taken);
+        }
     }
 }

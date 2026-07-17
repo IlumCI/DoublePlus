@@ -221,6 +221,28 @@ describe("Quiver V4 launchpad (fork)", function () {
     expect(after - before, "holder claimed NVDA").to.be.greaterThan(0n);
   });
 
+  it("taxes exact-output swaps too, so the fee can't be dodged", async () => {
+    const [admin, trader] = await ethers.getSigners();
+    const { hook, factory, router, hookAddr } = await deploy(admin.address, admin.address);
+    await (await factory.listStock(NVDA, usdgNvdaKey)).wait();
+    await (await launchToken(factory, admin, { name: "ExactOut", symbol: "EO", metadataURI: "", stock: NVDA, taxBps: 500 })).wait();
+    const token = await factory.allTokens(0);
+    const erc20 = await ethers.getContractAt("QuiverToken", token);
+    const { key, buyZeroForOne } = poolKeyFor(token, hookAddr);
+
+    const weth = new ethers.Contract(WETH, WETH_ABI, trader);
+    await (await weth.deposit({ value: ethers.parseEther("1") })).wait();
+    await (await weth.approve(await router.getAddress(), ethers.MaxUint256)).wait();
+
+    // Exact-OUTPUT buy: request an exact token amount, pay WETH. The tax is taken
+    // on the WETH (unspecified) side — which the old hook skipped entirely.
+    const exactOut = 10n ** 22n;
+    await (await router.connect(trader).swapExactOut(key, buyZeroForOne, exactOut, trader.address)).wait();
+
+    expect(await erc20.balanceOf(trader.address), "got the exact token amount").to.equal(exactOut);
+    expect(await hook.wethFees(token), "exact-output swap was taxed").to.be.greaterThan(0n);
+  });
+
   it("lets only the owner unwind a token's liquidity to a recipient", async () => {
     const [admin, trader, recipient] = await ethers.getSigners();
     const { factory, router, hookAddr } = await deploy(admin.address, admin.address);

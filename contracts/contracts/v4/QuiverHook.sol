@@ -186,24 +186,31 @@ contract QuiverHook is BaseHook, Ownable, ReentrancyGuard, IUnlockCallback {
     ) internal override returns (bytes4, int128) {
         PoolConfig storage c = _config[key.toId()];
         if (!c.registered || c.taxBps == 0) return (BaseHook.afterSwap.selector, int128(0));
-        if (params.amountSpecified >= 0) return (BaseHook.afterSwap.selector, int128(0));
 
-        Currency outputCurrency = params.zeroForOne ? key.currency1 : key.currency0;
-        int128 outAmount = params.zeroForOne ? delta.amount1() : delta.amount0();
-        if (outAmount <= 0) return (BaseHook.afterSwap.selector, int128(0));
+        // Charge the tax in the swap's UNSPECIFIED currency, so it applies to
+        // BOTH exact-input (fee comes out of the output) and exact-output (fee is
+        // added to the input) trades. This means every swap through the pool is
+        // taxed — none can dodge the fee by using an exact-output order.
+        bool exactInput = params.amountSpecified < 0;
+        bool unspecifiedIsCurrency1 = (params.zeroForOne == exactInput);
+        Currency unspecified = unspecifiedIsCurrency1 ? key.currency1 : key.currency0;
+        int128 unspecifiedAmount = unspecifiedIsCurrency1 ? delta.amount1() : delta.amount0();
 
-        uint256 fee = (uint256(uint128(outAmount)) * c.taxBps) / BPS;
+        uint256 magnitude = unspecifiedAmount < 0
+            ? uint256(uint128(-unspecifiedAmount))
+            : uint256(uint128(unspecifiedAmount));
+        uint256 fee = (magnitude * c.taxBps) / BPS;
         if (fee == 0) return (BaseHook.afterSwap.selector, int128(0));
 
-        poolManager.take(outputCurrency, address(this), fee);
+        poolManager.take(unspecified, address(this), fee);
 
-        bool outIsToken = Currency.unwrap(outputCurrency) == c.token;
-        if (outIsToken) {
+        bool feeIsToken = Currency.unwrap(unspecified) == c.token;
+        if (feeIsToken) {
             tokenFees[c.token] += fee;
         } else {
             wethFees[c.token] += fee;
         }
-        emit FeeAccrued(c.token, !outIsToken, fee);
+        emit FeeAccrued(c.token, !feeIsToken, fee);
 
         return (BaseHook.afterSwap.selector, int128(int256(fee)));
     }
@@ -212,7 +219,26 @@ contract QuiverHook is BaseHook, Ownable, ReentrancyGuard, IUnlockCallback {
     // harvest: normalise to WETH, split 25/25/25/25, act
     // ---------------------------------------------------------------------
 
+    /// @notice Permissionless harvest with no slippage bounds on the internal
+    ///         swaps. Convenient, but sandwichable — prefer `harvestBounded` from
+    ///         a keeper that can compute expected outputs.
     function harvest(address token) external nonReentrant {
+        _harvest(token, 0, 0, 0);
+    }
+
+    /// @notice Harvest with slippage floors on the internal swaps, so a sandwich
+    ///         attacker can't skim the holder/buyback quarters. `minWeth` bounds
+    ///         the token->WETH fee conversion, `minStock` the holder stock buy,
+    ///         `minToken` the buyback; zero disables that bound. A keeper computes
+    ///         these off-chain from the live pool price.
+    function harvestBounded(address token, uint256 minWeth, uint256 minStock, uint256 minToken)
+        external
+        nonReentrant
+    {
+        _harvest(token, minWeth, minStock, minToken);
+    }
+
+    function _harvest(address token, uint256 minWeth, uint256 minStock, uint256 minToken) private {
         PoolConfig storage c = _config[_poolOf[token]];
         if (!c.registered) revert NotRegistered();
 
@@ -221,7 +247,7 @@ contract QuiverHook is BaseHook, Ownable, ReentrancyGuard, IUnlockCallback {
         if (tf > 0) {
             tokenFees[token] = 0;
             Currency tokenCurrency = c.tokenIsCurrency0 ? c.poolKey.currency0 : c.poolKey.currency1;
-            wethFees[token] += _swap(c.poolKey, tokenCurrency, tf);
+            wethFees[token] += _swap(c.poolKey, tokenCurrency, tf, minWeth);
         }
 
         uint256 total = wethFees[token];
@@ -246,9 +272,9 @@ contract QuiverHook is BaseHook, Ownable, ReentrancyGuard, IUnlockCallback {
         // fold it into the protocol share instead.
         bool holderPaid;
         if (q > 0 && c.stock != address(0) && quote != address(0) && IQuiverToken(token).eligibleSupply() > 0) {
-            uint256 usdgOut = _swap(_quoteKey, _wethSide(_quoteKey), q);
+            uint256 usdgOut = _swap(_quoteKey, _wethSide(_quoteKey), q, 0);
             if (usdgOut > 0) {
-                uint256 stockOut = _swap(c.stockKey, Currency.wrap(quote), usdgOut);
+                uint256 stockOut = _swap(c.stockKey, Currency.wrap(quote), usdgOut, minStock);
                 if (stockOut > 0) {
                     IERC20(c.stock).safeTransfer(token, stockOut);
                     IQuiverToken(token).distributeRewards(stockOut);
@@ -263,7 +289,7 @@ contract QuiverHook is BaseHook, Ownable, ReentrancyGuard, IUnlockCallback {
 
         // 4. buyback&burn — buy the launched token with WETH and burn it
         if (q > 0) {
-            uint256 tokenOut = _swap(c.poolKey, _wethSide(c.poolKey), q);
+            uint256 tokenOut = _swap(c.poolKey, _wethSide(c.poolKey), q, minToken);
             if (tokenOut > 0) IQuiverToken(token).burn(tokenOut);
         }
 
@@ -291,7 +317,7 @@ contract QuiverHook is BaseHook, Ownable, ReentrancyGuard, IUnlockCallback {
     // Swap plumbing (our own router, via PoolManager.unlock)
     // ---------------------------------------------------------------------
 
-    function _swap(PoolKey memory key, Currency currencyIn, uint256 amountIn)
+    function _swap(PoolKey memory key, Currency currencyIn, uint256 amountIn, uint256 minOut)
         internal
         returns (uint256 amountOut)
     {
@@ -299,6 +325,7 @@ contract QuiverHook is BaseHook, Ownable, ReentrancyGuard, IUnlockCallback {
         bool zeroForOne = Currency.unwrap(currencyIn) == Currency.unwrap(key.currency0);
         bytes memory res = poolManager.unlock(abi.encode(SwapAction(key, zeroForOne, amountIn)));
         amountOut = abi.decode(res, (uint256));
+        require(amountOut >= minOut, "slippage");
     }
 
     function unlockCallback(bytes calldata data) external override returns (bytes memory) {
