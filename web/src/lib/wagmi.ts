@@ -1,49 +1,72 @@
-import { createConfig, http, type Config, type CreateConnectorFn } from "wagmi";
-import { injected } from "wagmi/connectors";
+import { WagmiAdapter } from "@reown/appkit-adapter-wagmi";
+import { defineChain } from "@reown/appkit/networks";
+import { http } from "viem";
+import type { Config } from "wagmi";
 
+import { BRAND } from "./brand";
 import { chain, env } from "./env";
 
 /**
- * The eager wallet config ships ONLY the injected connector (EIP-6963). It is a
- * few KB and connects every browser-extension / in-app wallet instantly with no
- * extra download. WalletConnect — ~1.3 MB of SDK — is deliberately NOT imported
- * here; it is built on demand by `loadWalletConnect()` the first time a visitor
- * needs a mobile / QR connection, so none of it touches the first paint. We use
- * wagmi's own connectors rather than Reown/AppKit precisely to keep this weight
- * off production load.
+ * Reown AppKit wallet integration. The WagmiAdapter owns the wagmi config so
+ * AppKit's modal and our wagmi hooks share one connection state; it registers
+ * the injected, WalletConnect and Coinbase connectors from a single project id.
+ *
+ * The AppKit modal UI (its web components) is heavy, so `createAppKit` is called
+ * lazily by `openWalletModal()` the first time a visitor connects — none of that
+ * UI weight touches the first paint. Account/session reads go through the normal
+ * wagmi hooks, which work off `wagmiConfig` whether or not the modal is open yet.
  */
-export const wagmiConfig: Config = createConfig({
-  chains: [chain],
-  connectors: [injected({ shimDisconnect: true })],
+const appKitNetwork = defineChain({
+  id: chain.id,
+  caipNetworkId: `eip155:${chain.id}`,
+  chainNamespace: "eip155",
+  name: chain.name,
+  nativeCurrency: chain.nativeCurrency,
+  rpcUrls: { default: { http: [env.rpcUrl] } },
+  ...(env.explorerUrl
+    ? { blockExplorers: { default: { name: "Explorer", url: env.explorerUrl } } }
+    : {}),
+});
+
+const wagmiAdapter = new WagmiAdapter({
+  networks: [appKitNetwork],
+  projectId: env.walletConnectProjectId,
   transports: { [chain.id]: http(env.rpcUrl, { batch: { wait: 16 } }) },
 });
 
-let wcPromise: Promise<CreateConnectorFn | null> | null = null;
+export const wagmiConfig = wagmiAdapter.wagmiConfig as Config;
+
+let modalPromise: Promise<{ open: () => void }> | null = null;
 
 /**
- * Lazily build the WalletConnect connector, dynamically importing its SDK so it
- * is fetched only when actually used. Returns a `CreateConnectorFn` that wagmi's
- * `connect({ connector })` sets up automatically, or null when no project id is
- * configured. Memoized so repeated calls reuse the same connector.
+ * Open the Reown AppKit wallet modal, lazily creating it (and loading its SDK)
+ * on first use. Subsequent calls reuse the same modal instance.
  */
-export function loadWalletConnect(): Promise<CreateConnectorFn | null> {
-  if (!env.walletConnectProjectId) return Promise.resolve(null);
-  if (wcPromise) return wcPromise;
-  wcPromise = (async () => {
-    const [{ walletConnect }, { BRAND }] = await Promise.all([
-      import("wagmi/connectors"),
-      import("./brand"),
-    ]);
-    return walletConnect({
-      projectId: env.walletConnectProjectId,
-      showQrModal: true,
-      metadata: {
-        name: BRAND.name,
-        description: BRAND.description,
-        url: BRAND.url,
-        icons: [`${BRAND.url}/icon.png`],
-      },
-    });
-  })();
-  return wcPromise;
+export function openWalletModal(): Promise<void> {
+  if (!env.walletConnectProjectId) {
+    return Promise.reject(new Error("Wallet is not configured (missing project id)."));
+  }
+  if (!modalPromise) {
+    modalPromise = import("@reown/appkit/react").then(({ createAppKit }) =>
+      createAppKit({
+        adapters: [wagmiAdapter],
+        networks: [appKitNetwork],
+        defaultNetwork: appKitNetwork,
+        projectId: env.walletConnectProjectId,
+        metadata: {
+          name: BRAND.name,
+          description: BRAND.description,
+          url: BRAND.url,
+          icons: [`${BRAND.url}/icon.png`],
+        },
+        themeMode: "dark",
+        themeVariables: {
+          "--w3m-accent": "#ee463a",
+          "--w3m-border-radius-master": "2px",
+        },
+        features: { analytics: false, email: false, socials: [] },
+      }),
+    );
+  }
+  return modalPromise.then((modal) => modal.open());
 }

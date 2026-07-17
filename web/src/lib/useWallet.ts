@@ -4,7 +4,7 @@ import { getChainId, getWalletClient, switchChain } from "wagmi/actions";
 
 import { client } from "./client";
 import { chain } from "./env";
-import { loadWalletConnect, wagmiConfig } from "./wagmi";
+import { openWalletModal, wagmiConfig } from "./wagmi";
 import { useUi } from "../store";
 
 /**
@@ -40,27 +40,14 @@ export function useWallet() {
   }, [walletClient]);
 
   const connectFirst = async () => {
-    // Prefer a browser-injected wallet (MetaMask, Rabby, Coinbase extension,
-    // discovered via EIP-6963): it connects instantly with no extra download.
-    const injectedConnector = connectors.find(
-      (c) => c.type === "injected" && c.id !== "coinbaseWalletSDK",
-    );
-    if (injectedConnector) {
-      connect({ connector: injectedConnector });
-      return;
+    // Open the Reown AppKit modal, which lists every wallet (injected, mobile
+    // via WalletConnect, Coinbase) and handles the connection. Its UI is loaded
+    // on demand here so none of that weight sits on the first paint.
+    try {
+      await openWalletModal();
+    } catch (err) {
+      pushToast({ kind: "error", title: "Could not open wallet", body: errorText(err) });
     }
-    // No browser wallet present: lazily fetch WalletConnect (its ~1.3 MB SDK is
-    // kept off first paint) and open the QR modal for a mobile connection.
-    const wc = await loadWalletConnect();
-    if (wc) {
-      connect({ connector: wc });
-      return;
-    }
-    pushToast({
-      kind: "error",
-      title: "No wallet found",
-      body: "Install MetaMask or a Robinhood Chain compatible wallet.",
-    });
   };
 
   return { address, isConnected, chainId, connectors, connect, connectFirst, disconnect, isPending };
