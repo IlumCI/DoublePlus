@@ -46,7 +46,11 @@ export function TokenPage() {
         .then((e) => live && setExtra(e))
         .catch(() => undefined);
     load();
-    const id = setInterval(load, 20_000);
+    // Skip refreshes while the tab is backgrounded — no point spending RPC on a
+    // page nobody is looking at, and it keeps idle tabs off the endpoint.
+    const id = setInterval(() => {
+      if (!document.hidden) load();
+    }, 20_000);
     return () => {
       live = false;
       clearInterval(id);

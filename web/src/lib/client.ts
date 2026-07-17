@@ -1,4 +1,4 @@
-import { createPublicClient, http, type PublicClient } from "viem";
+import { createPublicClient, fallback, http, type PublicClient } from "viem";
 import type { LaunchpadClient } from "@launchpad/sdk";
 
 import { chain, env } from "./env";
@@ -16,10 +16,27 @@ const V4: V4Addresses = {
 
 const V4_START_BLOCK = 11248000n;
 
+// One or more RPC endpoints (comma-separated in VITE_RPC_URL). Each is retried
+// on transient failures (429 rate-limits, 5xx) with backoff, and viem's
+// fallback rotates to the next endpoint if one keeps failing — so a single
+// overloaded RPC under heavy traffic degrades gracefully instead of blanking
+// the app. Adding a backup RPC is a pure env change, no code.
+const rpcUrls = env.rpcUrl
+  .split(",")
+  .map((u) => u.trim())
+  .filter(Boolean);
+
 const publicClient = createPublicClient({
   chain,
-  transport: http(env.rpcUrl),
-  batch: { multicall: { wait: 16 } },
+  transport: fallback(
+    rpcUrls.map((url) => http(url, { retryCount: 3, retryDelay: 200, batch: { wait: 16 } })),
+  ),
+  // Slow the live event watchers from viem's 4s default to 10s. Every open
+  // market and the launch feed is watched per visitor, so at scale this is the
+  // dominant RPC cost; 10s keeps trades feeling live while cutting that load
+  // ~60%. Reads coalesce into Multicall3 within a 24ms window.
+  pollingInterval: 10_000,
+  batch: { multicall: { wait: 24 } },
 }) as PublicClient;
 
 const v4 = new V4Client(publicClient, V4, V4_START_BLOCK);

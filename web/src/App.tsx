@@ -16,7 +16,9 @@ const DocsPage = lazy(() => import("./pages/Docs").then((m) => ({ default: m.Doc
 
 const queryClient = new QueryClient({
   defaultOptions: {
-    queries: { staleTime: 10_000, refetchOnWindowFocus: false },
+    // Serve cached reads longer and keep them in memory across navigation so
+    // moving between pages doesn't re-hit the RPC for data we already have.
+    queries: { staleTime: 30_000, gcTime: 300_000, refetchOnWindowFocus: false, retry: 2 },
   },
 });
 

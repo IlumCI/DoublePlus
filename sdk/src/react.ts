@@ -87,8 +87,11 @@ export function useTokens(
     const unsub = client.subscribeToLaunches(() => result.reload());
     // Poll on an interval so new launches appear without a reload and a
     // transient RPC failure (mobile rate-limits) self-heals instead of
-    // leaving the feed stuck empty.
-    const id = setInterval(() => result.reload(), 20_000);
+    // leaving the feed stuck empty. Pause while the tab is backgrounded so idle
+    // tabs stop hitting the RPC.
+    const id = setInterval(() => {
+      if (typeof document === "undefined" || !document.hidden) result.reload();
+    }, 20_000);
     return () => {
       unsub();
       clearInterval(id);
