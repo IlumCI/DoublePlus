@@ -73,6 +73,9 @@ export function AdminPage() {
 
   const [priceInput, setPriceInput] = useState("");
   const [treasuryInput, setTreasuryInput] = useState("");
+  const [unwind, setUnwind] = useState<{ address: string; symbol: string } | null>(null);
+  const [unwindPct, setUnwindPct] = useState("100");
+  const [unwindTo, setUnwindTo] = useState("");
 
   // "Manage by address" lookup: paste any launched token's contract address.
   const [lookupInput, setLookupInput] = useState("");
@@ -116,6 +119,23 @@ export function AdminPage() {
   const writeHook = (functionName: string, args: unknown[]) =>
     writeContract(v4Client.v4.hook, hookAbi, functionName, args);
 
+  const submitUnwind = () => {
+    if (!unwind) return;
+    const pct = Number(unwindPct);
+    if (!Number.isFinite(pct) || pct <= 0 || pct > 100) {
+      pushToast({ kind: "error", title: "Invalid percent", body: "Enter a number from 1 to 100." });
+      return;
+    }
+    const to = unwindTo.trim();
+    if (!isAddress(to)) {
+      pushToast({ kind: "error", title: "Invalid address", body: "Enter a valid recipient address." });
+      return;
+    }
+    const target = unwind;
+    setUnwind(null);
+    runTx("Unwind liquidity", () => writeFactory("unwindPosition", [target.address, Math.round(pct * 100), to]));
+  };
+
   // Per-token owner actions: distribute accrued fees, or unwind pooled liquidity.
   const tokenActions = (t: { address: string; symbol: string }) => (
     <div className="flex justify-end gap-1.5">
@@ -129,22 +149,9 @@ export function AdminPage() {
       <button
         disabled={busyAction !== null}
         onClick={() => {
-          const pctStr = window.prompt(`Unwind what % of ${t.symbol}'s liquidity? (1–100)`, "100");
-          if (!pctStr) return;
-          const pct = Number(pctStr);
-          if (!Number.isFinite(pct) || pct <= 0 || pct > 100) {
-            pushToast({ kind: "error", title: "Invalid percent", body: "Enter a number from 1 to 100." });
-            return;
-          }
-          const recipient = (window.prompt("Send unwound token + WETH to which address?", address ?? "") ?? "").trim();
-          if (!isAddress(recipient)) {
-            pushToast({ kind: "error", title: "Invalid address", body: "Enter a valid recipient address." });
-            return;
-          }
-          if (!window.confirm(`Unwind ${pct}% of ${t.symbol}'s liquidity to ${shortAddr(recipient)}? This pulls pooled liquidity — it is not reversible.`)) return;
-          runTx("Unwind liquidity", () =>
-            writeFactory("unwindPosition", [t.address, Math.round(pct * 100), recipient]),
-          );
+          setUnwind({ address: t.address, symbol: t.symbol });
+          setUnwindPct("100");
+          setUnwindTo(address ?? "");
         }}
         className="rounded-md border border-down/40 bg-down/5 px-2.5 py-1 text-[11px] font-semibold text-down transition-colors hover:bg-down/10 disabled:opacity-50"
       >
@@ -375,6 +382,50 @@ export function AdminPage() {
           </div>
         )}
       </div>
+
+      {/* Unwind LP modal */}
+      {unwind ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4" onClick={() => setUnwind(null)}>
+          <div className="w-full max-w-sm rounded-2xl border border-edge bg-panel p-4" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-[14px] font-bold text-ink">Unwind {unwind.symbol} liquidity</h3>
+            <p className="mt-1 text-[11.5px] leading-relaxed text-ink-3">
+              Pulls pooled liquidity (token + WETH) to a recipient. This is not reversible and lowers the pool's liquidity.
+            </p>
+            <label className="mt-3 block text-[11px] font-medium text-ink-2">Percent to remove (1–100)</label>
+            <input
+              value={unwindPct}
+              onChange={(e) => setUnwindPct(e.target.value)}
+              inputMode="decimal"
+              placeholder="100"
+              className="mt-1 h-9 w-full rounded-lg border border-edge bg-panel-2/40 px-3 text-[13px] text-ink placeholder:text-ink-3 focus:border-edge-2 focus:outline-none"
+            />
+            <label className="mt-3 block text-[11px] font-medium text-ink-2">Recipient</label>
+            <input
+              value={unwindTo}
+              onChange={(e) => setUnwindTo(e.target.value)}
+              placeholder="0x…"
+              spellCheck={false}
+              autoComplete="off"
+              className="mt-1 h-9 w-full rounded-lg border border-edge bg-panel-2/40 px-3 font-mono text-[12px] text-ink placeholder:text-ink-3 focus:border-edge-2 focus:outline-none"
+            />
+            <div className="mt-4 flex gap-2">
+              <button
+                onClick={() => setUnwind(null)}
+                className="h-9 flex-1 rounded-lg border border-edge text-[12.5px] font-semibold text-ink-2 transition-colors hover:text-ink"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={busyAction !== null}
+                onClick={submitUnwind}
+                className="h-9 flex-1 rounded-lg bg-down text-[12.5px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+              >
+                Unwind
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
