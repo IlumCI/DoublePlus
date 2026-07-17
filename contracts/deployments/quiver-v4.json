@@ -1,0 +1,62 @@
+{
+  "network": "robinhood",
+  "chainId": 4663,
+  "deployer": "0x7817F4e44a658410C4ADA6a9226ef3d51e5Ea846",
+  "protocolAdmin": "0x0315ecb53f64b7a4ba56bb8a4dab0d96f0856b60",
+  "treasury": "0x0315ecb53f64b7a4ba56bb8a4dab0d96f0856b60",
+  "renounced": true,
+  "wethUsdPrice8": "300000000000",
+  "v4": {
+    "poolManager": "0x8366a39cc670b4001a1121b8f6a443a643e40951",
+    "weth": "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73",
+    "usdg": "0x5fc5360d0400a0fd4f2af552add042d716f1d168"
+  },
+  "contracts": {
+    "create2Deployer": "0x83a6Ec6b844bc7D1Cea783C2BF9A9C67C627E65e",
+    "hook": "0xD7bDA7629Db314f9810724bDf3c8ce8057d88044",
+    "factory": "0xb7D9111c574f96D1e818a23b6692D1BEdE834663",
+    "router": "0x6af9C2C0F57Cee9f15142abBE77373d4B4884B64"
+  },
+  "stocks": [
+    {
+      "symbol": "NVDA",
+      "address": "0xd0601CE157Db5bdC3162BbaC2a2C8aF5320D9EEC"
+    },
+    {
+      "symbol": "AAPL",
+      "address": "0xaF3D76f1834A1d425780943C99Ea8A608f8a93f9"
+    },
+    {
+      "symbol": "TSLA",
+      "address": "0x322F0929c4625eD5bAd873c95208D54E1c003b2d"
+    },
+    {
+      "symbol": "GOOGL",
+      "address": "0x2e0847E8910a9732eB3fb1bb4b70a580ADAD4FE3"
+    },
+    {
+      "symbol": "AMZN",
+      "address": "0x12f190a9F9d7D37a250758b26824B97CE941bF54"
+    },
+    {
+      "symbol": "AMD",
+      "address": "0x86923f96303D656E4aa86D9d42D1e57ad2023fdC"
+    },
+    {
+      "symbol": "MU",
+      "address": "0xfF080c8ce2E5feadaCa0Da81314Ae59D232d4afD"
+    },
+    {
+      "symbol": "SNDK",
+      "address": "0xB90A19fF0Af67f7779afF50A882A9CfF42446400"
+    },
+    {
+      "symbol": "SPCX",
+      "address": "0x4a0E65A3EcceC6dBe60AE065F2e7bb85Fae35eEa"
+    },
+    {
+      "symbol": "USO",
+      "address": "0xa30FA36Db767ad9eD3f7a60fC79526fB4d56D344"
+    }
+  ]
+}

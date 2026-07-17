@@ -1,0 +1,18 @@
+{
+  "note": "Tokenized Robinhood stocks eligible as holder rewards. Each entry is the stock ERC-20 and the USDG pool tier the hook buys it through (currency0 = USDG, since USDG < every stock address). Curated; adjust via factory.listStock.",
+  "weth": "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73",
+  "usdg": "0x5fc5360d0400a0fd4f2af552add042d716f1d168",
+  "wethUsdgPool": { "fee": 500, "tickSpacing": 10, "hooks": "0x0000000000000000000000000000000000000000" },
+  "stocks": [
+    { "symbol": "NVDA", "name": "NVIDIA", "address": "0xd0601CE157Db5bdC3162BbaC2a2C8aF5320D9EEC", "fee": 3000, "tickSpacing": 60 },
+    { "symbol": "AAPL", "name": "Apple", "address": "0xaF3D76f1834A1d425780943C99Ea8A608f8a93f9", "fee": 3000, "tickSpacing": 60 },
+    { "symbol": "TSLA", "name": "Tesla", "address": "0x322F0929c4625eD5bAd873c95208D54E1c003b2d", "fee": 3000, "tickSpacing": 60 },
+    { "symbol": "GOOGL", "name": "Alphabet Class A", "address": "0x2e0847E8910a9732eB3fb1bb4b70a580ADAD4FE3", "fee": 3000, "tickSpacing": 60 },
+    { "symbol": "AMZN", "name": "Amazon", "address": "0x12f190a9F9d7D37a250758b26824B97CE941bF54", "fee": 3000, "tickSpacing": 60 },
+    { "symbol": "AMD", "name": "AMD", "address": "0x86923f96303D656E4aa86D9d42D1e57ad2023fdC", "fee": 10000, "tickSpacing": 200 },
+    { "symbol": "MU", "name": "Micron Technology", "address": "0xfF080c8ce2E5feadaCa0Da81314Ae59D232d4afD", "fee": 3000, "tickSpacing": 60 },
+    { "symbol": "SNDK", "name": "Sandisk Corporation", "address": "0xB90A19fF0Af67f7779afF50A882A9CfF42446400", "fee": 10000, "tickSpacing": 200 },
+    { "symbol": "SPCX", "name": "Space Exploration Technologies Corp", "address": "0x4a0E65A3EcceC6dBe60AE065F2e7bb85Fae35eEa", "fee": 3000, "tickSpacing": 60 },
+    { "symbol": "USO", "name": "United States Oil Fund", "address": "0xa30FA36Db767ad9eD3f7a60fC79526fB4d56D344", "fee": 20000, "tickSpacing": 400 }
+  ]
+}
