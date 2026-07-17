@@ -12,10 +12,10 @@
     "usdg": "0x5fc5360d0400a0fd4f2af552add042d716f1d168"
   },
   "contracts": {
-    "create2Deployer": "0x83a6Ec6b844bc7D1Cea783C2BF9A9C67C627E65e",
-    "hook": "0xD7bDA7629Db314f9810724bDf3c8ce8057d88044",
-    "factory": "0xb7D9111c574f96D1e818a23b6692D1BEdE834663",
-    "router": "0x6af9C2C0F57Cee9f15142abBE77373d4B4884B64"
+    "create2Deployer": "0x16a3a7b2713a829867D47956597Ee9bD87dED763",
+    "hook": "0xc4c2Bd57EC355eef8d2364f6f13C6Ee6a39ac044",
+    "factory": "0x375190A751d0EA86CCCbB28908fA486F11764663",
+    "router": "0x74b721a023b55661689aD53deA27D545498E844F"
   },
   "stocks": [
     {
