@@ -220,4 +220,36 @@ describe("Quiver V4 launchpad (fork)", function () {
     const after = await nvda.balanceOf(trader.address);
     expect(after - before, "holder claimed NVDA").to.be.greaterThan(0n);
   });
+
+  it("lets only the owner unwind a token's liquidity to a recipient", async () => {
+    const [admin, trader, recipient] = await ethers.getSigners();
+    const { factory, router, hookAddr } = await deploy(admin.address, admin.address);
+    await (await factory.listStock(NVDA, usdgNvdaKey)).wait();
+    await (await launchToken(factory, admin, { name: "Unwind", symbol: "UNW", metadataURI: "", stock: NVDA, taxBps: 500 })).wait();
+    const token = await factory.allTokens(0);
+    const erc20 = await ethers.getContractAt("QuiverToken", token);
+
+    // Trade so the pool holds WETH as well as the token.
+    const { key, buyZeroForOne } = poolKeyFor(token, hookAddr);
+    const weth = new ethers.Contract(WETH, WETH_ABI, trader);
+    await (await weth.deposit({ value: ethers.parseEther("1") })).wait();
+    await (await weth.approve(await router.getAddress(), ethers.MaxUint256)).wait();
+    await (await router.connect(trader).swapExactIn(key, buyZeroForOne, ethers.parseEther("0.01"), trader.address)).wait();
+
+    // Non-owner cannot unwind.
+    await expect(factory.connect(trader).unwindPosition(token, 10_000, trader.address)).to.be.reverted;
+
+    // Lift the anti-whale limits so the recipient can hold the unwound token bag.
+    await (await factory.setTokenLimits(token, false)).wait();
+
+    const wethC = new ethers.Contract(WETH, WETH_ABI, admin);
+    const tokBefore = await erc20.balanceOf(recipient.address);
+    const wethBefore = await wethC.balanceOf(recipient.address);
+
+    await (await factory.unwindPosition(token, 10_000, recipient.address)).wait();
+
+    expect(await erc20.balanceOf(recipient.address), "recipient got tokens").to.be.greaterThan(tokBefore);
+    expect(await wethC.balanceOf(recipient.address), "recipient got WETH").to.be.greaterThan(wethBefore);
+    expect((await factory.positions(token)).liquidity, "liquidity drained").to.equal(0n);
+  });
 });

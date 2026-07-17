@@ -45,9 +45,7 @@ contract QuiverToken is ERC20 {
     /// @notice Lifetime rewards distributed to holders, in reward units.
     uint256 public totalRewardsDistributed;
 
-    // --- Anti-whale limits (active until the factory lifts them) ---
-    /// @notice Max tokens per transfer while limits are active (2% of supply).
-    uint256 public immutable maxTxAmount;
+    // --- Anti-whale limit (active until the factory lifts it) ---
     /// @notice Max tokens a non-exempt wallet may hold (2% of supply).
     uint256 public immutable maxWalletAmount;
     /// @notice Whether the anti-whale caps are enforced.
@@ -85,8 +83,7 @@ contract QuiverToken is ERC20 {
         rewardToken = rewardToken_;
         _metadataURI = metadataURI_;
 
-        // Anti-whale caps: 2% max transaction, 2% max wallet, active at launch.
-        maxTxAmount = (supply_ * 2) / 100;
+        // Anti-whale cap: 2% max wallet, active at launch.
         maxWalletAmount = (supply_ * 2) / 100;
         limitsActive = true;
 
@@ -225,15 +222,11 @@ contract QuiverToken is ERC20 {
     ///      balance, keeps `eligibleSupply` in sync with participation, and
     ///      rebases each side's reward debt to its new balance.
     function _update(address from, address to, uint256 value) internal override {
-        // Anti-whale caps. Exempt parties (pool, PoolManager, hook, factory)
-        // bypass so liquidity and protocol flows are never blocked.
+        // Anti-whale max-wallet cap. Exempt parties (pool, PoolManager, hook,
+        // factory) bypass so liquidity and protocol flows are never blocked.
         if (limitsActive) {
             if (to != address(0) && !excluded[to]) {
-                require(value <= maxTxAmount, "max tx");
                 require(balanceOf(to) + value <= maxWalletAmount, "max wallet");
-            }
-            if (from != address(0) && !excluded[from]) {
-                require(value <= maxTxAmount, "max tx");
             }
         }
 

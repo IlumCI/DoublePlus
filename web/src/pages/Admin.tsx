@@ -122,7 +122,7 @@ export function AdminPage() {
       <button
         disabled={busyAction !== null}
         onClick={() => {
-          if (window.confirm(`Lift the anti-whale limits for ${t.symbol}? This removes the 2% max wallet / max tx caps permanently.`))
+          if (window.confirm(`Lift the anti-whale limit for ${t.symbol}? This removes the 2% max wallet cap permanently.`))
             runTx("Lift limits", () => writeFactory("setTokenLimits", [t.address, false]));
         }}
         className="rounded-md border border-edge bg-panel px-2.5 py-1 text-[11px] font-semibold text-ink-2 transition-colors hover:border-edge-2 hover:text-ink disabled:opacity-50"

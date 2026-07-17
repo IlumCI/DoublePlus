@@ -8,6 +8,7 @@ interface IQuiverToken is IERC20 {
     function taxBps() external view returns (uint16);
     function rewardToken() external view returns (address);
     function hook() external view returns (address);
+    function eligibleSupply() external view returns (uint256);
 
     function initHook(address hook_, address[] calldata excludedAddrs) external;
     function distributeRewards(uint256 amount) external;

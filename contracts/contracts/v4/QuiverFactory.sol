@@ -65,6 +65,15 @@ contract QuiverFactory is Ownable, ReentrancyGuard, IUnlockCallback {
     address[] public allTokens;
     mapping(address creator => address[]) internal _tokensByCreator;
 
+    struct Position {
+        int24 tickLower;
+        int24 tickUpper;
+        uint128 liquidity; // remaining factory-held liquidity (decremented on unwind)
+    }
+    /// @notice The seeded LP position the factory holds for each token. Kept so
+    ///         the owner can unwind it later (see `unwindPosition`).
+    mapping(address token => Position) public positions;
+
     struct LaunchParams {
         string name;
         string symbol;
@@ -82,6 +91,13 @@ contract QuiverFactory is Ownable, ReentrancyGuard, IUnlockCallback {
     );
     event StockListed(address indexed stock);
     event StockDelisted(address indexed stock);
+    event PositionUnwound(
+        address indexed token,
+        uint128 liquidityRemoved,
+        uint256 tokenAmount,
+        uint256 wethAmount,
+        address indexed recipient
+    );
     event NativeUsdPriceSet(uint256 price8);
     event LaunchesPausedSet(bool paused);
 
@@ -204,7 +220,8 @@ contract QuiverFactory is Ownable, ReentrancyGuard, IUnlockCallback {
                 TickMath.getSqrtPriceAtTick(tickUpper),
                 TOTAL_SUPPLY
             );
-        poolManager.unlock(abi.encode(key, tickLower, tickUpper, liquidity, tokenIsCurrency0));
+        positions[token] = Position({tickLower: tickLower, tickUpper: tickUpper, liquidity: liquidity});
+        poolManager.unlock(abi.encode(uint8(0), abi.encode(key, tickLower, tickUpper, liquidity, tokenIsCurrency0)));
 
         // 5. Register the pool with the hook so trades are taxed and rewarded.
         poolId = PoolId.unwrap(key.toId());
@@ -229,33 +246,117 @@ contract QuiverFactory is Ownable, ReentrancyGuard, IUnlockCallback {
 
     function unlockCallback(bytes calldata data) external override returns (bytes memory) {
         require(msg.sender == address(poolManager), "not pool manager");
-        (PoolKey memory key, int24 tickLower, int24 tickUpper, uint128 liquidity, bool tokenIsCurrency0) =
-            abi.decode(data, (PoolKey, int24, int24, uint128, bool));
+        (uint8 action, bytes memory payload) = abi.decode(data, (uint8, bytes));
+
+        // action 0 = seed the launch liquidity (single-sided token deposit).
+        if (action == 0) {
+            (PoolKey memory key, int24 tickLower, int24 tickUpper, uint128 liquidity, bool tokenIsCurrency0) =
+                abi.decode(payload, (PoolKey, int24, int24, uint128, bool));
+
+            (BalanceDelta delta, ) = poolManager.modifyLiquidity(
+                key,
+                ModifyLiquidityParams({
+                    tickLower: tickLower,
+                    tickUpper: tickUpper,
+                    liquidityDelta: int256(uint256(liquidity)),
+                    salt: bytes32(0)
+                }),
+                ""
+            );
+
+            // Single-sided token position: only the token side should be owed;
+            // the WETH side must net to zero (we deposit no WETH).
+            int128 tokenOwed = tokenIsCurrency0 ? delta.amount0() : delta.amount1();
+            int128 wethOwed = tokenIsCurrency0 ? delta.amount1() : delta.amount0();
+            require(wethOwed >= 0, "weth owed");
+            if (tokenOwed < 0) {
+                Currency tokenCurrency = tokenIsCurrency0 ? key.currency0 : key.currency1;
+                uint256 amt = uint256(uint128(-tokenOwed));
+                poolManager.sync(tokenCurrency);
+                IERC20(Currency.unwrap(tokenCurrency)).safeTransfer(address(poolManager), amt);
+                poolManager.settle();
+            }
+            return "";
+        }
+
+        // action 1 = unwind: remove `removed` liquidity and send everything the
+        // position returns (token + WETH, incl. any accrued fees) to recipient.
+        (
+            PoolKey memory key,
+            int24 tickLower,
+            int24 tickUpper,
+            uint128 removed,
+            address recipient,
+            bool tokenIsCurrency0
+        ) = abi.decode(payload, (PoolKey, int24, int24, uint128, address, bool));
 
         (BalanceDelta delta, ) = poolManager.modifyLiquidity(
             key,
             ModifyLiquidityParams({
                 tickLower: tickLower,
                 tickUpper: tickUpper,
-                liquidityDelta: int256(uint256(liquidity)),
+                liquidityDelta: -int256(uint256(removed)),
                 salt: bytes32(0)
             }),
             ""
         );
 
-        // Single-sided token position: only the token side should be owed; the
-        // WETH side must net to zero (we deposit no WETH).
-        int128 tokenOwed = tokenIsCurrency0 ? delta.amount0() : delta.amount1();
-        int128 wethOwed = tokenIsCurrency0 ? delta.amount1() : delta.amount0();
-        require(wethOwed >= 0, "weth owed");
-        if (tokenOwed < 0) {
-            Currency tokenCurrency = tokenIsCurrency0 ? key.currency0 : key.currency1;
-            uint256 amt = uint256(uint128(-tokenOwed));
-            poolManager.sync(tokenCurrency);
-            IERC20(Currency.unwrap(tokenCurrency)).safeTransfer(address(poolManager), amt);
-            poolManager.settle();
-        }
-        return "";
+        uint256 amt0 = _takePositive(key.currency0, delta.amount0(), recipient);
+        uint256 amt1 = _takePositive(key.currency1, delta.amount1(), recipient);
+        (uint256 tokenAmount, uint256 wethAmount) = tokenIsCurrency0 ? (amt0, amt1) : (amt1, amt0);
+        return abi.encode(tokenAmount, wethAmount);
+    }
+
+    /// @dev Take a positive balance-delta amount for `currency` straight to `to`.
+    function _takePositive(Currency currency, int128 amount, address to) internal returns (uint256 value) {
+        if (amount <= 0) return 0;
+        value = uint256(uint128(amount));
+        poolManager.take(currency, to, value);
+    }
+
+    // ---------------------------------------------------------------------
+    // Liquidity unwind (owner)
+    // ---------------------------------------------------------------------
+
+    /// @notice Remove `liquidityBps` of a token's factory-held liquidity and send
+    ///         the returned token + WETH to `recipient`. Owner only.
+    /// @dev This is a deliberate, disclosed admin power: it lets the owner pull
+    ///      pooled liquidity, so the "locked liquidity" guarantee does NOT apply
+    ///      to markets launched by a factory that exposes it.
+    /// @dev If the token's anti-whale limits are still active, `recipient` must be
+    ///      able to hold the returned token amount, or the max-wallet cap will
+    ///      revert the transfer. Lift the token's limits first (`setTokenLimits`)
+    ///      when unwinding a large position to a normal wallet.
+    function unwindPosition(address token, uint16 liquidityBps, address recipient)
+        external
+        onlyOwner
+        nonReentrant
+        returns (uint256 tokenAmount, uint256 wethAmount)
+    {
+        if (liquidityBps == 0 || liquidityBps > 10_000) revert InvalidParams();
+        if (recipient == address(0)) revert InvalidParams();
+        Position storage pos = positions[token];
+        uint128 held = pos.liquidity;
+        if (held == 0) revert InvalidParams();
+
+        uint128 removed = uint128((uint256(held) * liquidityBps) / 10_000);
+        if (removed == 0) revert InvalidParams();
+        pos.liquidity = held - removed;
+
+        bool tokenIsCurrency0 = token < weth;
+        PoolKey memory key = PoolKey({
+            currency0: Currency.wrap(tokenIsCurrency0 ? token : weth),
+            currency1: Currency.wrap(tokenIsCurrency0 ? weth : token),
+            fee: LP_FEE,
+            tickSpacing: TICK_SPACING,
+            hooks: IHooks(address(hook))
+        });
+
+        bytes memory res = poolManager.unlock(
+            abi.encode(uint8(1), abi.encode(key, pos.tickLower, pos.tickUpper, removed, recipient, tokenIsCurrency0))
+        );
+        (tokenAmount, wethAmount) = abi.decode(res, (uint256, uint256));
+        emit PositionUnwound(token, removed, tokenAmount, wethAmount, recipient);
     }
 
     // ---------------------------------------------------------------------

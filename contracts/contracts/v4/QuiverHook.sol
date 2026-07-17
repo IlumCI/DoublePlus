@@ -241,8 +241,11 @@ contract QuiverHook is BaseHook, Ownable, ReentrancyGuard, IUnlockCallback {
         // 3. holders — buy stock (WETH -> USDG -> stock) and distribute. If the
         //    stock route isn't configured/liquid, fold this quarter into the
         //    protocol share so no WETH is stranded.
+        // Only route the holder quarter into stock if there are eligible holders
+        // to receive it — otherwise the reward would be stranded in the token, so
+        // fold it into the protocol share instead.
         bool holderPaid;
-        if (q > 0 && c.stock != address(0) && quote != address(0)) {
+        if (q > 0 && c.stock != address(0) && quote != address(0) && IQuiverToken(token).eligibleSupply() > 0) {
             uint256 usdgOut = _swap(_quoteKey, _wethSide(_quoteKey), q);
             if (usdgOut > 0) {
                 uint256 stockOut = _swap(c.stockKey, Currency.wrap(quote), usdgOut);

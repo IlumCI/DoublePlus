@@ -189,7 +189,7 @@ export function LaunchPage() {
         <dl className="space-y-1.5 border-t border-edge pt-3 text-[12px]">
           <Row label="Starting market cap" value="$5,000" />
           <Row label="Supply" value="1,000,000,000" />
-          <Row label="Anti-whale" value="2% max wallet · tx" />
+          <Row label="Anti-whale" value="2% max wallet" />
         </dl>
 
         <button type="submit" disabled={busy}
