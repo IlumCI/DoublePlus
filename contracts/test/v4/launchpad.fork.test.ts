@@ -215,6 +215,36 @@ describe("Quiver V4 launchpad (fork)", function () {
     expect(after - before, "holder claimed NVDA").to.be.greaterThan(0n);
   });
 
+  it("auto-delivers rewards to holder wallets via keeper claimForMany", async () => {
+    const [admin, trader] = await ethers.getSigners();
+    const { hook, factory, router, hookAddr } = await deploy(admin.address, admin.address);
+
+    await (await hook.setQuoteRoute(USDG, wethUsdgKey)).wait();
+    await (await factory.listStock(NVDA, usdgNvdaKey)).wait();
+    await (await launchToken(factory, admin, { name: "Push Test", symbol: "PUSH", metadataURI: "", stock: NVDA, taxBps: 500 })).wait();
+    const token = await factory.allTokens(0);
+    const erc20 = await ethers.getContractAt("QuiverToken", token);
+
+    const { key, buyZeroForOne } = poolKeyFor(token, hookAddr);
+    const weth = new ethers.Contract(WETH, WETH_ABI, trader);
+    await (await weth.deposit({ value: ethers.parseEther("1") })).wait();
+    await (await weth.approve(await router.getAddress(), ethers.MaxUint256)).wait();
+    await (await router.connect(trader).swapExactIn(key, buyZeroForOne, ethers.parseEther("0.004"), trader.address)).wait();
+
+    await (await hook.harvest(token)).wait();
+    const pending = await erc20.pendingRewards(trader.address);
+    expect(pending, "holder accrued NVDA").to.be.greaterThan(0n);
+
+    // The keeper (admin here) pushes — the holder signs nothing, pays nothing,
+    // and the NVDA can only land in the holder's own wallet.
+    const nvda = await ethers.getContractAt("QuiverToken", NVDA);
+    const before = await nvda.balanceOf(trader.address);
+    await (await erc20.connect(admin).claimForMany([trader.address])).wait();
+    const after = await nvda.balanceOf(trader.address);
+    expect(after - before, "NVDA pushed to holder wallet").to.be.greaterThan(0n);
+    expect(await erc20.pendingRewards(trader.address), "pending drained").to.equal(0n);
+  });
+
   it("taxes exact-output swaps too, so the fee can't be dodged", async () => {
     const [admin, trader] = await ethers.getSigners();
     const { hook, factory, router, hookAddr } = await deploy(admin.address, admin.address);
