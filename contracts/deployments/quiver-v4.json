@@ -1,6 +1,7 @@
 {
   "network": "robinhood",
   "chainId": 4663,
+  "startBlock": 12744439,
   "deployer": "0x7817F4e44a658410C4ADA6a9226ef3d51e5Ea846",
   "protocolAdmin": "0x0315ecb53f64b7a4ba56bb8a4dab0d96f0856b60",
   "treasury": "0x0315ecb53f64b7a4ba56bb8a4dab0d96f0856b60",
@@ -12,10 +13,10 @@
     "usdg": "0x5fc5360d0400a0fd4f2af552add042d716f1d168"
   },
   "contracts": {
-    "create2Deployer": "0x16a3a7b2713a829867D47956597Ee9bD87dED763",
-    "hook": "0xc4c2Bd57EC355eef8d2364f6f13C6Ee6a39ac044",
-    "factory": "0x375190A751d0EA86CCCbB28908fA486F11764663",
-    "router": "0x74b721a023b55661689aD53deA27D545498E844F"
+    "create2Deployer": "0xEbd4d56F130C4Dd9E16BF8282910aFA31EAF45ED",
+    "hook": "0x1E8fd8f01C44084E514d872AD27455De5c994044",
+    "factory": "0x7684E116F10DD7B6634E17cba9A3767CD7B84663",
+    "router": "0xA5CED4a472586B79c8d744F1b50b8D5a703b1b5d"
   },
   "stocks": [
     {

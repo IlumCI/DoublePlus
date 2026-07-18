@@ -255,7 +255,8 @@ function RewardsStrip({ token, extra }: { token: TokenSummary; extra: Extra | nu
           Holders earn {stock.name} <span className="text-ink-3">({stock.symbol})</span>
         </p>
         <p className="mt-0.5 text-xs text-ink-3">
-          Every trade pays holders {stock.symbol}, split by how much you hold. {fmtTokens(extra.totalRewards.toString())} {stock.symbol} paid out so far.
+          Every trade pays holders {stock.symbol}, split by how much you hold — delivered to wallets
+          automatically, no claiming needed. {fmtTokens(extra.totalRewards.toString())} {stock.symbol} paid out so far.
         </p>
       </div>
       <div className="flex items-center gap-3">
