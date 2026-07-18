@@ -91,10 +91,13 @@ async function deliverRewards(tokenAddr) {
     for (let j = 0; j < chunk.length; j++) if (pends[j] >= MIN_CLAIM) due.push(chunk[j]);
   }
   if (!due.length) return;
-  for (let i = 0; i < due.length; i += 100) {
-    const batch = due.slice(i, i + 100);
+  for (let i = 0; i < due.length; i += 50) {
+    const batch = due.slice(i, i + 50);
     try {
-      const tx = await token.claimForMany(batch);
+      // Explicit gas: claimForMany swallows inner reverts (try/catch), so a
+      // short gas estimate from a lagging RPC node would silently deliver
+      // nothing. Budget per holder instead of trusting estimateGas.
+      const tx = await token.claimForMany(batch, { gasLimit: 300_000n + 150_000n * BigInt(batch.length) });
       await tx.wait();
       console.log(`📬 ${tokenAddr} delivered rewards to ${batch.length} holder(s) ${tx.hash}`);
     } catch (e) {
