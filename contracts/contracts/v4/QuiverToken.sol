@@ -152,16 +152,37 @@ contract QuiverToken is ERC20 {
 
     /// @notice Claim all settled + pending rewards to the caller.
     function claim() external returns (uint256 amount) {
-        _settle(msg.sender);
-        amount = claimable[msg.sender];
+        return _claimTo(msg.sender);
+    }
+
+    /// @notice Push a holder's accrued rewards to THEIR wallet. Callable by
+    ///         anyone (the protocol keeper calls it after every distribution so
+    ///         rewards land in wallets with no user action), but the funds can
+    ///         only ever go to the holder — non-custodial by construction.
+    function claimFor(address holder) external returns (uint256 amount) {
+        return _claimTo(holder);
+    }
+
+    /// @notice Batch delivery for the keeper: push rewards to many holders in
+    ///         one transaction. A single failing receiver (native rewards only)
+    ///         is skipped rather than blocking the whole batch.
+    function claimForMany(address[] calldata holders) external {
+        for (uint256 i; i < holders.length; ++i) {
+            try this.claimFor(holders[i]) {} catch {}
+        }
+    }
+
+    function _claimTo(address holder) private returns (uint256 amount) {
+        _settle(holder);
+        amount = claimable[holder];
         if (amount == 0) return 0;
-        claimable[msg.sender] = 0;
-        emit RewardsClaimed(msg.sender, amount);
+        claimable[holder] = 0;
+        emit RewardsClaimed(holder, amount);
         if (rewardToken == address(0)) {
-            (bool ok, ) = payable(msg.sender).call{value: amount}("");
+            (bool ok, ) = payable(holder).call{value: amount}("");
             require(ok, "native xfer");
         } else {
-            IERC20(rewardToken).safeTransfer(msg.sender, amount);
+            IERC20(rewardToken).safeTransfer(holder, amount);
         }
     }
 

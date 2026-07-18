@@ -58,7 +58,10 @@ export class V4Client {
   private coresUpTo = 0n;
   private coresInflight: Promise<Core[]> | null = null;
   private nativeUsd = 3000; // USD per WETH, refreshed from the factory
-  private tradesCache = new Map<string, TradeRecord[]>();
+  // Per-token trade log, kept incrementally: `upTo` is the last block scanned,
+  // so each call fetches only new swaps and appends. Never a permanent snapshot
+  // (a stale cache is what pinned mcap to the launch price and hid new trades).
+  private tradesCache = new Map<string, { records: TradeRecord[]; upTo: bigint }>();
   private blockTsAnchor?: { block: bigint; ts: number; perBlock: number };
 
   constructor(publicClient: PublicClient, v4: V4Addresses, startBlock: bigint) {
@@ -192,20 +195,24 @@ export class V4Client {
     // without having listed tokens first (e.g. a serverless endpoint hit cold,
     // or a deep link straight to a token page).
     await this.loadCores();
-    const core = this.cores.get(token.toLowerCase());
+    const key = token.toLowerCase();
+    const core = this.cores.get(key);
     if (!core) return [];
-    const cached = this.tradesCache.get(token.toLowerCase());
-    if (cached) return cached;
+    const cached = this.tradesCache.get(key);
     try {
       const latest = await this.publicClient.getBlockNumber();
+      // Only scan blocks we haven't seen yet, then append — keeps every read
+      // cheap while staying live. First read starts at the launch block.
+      const fromBlock = cached ? cached.upTo + 1n : core.launchBlock;
+      if (cached && fromBlock > latest) return cached.records;
       const logs = (await this.publicClient.getLogs({
         address: this.v4.poolManager,
         event: poolSwapEvent as any,
         args: { id: core.poolId },
-        fromBlock: core.launchBlock,
+        fromBlock,
         toBlock: latest,
       })) as any[];
-      const records: TradeRecord[] = logs.map((log) => {
+      const fresh: TradeRecord[] = logs.map((log) => {
         const amount0 = log.args.amount0 as bigint;
         const amount1 = log.args.amount1 as bigint;
         const wethDelta = core.tokenIsCurrency0 ? amount1 : amount0; // swapper's WETH delta
@@ -227,13 +234,14 @@ export class V4Client {
         };
       });
       // Estimate timestamps from block numbers.
-      if (records.length) {
-        for (const r of records) r.timestamp = await this.estTs(BigInt(r.blockNumber), latest);
+      if (fresh.length) {
+        for (const r of fresh) r.timestamp = await this.estTs(BigInt(r.blockNumber), latest);
       }
-      this.tradesCache.set(token.toLowerCase(), records);
+      const records = cached ? cached.records.concat(fresh) : fresh;
+      this.tradesCache.set(key, { records, upTo: latest });
       return records;
     } catch {
-      return this.tradesCache.get(token.toLowerCase()) ?? [];
+      return this.tradesCache.get(key)?.records ?? [];
     }
   }
 

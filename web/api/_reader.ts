@@ -24,15 +24,15 @@ const chain = defineChain({
 });
 
 const V4: V4Addresses = {
-  factory: "0x375190A751d0EA86CCCbB28908fA486F11764663",
-  hook: "0xc4c2Bd57EC355eef8d2364f6f13C6Ee6a39ac044",
-  router: "0x74b721a023b55661689aD53deA27D545498E844F",
+  factory: "0x7684E116F10DD7B6634E17cba9A3767CD7B84663",
+  hook: "0x1E8fd8f01C44084E514d872AD27455De5c994044",
+  router: "0xA5CED4a472586B79c8d744F1b50b8D5a703b1b5d",
   poolManager: "0x8366a39cc670b4001a1121b8f6a443a643e40951",
   weth: "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73",
   usdg: "0x5fc5360d0400a0fd4f2af552add042d716f1d168",
 };
 
-const V4_START_BLOCK = 12007613n;
+const V4_START_BLOCK = 12744439n;
 
 const publicClient = createPublicClient({
   chain,

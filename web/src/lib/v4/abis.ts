@@ -128,3 +128,9 @@ export const erc20Abi = [
   { type: "function", name: "symbol", stateMutability: "view", inputs: [], outputs: [{ type: "string" }] },
   { type: "function", name: "decimals", stateMutability: "view", inputs: [], outputs: [{ type: "uint8" }] },
 ] as const;
+
+// WETH9 unwrap — protocol fees arrive as WETH; withdraw converts to native ETH.
+export const wethAbi = [
+  ...erc20Abi,
+  { type: "function", name: "withdraw", stateMutability: "nonpayable", inputs: [{ type: "uint256" }], outputs: [] },
+] as const;

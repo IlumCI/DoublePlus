@@ -10,7 +10,7 @@ import { Button, EmptyState, Skeleton } from "../components/ui";
 import { client, v4Client } from "../lib/client";
 import { env } from "../lib/env";
 import { compact, fmtUsd, fmtWei, shortAddr } from "../lib/format";
-import { erc20Abi, factoryAbi, hookAbi } from "../lib/v4/abis";
+import { erc20Abi, factoryAbi, hookAbi, wethAbi } from "../lib/v4/abis";
 import { errorText, useWallet } from "../lib/useWallet";
 import { useUi } from "../store";
 
@@ -60,6 +60,27 @@ export function AdminPage() {
   });
 
   const { data: tokens, loading: tokensLoading } = useTokens(client, { sort: "volume", limit: 50 });
+
+  // Connected admin wallet's WETH — protocol fees are pushed here as WETH on
+  // every harvest; unwrap converts them to native ETH in the same wallet.
+  const myWeth = useQuery({
+    queryKey: ["admin-weth", address?.toLowerCase()],
+    queryFn: async () =>
+      (await v4Client.publicClient.readContract({
+        address: v4Client.v4.weth,
+        abi: erc20Abi,
+        functionName: "balanceOf",
+        args: [address as `0x${string}`],
+      })) as bigint,
+    enabled: isAdmin && Boolean(address),
+    refetchInterval: 20_000,
+  });
+
+  const unwrapWeth = () => {
+    const bal = myWeth.data ?? 0n;
+    if (bal === 0n) return;
+    runTx("Unwrap WETH", () => writeContract(v4Client.v4.weth, wethAbi, "withdraw", [bal]), () => myWeth.refetch());
+  };
 
   const [unwind, setUnwind] = useState<{ address: string; symbol: string } | null>(null);
   const [unwindPct, setUnwindPct] = useState("100");
@@ -206,11 +227,31 @@ export function AdminPage() {
 
       {/* Protocol treasury */}
       <div className="mt-3 rounded-xl border border-edge bg-panel px-4 py-3">
-        <h2 className="text-[13px] font-semibold text-ink">Protocol treasury</h2>
-        <p className="mt-0.5 text-[11px] text-ink-3">
-          The protocol's 25% share of every trade's tax is sent here as WETH on each distribution.
-        </p>
-        <p className="mt-1.5 font-mono text-[12px] text-ink-2">{s ? s.treasury : "—"}</p>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-[13px] font-semibold text-ink">Protocol treasury</h2>
+            <p className="mt-0.5 text-[11px] text-ink-3">
+              The protocol's 25% share of every trade's tax is sent here as WETH on each distribution.
+              Unwrap converts it to native ETH in this wallet.
+            </p>
+            <p className="mt-1.5 font-mono text-[12px] text-ink-2">{s ? s.treasury : "—"}</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <p className="tnum text-[15px] font-semibold text-accent-ink">
+                {myWeth.data !== undefined ? `${fmtWei(myWeth.data)} WETH` : "—"}
+              </p>
+              <p className="text-[11px] text-ink-3">in your wallet</p>
+            </div>
+            <Button
+              variant="primary"
+              disabled={busyAction !== null || !myWeth.data || myWeth.data === 0n}
+              onClick={unwrapWeth}
+            >
+              {busyAction === "Unwrap WETH" ? "Unwrapping" : "Unwrap to ETH"}
+            </Button>
+          </div>
+        </div>
       </div>
 
       {/* Manage by address */}

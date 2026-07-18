@@ -114,6 +114,7 @@ async function main() {
   const out = {
     network: network.name,
     chainId: 4663,
+    startBlock: await ethers.provider.getBlockNumber(),
     deployer: signer.address,
     protocolAdmin,
     treasury,
