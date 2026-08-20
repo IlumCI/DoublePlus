@@ -2589,3 +2589,11 @@ button.bg-accent:disabled {
   background: rgba(124, 92, 255, .07);
 }
 :root[data-brand="base"] .kf-seg2 button svg { flex: none; }
+
+/* Token image zone: the dashed container wraps the input row AND the hint;
+   the URL input and the paperclip each carry their own hairline box. */
+:root[data-brand="base"] .kf-drop-zone { flex-direction: column; align-items: stretch; gap: 12px; padding: 16px; border: 1.5px dashed #ffffff1f; border-radius: 16px; }
+:root[data-brand="base"] .kf-drop-row { display: flex; align-items: center; gap: 10px; }
+:root[data-brand="base"] .kf-drop-row input { box-shadow: inset 0 0 0 1px #ffffff17 !important; border-radius: 12px; padding: 13px 14px !important; flex: 1; min-width: 0; }
+:root[data-brand="base"] .kf-clip { width: 52px; height: 52px; border-radius: 12px; box-shadow: inset 0 0 0 1px #ffffff17; }
+:root[data-brand="base"] .kf-drop-hint { margin: 0; font-size: 13px; line-height: 1.45; color: var(--color-ink-2); }

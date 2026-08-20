@@ -194,25 +194,27 @@ export function LaunchBase({ onCancel }: { onCancel?: () => void } = {}) {
           <div className="kf-drop-zone"
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) onLogoFile(f); }}>
-            {logoPreview ? (
-              <img src={logoPreview} alt="" style={{ width: 46, height: 46, borderRadius: 12, objectFit: "cover" }} />
-            ) : null}
-            <input
-              type="text"
-              value={logoUrl || (logoData ? "Uploaded image ready" : "")}
-              placeholder="Paste image URL or upload..."
-              onChange={(e) => { setLogoUrl(e.target.value); if (logoData) setLogoData(""); }}
-              onFocus={() => { if (logoData) { setLogoData(""); setLogoUrl(""); } }}
-            />
-            <button type="button" className="kf-clip" aria-label="Upload image" onClick={() => fileRef.current?.click()}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m21 11.5-8.5 8.5a5.5 5.5 0 0 1-7.8-7.8L13 4a3.7 3.7 0 0 1 5.2 5.2l-8.2 8.2a1.8 1.8 0 0 1-2.6-2.6L15 7.3" /></svg>
-            </button>
+            <div className="kf-drop-row">
+              {logoPreview ? (
+                <img src={logoPreview} alt="" style={{ width: 50, height: 50, borderRadius: 12, objectFit: "cover", flex: "none" }} />
+              ) : null}
+              <input
+                type="text"
+                value={logoUrl || (logoData ? "Uploaded image ready" : "")}
+                placeholder="Paste image URL or upload..."
+                onChange={(e) => { setLogoUrl(e.target.value); if (logoData) setLogoData(""); }}
+                onFocus={() => { if (logoData) { setLogoData(""); setLogoUrl(""); } }}
+              />
+              <button type="button" className="kf-clip" aria-label="Upload image" onClick={() => fileRef.current?.click()}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m21 11.5-8.5 8.5a5.5 5.5 0 0 1-7.8-7.8L13 4a3.7 3.7 0 0 1 5.2 5.2l-8.2 8.2a1.8 1.8 0 0 1-2.6-2.6L15 7.3" /></svg>
+              </button>
+            </div>
+            <p className="kf-drop-hint">
+              Paste an image URL, browse, or drag and drop an image here.
+              {logoUrl.trim() && !logoUrlOk ? <span style={{ color: "var(--color-down)" }}> Not a valid image URL.</span> : null}
+              {logoValue ? <> · <button type="button" style={{ color: "var(--color-accent-ink)", background: "none", border: 0, cursor: "pointer", padding: 0 }} onClick={() => { setLogoData(""); setLogoUrl(""); }}>Remove</button></> : null}
+            </p>
           </div>
-          <p className="hint">
-            Paste an image URL (https or ipfs), browse, or drag and drop an image here.
-            {logoUrl.trim() && !logoUrlOk ? <span style={{ color: "var(--color-down)" }}> Not a valid image URL.</span> : null}
-            {logoValue ? <> · <button type="button" style={{ color: "var(--color-accent-ink)", background: "none", border: 0, cursor: "pointer", padding: 0 }} onClick={() => { setLogoData(""); setLogoUrl(""); }}>Remove</button></> : null}
-          </p>
         </div>
 
         <div className="kf-field">
