@@ -25,14 +25,16 @@ function QuickBuyBolt({ token, symbol }: { token: `0x${string}`; symbol: string 
   const pushToast = useUi((s) => s.pushToast);
   const [open, setOpen] = useState(false);
   const [busyAmt, setBusyAmt] = useState<number | null>(null);
-  const wrapRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
     if (!open) return;
-    const away = (e: MouseEvent) => { if (!wrapRef.current?.contains(e.target as Node)) setOpen(false); };
+    const away = (e: MouseEvent) => {
+      const el = e.target as HTMLElement;
+      if (!el.closest?.(`[data-qb="${token}"]`)) setOpen(false);
+    };
     document.addEventListener("pointerdown", away);
     return () => document.removeEventListener("pointerdown", away);
-  }, [open]);
+  }, [open, token]);
 
   const buy = async (usd: number) => {
     if (busyAmt != null) return;
@@ -52,9 +54,10 @@ function QuickBuyBolt({ token, symbol }: { token: `0x${string}`; symbol: string 
   };
 
   return (
-    <span className="kf-qb" ref={wrapRef} onClick={(e) => e.preventDefault()}>
+    <>
       <button
         className={`kf-bolt ${open ? "on" : ""}`}
+        data-qb={token}
         aria-label={`Quick buy ${symbol}`}
         aria-expanded={open}
         onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen((o) => !o); }}
@@ -62,7 +65,7 @@ function QuickBuyBolt({ token, symbol }: { token: `0x${string}`; symbol: string 
         {BOLT}
       </button>
       {open ? (
-        <span className="kf-qb-pop" role="menu" onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
+        <span className="kf-qb-strip" data-qb={token} role="group" onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
           {[10, 25, 50, 100].map((a) => (
             <button key={a} className="kf-qb-amt" disabled={busyAmt != null} onClick={() => buy(a)}>
               {busyAmt === a ? "…" : `$${a}`}
@@ -70,7 +73,7 @@ function QuickBuyBolt({ token, symbol }: { token: `0x${string}`; symbol: string 
           ))}
         </span>
       ) : null}
-    </span>
+    </>
   );
 }
 
