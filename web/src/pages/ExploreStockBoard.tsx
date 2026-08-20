@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useTokens } from "@launchpad/sdk/react";
 import type { TokenSummary } from "@launchpad/sdk";
 
@@ -17,14 +17,55 @@ import { KoiIcon } from "../components/base/KoiIcon";
 import { ensureSdkWallet, errorText, useWallet } from "../lib/useWallet";
 import { useUi } from "../store";
 
-/** Inline quick-buy: the row's lightning bolt opens a small popover with the
- *  $10/$25/$50/$100 presets and fires a real buy through the connected wallet,
- *  never leaving the page — mirroring the reference row action. */
-function QuickBuyBolt({ token, symbol }: { token: `0x${string}`; symbol: string }) {
+/** Shared quick-buy: sizes a whole-dollar amount into the value the coin's
+ *  buy path expects and fires a real buy through the connected wallet, never
+ *  leaving the page. Used by both the row bolt and the hero leader cards. */
+function useQuickBuy(token: `0x${string}`, symbol: string, onDone?: () => void) {
   const { isConnected, connectFirst } = useWallet();
   const pushToast = useUi((s) => s.pushToast);
-  const [open, setOpen] = useState(false);
   const [busyAmt, setBusyAmt] = useState<number | null>(null);
+
+  const buy = async (usd: number) => {
+    if (busyAmt != null) return;
+    if (!isConnected) { onDone?.(); return connectFirst(); }
+    setBusyAmt(usd);
+    try {
+      if (!(await ensureSdkWallet())) throw new Error("Wallet session expired. Reconnect and try again.");
+      const value = await (client as any).quickBuyValue(token, usd);
+      const hash = await (client as any).buyToken(token, value);
+      pushToast({ kind: "success", title: `Buying $${usd} of ${symbol}`, txHash: hash });
+      onDone?.();
+    } catch (err) {
+      pushToast({ kind: "error", title: "Quick buy failed", body: errorText(err) });
+    } finally {
+      setBusyAmt(null);
+    }
+  };
+  return { buy, busyAmt };
+}
+
+/** The four preset buttons shown in the hero leader cards — always visible,
+ *  each fires a real quick buy (matching the reference card-v-quickbuy). */
+function LeaderBuy({ token, symbol }: { token: `0x${string}`; symbol: string }) {
+  const { buy, busyAmt } = useQuickBuy(token, symbol);
+  return (
+    <div className="kf-buy-row" onClick={(e) => e.preventDefault()}>
+      {[10, 25, 50, 100].map((a) => (
+        <button key={a} className="kf-buy-btn" disabled={busyAmt != null}
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); buy(a); }}>
+          {busyAmt === a ? "…" : `$${a}`}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** The row's lightning bolt reveals a full-width strip of the $10/$25/$50/$100
+ *  presets on a second line, each firing a real buy — mirroring the reference
+ *  row quick-buy. */
+function QuickBuyBolt({ token, symbol }: { token: `0x${string}`; symbol: string }) {
+  const [open, setOpen] = useState(false);
+  const { buy, busyAmt } = useQuickBuy(token, symbol, () => setOpen(false));
 
   useEffect(() => {
     if (!open) return;
@@ -35,23 +76,6 @@ function QuickBuyBolt({ token, symbol }: { token: `0x${string}`; symbol: string 
     document.addEventListener("pointerdown", away);
     return () => document.removeEventListener("pointerdown", away);
   }, [open, token]);
-
-  const buy = async (usd: number) => {
-    if (busyAmt != null) return;
-    if (!isConnected) { setOpen(false); return connectFirst(); }
-    setBusyAmt(usd);
-    try {
-      if (!(await ensureSdkWallet())) throw new Error("Wallet session expired. Reconnect and try again.");
-      const value = await (client as any).quickBuyValue(token, usd);
-      const hash = await (client as any).buyToken(token, value);
-      pushToast({ kind: "success", title: `Buying $${usd} of ${symbol}`, txHash: hash });
-      setOpen(false);
-    } catch (err) {
-      pushToast({ kind: "error", title: "Quick buy failed", body: errorText(err) });
-    } finally {
-      setBusyAmt(null);
-    }
-  };
 
   return (
     <>
@@ -150,7 +174,6 @@ function ordinal(n: number) {
  * holders a real tokenized stock) rides along as the reward tag on every row.
  */
 export function ExploreStockBoard() {
-  const nav = useNavigate();
   const [sp, setSp] = useSearchParams();
   const tab = (sp.get("tab") as Tab) || "movers";
   const [filter, setFilter] = useState<string | null>(null);
@@ -272,11 +295,7 @@ export function ExploreStockBoard() {
                     <div className="kf-stat"><div className="k">Volume</div><div className="v">{volUsd(t) > 0 ? fmtUsd(volUsd(t)) : "—"}</div></div>
                     <div className="kf-stat chg"><div className="k">24h</div><div className={`v ${has ? (chg! >= 0 ? "up" : "down") : ""}`}>{has ? `${chg! >= 0 ? "+" : ""}${chg!.toFixed(2)}%` : "—"}</div></div>
                   </div>
-                  <div className="kf-buy-row">
-                    {[10, 25, 50, 100].map((a) => (
-                      <button key={a} className="kf-buy-btn" onClick={(e) => { e.preventDefault(); nav(`/token/${t.address}?buy=${a}`); }}>${a}</button>
-                    ))}
-                  </div>
+                  <LeaderBuy token={t.address as `0x${string}`} symbol={t.symbol} />
                 </Link>
               );
             })
