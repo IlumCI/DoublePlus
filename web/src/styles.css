@@ -2597,3 +2597,34 @@ button.bg-accent:disabled {
 :root[data-brand="base"] .kf-drop-row input { box-shadow: inset 0 0 0 1px #ffffff17 !important; border-radius: 12px; padding: 13px 14px !important; flex: 1; min-width: 0; }
 :root[data-brand="base"] .kf-clip { width: 52px; height: 52px; border-radius: 12px; box-shadow: inset 0 0 0 1px #ffffff17; }
 :root[data-brand="base"] .kf-drop-hint { margin: 0; font-size: 13px; line-height: 1.45; color: var(--color-ink-2); }
+
+/* Reference form metrics, measured from its components: 40px inputs at 8px
+   radius, 14px labels, 12px hints, 16px field gaps, 44px toggle buttons. */
+:root[data-brand="base"] .kf-form { gap: 16px; }
+:root[data-brand="base"] .kf-field label { font-size: 14px; line-height: 20px; margin-bottom: 6px; }
+:root[data-brand="base"] .kf-field input[type="text"], :root[data-brand="base"] .kf-field input[type="url"],
+:root[data-brand="base"] .kf-field textarea, :root[data-brand="base"] .kf-field select {
+  border-radius: 8px; padding: 10px 12px; font-size: 16px; line-height: 20px;
+}
+:root[data-brand="base"] .kf-field .hint { font-size: 12px; line-height: 16px; margin-top: 6px; }
+:root[data-brand="base"] .kf-err-msg { font-size: 12px; line-height: 16px; margin-top: 6px; }
+:root[data-brand="base"] .kf-seg2 { gap: 8px; margin-bottom: 8px; }
+:root[data-brand="base"] .kf-seg2 button, :root[data-brand="base"] .kf-pairgrid button {
+  height: 44px; padding: 0 16px; border-radius: 8px; font-size: 14px; font-weight: 500;
+}
+:root[data-brand="base"] .kf-pairgrid { gap: 8px; }
+:root[data-brand="base"] .kf-drop-zone { border-radius: 12px; padding: 12px; gap: 10px; }
+:root[data-brand="base"] .kf-drop-row input { border-radius: 8px; padding: 10px 12px !important; }
+:root[data-brand="base"] .kf-clip { width: 40px; height: 40px; border-radius: 8px; }
+:root[data-brand="base"] .kf-clip svg { width: 17px; height: 17px; }
+:root[data-brand="base"] .kf-drop-hint { font-size: 12px; line-height: 16px; }
+:root[data-brand="base"] .kf-btnrow { gap: 8px; }
+:root[data-brand="base"] .kf-cancel { height: 48px; padding: 0 16px; border-radius: 10px; font-size: 14px; }
+:root[data-brand="base"] .kf-btnrow .kf-submit { height: 48px; padding: 0 16px; border-radius: 10px; font-size: 15px; }
+:root[data-brand="base"] .kf-form-summary { font-size: 13px; }
+:root[data-brand="base"] .kf-devbuy-row { font-size: 12px; margin: 10px 0 4px; }
+:root[data-brand="base"] .kf-launch-h1 { font-size: 20px; }
+:root[data-brand="base"] .kf-launch-sub { font-size: 13px; margin: 4px 0 12px; }
+@media (min-width: 640px) {
+  :root[data-brand="base"] .kf-field input[type="text"], :root[data-brand="base"] .kf-field textarea { font-size: 14px; }
+}
