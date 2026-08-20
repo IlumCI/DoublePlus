@@ -252,9 +252,12 @@ export function LaunchBase({ onCancel }: { onCancel?: () => void } = {}) {
               ? "ETH spent buying your own token in the launch transaction."
               : `${devSym} spent buying your own token right after launch.`}
           </p>
-          <div className="kf-devbuy-row"><span>Dev buy amount</span><span>Estimated {devPct.toFixed(0)}% of supply</span></div>
+          <div className="kf-devbuy-row">
+            <span>Dev buy amount</span>
+            {devBuy > 0 ? <output>{devBuy} {devSym}{devPct >= 1 ? ` · ~${devPct.toFixed(0)}% of supply` : ""}</output> : null}
+          </div>
           <input type="range" min={0} max={devMax} step={devMax / 100} value={Math.min(devBuy, devMax)}
-            onChange={(e) => setDevBuy(Number(e.target.value))} className="w-full accent-[color:var(--color-accent)]" />
+            onChange={(e) => setDevBuy(Number(e.target.value))} aria-label={`Dev buy amount in ${devSym}`} />
           <div className="kf-devbuy-row muted"><span>0 {devSym}</span><span>{devMax}+ {devSym}</span></div>
         </div>
 
@@ -262,7 +265,7 @@ export function LaunchBase({ onCancel }: { onCancel?: () => void } = {}) {
         <div className="kf-field">
           <label>Trade tax <i>· {taxPct}%</i></label>
           <input type="range" min={1} max={10} step={1} value={taxPct} onChange={(e) => setTaxPct(Number(e.target.value))}
-            className="w-full accent-[color:var(--color-accent)]" />
+            aria-label="Trade tax percent" />
           <p className="hint">Half goes to holders as {selected.symbol}, half to you. The platform takes a small cut.</p>
         </div>
 
@@ -302,7 +305,8 @@ export function LaunchBase({ onCancel }: { onCancel?: () => void } = {}) {
           <p className="hint">Leave blank to keep fees for yourself.</p>
         </div>
 
-        <div className="kf-field" style={{ borderTop: "1px solid var(--color-edge)", paddingTop: 14 }}>
+        <div className="kf-divider" />
+        <div className="kf-field">
           <p className="hint" style={{ marginTop: 0 }}>Starting market cap $4,000 · Supply 1,000,000,000 · Holder reward {selected.symbol} (50% of the tax)</p>
         </div>
 
@@ -313,7 +317,9 @@ export function LaunchBase({ onCancel }: { onCancel?: () => void } = {}) {
             {busy ? "Confirm in wallet…" : isConnected ? "Launch token" : "Connect & launch"}
           </button>
         </div>
-        {!isConnected ? <p className="hint" style={{ textAlign: "center" }}>Connect a wallet to launch from your own address.</p> : null}
+        <p className="kf-footnote">
+          {isConnected ? "You pay network gas and any dev buy." : "Connect a wallet to launch from your own address."}
+        </p>
       </form>
     </div>
   );
