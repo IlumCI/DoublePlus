@@ -2119,6 +2119,14 @@ button.bg-accent:disabled {
 :root[data-brand="base"] .kf-bolt svg { width: 19px; height: 19px; }
 :root[data-brand="base"] .kf-bolt:hover { box-shadow: inset 0 0 0 1px rgba(255, 210, 61, .5), 0 0 16px rgba(255, 210, 61, .2); }
 :root[data-brand="base"] .kf-bolt:active { transform: scale(.9); }
+:root[data-brand="base"] .kf-bolt.on { box-shadow: inset 0 0 0 1px rgba(255, 210, 61, .6), 0 0 16px rgba(255, 210, 61, .25); }
+/* Quick-buy popover: floats above the bolt with the $10/$25/$50/$100 presets. */
+:root[data-brand="base"] .kf-qb { position: relative; flex: none; display: inline-grid; place-items: center; }
+:root[data-brand="base"] .kf-qb-pop { position: absolute; right: 0; bottom: calc(100% + 8px); z-index: 40; display: flex; gap: 6px; padding: 8px; border-radius: 14px; background: #141416; box-shadow: 0 18px 40px rgba(0, 0, 0, .6), inset 0 0 0 1px #27272a; animation: kf-fade .14s ease; }
+:root[data-brand="base"] .kf-qb-amt { border: 0; cursor: pointer; height: 36px; min-width: 46px; padding: 0 12px; border-radius: 8px; background: #27272a; color: #f7f7f7; font-family: var(--font-body); font-weight: 600; font-size: 13px; font-variant-numeric: tabular-nums; transition: background .12s, transform .1s; }
+:root[data-brand="base"] .kf-qb-amt:hover { background: #ec4899; color: #09090b; }
+:root[data-brand="base"] .kf-qb-amt:active { transform: scale(.94); }
+:root[data-brand="base"] .kf-qb-amt:disabled { opacity: .6; cursor: default; }
 :root[data-brand="base"] .kf-empty { text-align: center; color: var(--color-ink-2); font-size: 14px; padding: 46px 20px; line-height: 1.6; }
 :root[data-brand="base"] .kf-empty a { color: var(--color-accent-ink); font-weight: 700; }
 :root[data-brand="base"] .kf-skel { height: 76px; border-radius: 18px; margin: 6px 8px; background: linear-gradient(100deg, var(--color-panel) 30%, var(--color-panel-2) 50%, var(--color-panel) 70%); background-size: 200% 100%; animation: kf-shine 1.3s linear infinite; }

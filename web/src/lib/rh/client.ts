@@ -823,6 +823,19 @@ export class RhClient {
     return info;
   }
 
+  /** Convert a whole-dollar quick-buy amount into the value `buyToken` expects
+   *  for this coin: ETH wei for a WETH pair, else the pair token's own units.
+   *  Uses the pair's live USD price so $10 buys ~$10 of the pair regardless of
+   *  which asset the coin trades against. */
+  async quickBuyValue(coin: Address, usd: number): Promise<bigint> {
+    const info = await this.basePairInfo(coin);
+    const price = await this.pairUsdOf(info.address);
+    if (!(price > 0)) throw new Error("This pool has no price yet — open it to trade.");
+    const units = (usd / price) * 10 ** info.decimals;
+    if (!(units > 0)) throw new Error("Amount too small for this pool.");
+    return BigInt(Math.floor(units));
+  }
+
   /** Approve `spender` to pull `amount` of `erc` from the caller if the current
    *  allowance is short. Waits for the approval to confirm. */
   private async ensureAllowance(erc: Address, spender: Address, amount: bigint) {

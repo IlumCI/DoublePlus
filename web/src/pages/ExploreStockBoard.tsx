@@ -14,6 +14,65 @@ import { OFFICIAL_LOGOS } from "../lib/officialLogos";
 import { volUsd } from "../components/market/util";
 import { PREVIEW, PREVIEW_ON } from "../lib/base/preview";
 import { KoiIcon } from "../components/base/KoiIcon";
+import { ensureSdkWallet, errorText, useWallet } from "../lib/useWallet";
+import { useUi } from "../store";
+
+/** Inline quick-buy: the row's lightning bolt opens a small popover with the
+ *  $10/$25/$50/$100 presets and fires a real buy through the connected wallet,
+ *  never leaving the page — mirroring the reference row action. */
+function QuickBuyBolt({ token, symbol }: { token: `0x${string}`; symbol: string }) {
+  const { isConnected, connectFirst } = useWallet();
+  const pushToast = useUi((s) => s.pushToast);
+  const [open, setOpen] = useState(false);
+  const [busyAmt, setBusyAmt] = useState<number | null>(null);
+  const wrapRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => { if (!wrapRef.current?.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("pointerdown", away);
+    return () => document.removeEventListener("pointerdown", away);
+  }, [open]);
+
+  const buy = async (usd: number) => {
+    if (busyAmt != null) return;
+    if (!isConnected) { setOpen(false); return connectFirst(); }
+    setBusyAmt(usd);
+    try {
+      if (!(await ensureSdkWallet())) throw new Error("Wallet session expired. Reconnect and try again.");
+      const value = await (client as any).quickBuyValue(token, usd);
+      const hash = await (client as any).buyToken(token, value);
+      pushToast({ kind: "success", title: `Buying $${usd} of ${symbol}`, txHash: hash });
+      setOpen(false);
+    } catch (err) {
+      pushToast({ kind: "error", title: "Quick buy failed", body: errorText(err) });
+    } finally {
+      setBusyAmt(null);
+    }
+  };
+
+  return (
+    <span className="kf-qb" ref={wrapRef} onClick={(e) => e.preventDefault()}>
+      <button
+        className={`kf-bolt ${open ? "on" : ""}`}
+        aria-label={`Quick buy ${symbol}`}
+        aria-expanded={open}
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen((o) => !o); }}
+      >
+        {BOLT}
+      </button>
+      {open ? (
+        <span className="kf-qb-pop" role="menu" onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
+          {[10, 25, 50, 100].map((a) => (
+            <button key={a} className="kf-qb-amt" disabled={busyAmt != null} onClick={() => buy(a)}>
+              {busyAmt === a ? "…" : `$${a}`}
+            </button>
+          ))}
+        </span>
+      ) : null}
+    </span>
+  );
+}
 
 type Tab = "top" | "trending" | "movers" | "new" | "live";
 const TABS: { id: Tab; label: string; live?: boolean }[] = [
@@ -301,7 +360,7 @@ export function ExploreStockBoard() {
                     {has ? (chg! >= 0 ? UP_TRI : DN_TRI) : null}{has ? `${chg! >= 0 ? "+" : ""}${chg!.toFixed(2)}%` : "new"}
                   </span>
                 </span>
-                <button className="kf-bolt" aria-label={`Trade ${t.symbol}`} onClick={(e) => { e.preventDefault(); nav(`/token/${t.address}`); }}>{BOLT}</button>
+                <QuickBuyBolt token={t.address as `0x${string}`} symbol={t.symbol} />
               </Link>
             );
           })
