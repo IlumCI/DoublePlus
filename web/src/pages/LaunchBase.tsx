@@ -42,6 +42,7 @@ export function LaunchBase({ onCancel }: { onCancel?: () => void } = {}) {
   const [taxPct, setTaxPct] = useState(1);
   const [busy, setBusy] = useState(false);
   const [logoData, setLogoData] = useState("");
+  const [logoUrl, setLogoUrl] = useState("");
   const [devBuy, setDevBuy] = useState(0);
   const [feeMode, setFeeMode] = useState<"twitter" | "wallet">("twitter");
   const [feeRecipient, setFeeRecipient] = useState("");
@@ -71,6 +72,7 @@ export function LaunchBase({ onCancel }: { onCancel?: () => void } = {}) {
       if (out.length > 24_000) out = render(192, 0.62);
       if (out.length > 24_000) out = render(128, 0.6);
       setLogoData(out);
+      setLogoUrl("");
     } catch {
       pushToast({ kind: "error", title: "Could not read that image", body: "Try a PNG or JPG file." });
     }
@@ -79,6 +81,11 @@ export function LaunchBase({ onCancel }: { onCancel?: () => void } = {}) {
   const selected = PAIRS.find((s) => s.address === stock)!;
 
   const nameError = tried && !form.name.trim() ? "Token name is required." : null;
+  const logoUrlOk = /^(https?:\/\/|ipfs:\/\/)\S+$/i.test(logoUrl.trim());
+  const logoValue = logoUrlOk ? logoUrl.trim() : logoData;
+  const logoPreview = logoUrlOk
+    ? (logoUrl.trim().startsWith("ipfs://") ? `https://ipfs.io/ipfs/${logoUrl.trim().slice(7)}` : logoUrl.trim())
+    : logoData;
   const autoSymbol = () => form.name.trim().replace(/[^a-zA-Z0-9]/g, "").slice(0, 6).toUpperCase() || "TOKEN";
   const isEthPair = selected.address.toLowerCase() === BASE_WETH.toLowerCase();
   const isUsdcPair = selected.address.toLowerCase() === BASE_USDC.toLowerCase();
@@ -109,7 +116,7 @@ export function LaunchBase({ onCancel }: { onCancel?: () => void } = {}) {
       };
       const metadata = JSON.stringify({
         description: form.description.trim(),
-        logo: logoData,
+        logo: logoValue,
         website: url(form.website),
         twitter: url(form.twitter, "x"),
         telegram: url(form.telegram, "telegram"),
@@ -186,18 +193,24 @@ export function LaunchBase({ onCancel }: { onCancel?: () => void } = {}) {
           <div className="kf-drop-zone"
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) onLogoFile(f); }}>
-            {logoData ? (
-              <img src={logoData} alt="" style={{ width: 46, height: 46, borderRadius: 12, objectFit: "cover" }} />
+            {logoPreview ? (
+              <img src={logoPreview} alt="" style={{ width: 46, height: 46, borderRadius: 12, objectFit: "cover" }} />
             ) : null}
-            <input type="text" readOnly value={logoData ? "Image ready" : ""} placeholder="Paste image URL or upload..."
-              onClick={() => fileRef.current?.click()} style={{ cursor: "pointer" }} />
+            <input
+              type="text"
+              value={logoUrl || (logoData ? "Uploaded image ready" : "")}
+              placeholder="Paste image URL or upload..."
+              onChange={(e) => { setLogoUrl(e.target.value); if (logoData) setLogoData(""); }}
+              onFocus={() => { if (logoData) { setLogoData(""); setLogoUrl(""); } }}
+            />
             <button type="button" className="kf-clip" aria-label="Upload image" onClick={() => fileRef.current?.click()}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m21 11.5-8.5 8.5a5.5 5.5 0 0 1-7.8-7.8L13 4a3.7 3.7 0 0 1 5.2 5.2l-8.2 8.2a1.8 1.8 0 0 1-2.6-2.6L15 7.3" /></svg>
             </button>
           </div>
           <p className="hint">
-            Paste an image URL, browse, or drag and drop an image here.
-            {logoData ? <> · <button type="button" style={{ color: "var(--color-accent-ink)", background: "none", border: 0, cursor: "pointer", padding: 0 }} onClick={() => setLogoData("")}>Remove</button></> : null}
+            Paste an image URL (https or ipfs), browse, or drag and drop an image here.
+            {logoUrl.trim() && !logoUrlOk ? <span style={{ color: "var(--color-down)" }}> Not a valid image URL.</span> : null}
+            {logoValue ? <> · <button type="button" style={{ color: "var(--color-accent-ink)", background: "none", border: 0, cursor: "pointer", padding: 0 }} onClick={() => { setLogoData(""); setLogoUrl(""); }}>Remove</button></> : null}
           </p>
         </div>
 
