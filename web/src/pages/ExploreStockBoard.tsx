@@ -374,8 +374,8 @@ export function ExploreStockBoard() {
                 </span>
                 <span className="kf-pool-right">
                   <span className="kf-pool-mc">{Number(t.marketCapUsd) > 0 ? fmtUsd(t.marketCapUsd) : "—"}</span>
-                  <span className={`kf-pool-chg ${has ? (chg! >= 0 ? "up" : "down") : ""}`}>
-                    {has ? (chg! >= 0 ? UP_TRI : DN_TRI) : null}{has ? `${chg! >= 0 ? "+" : ""}${chg!.toFixed(2)}%` : "new"}
+                  <span className={`kf-pool-chg ${has ? (chg! >= 0 ? "up" : "down") : "flat"}`}>
+                    {has ? (chg! >= 0 ? UP_TRI : DN_TRI) : null}{has ? `${chg! >= 0 ? "+" : ""}${chg!.toFixed(2)}%` : "0.00%"}
                   </span>
                 </span>
                 <QuickBuyBolt token={t.address as `0x${string}`} symbol={t.symbol} />
