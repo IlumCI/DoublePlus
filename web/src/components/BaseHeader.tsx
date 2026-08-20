@@ -4,18 +4,21 @@ import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { BRAND } from "../lib/brand";
 import { BaseTicker } from "./BaseTicker";
 import { KoiIcon } from "./base/KoiIcon";
+import { WalletSheet } from "./base/WalletSheet";
 import { Skeleton } from "./ui";
 import { useWallet } from "../lib/useWallet";
+import { useUi } from "../store";
 
 // The launch form rides in a slide-up sheet on mobile, so it loads lazily —
 // the header itself stays light.
 const LaunchForm = lazy(() => import("../pages/LaunchBase").then((m) => ({ default: m.LaunchBase })));
 
 function WalletButton() {
-  const { address, isConnected, connectFirst, disconnect, isPending } = useWallet();
+  const { address, isConnected, connectFirst, isPending } = useWallet();
+  const setWalletOpen = useUi((s) => s.setWalletOpen);
   if (isConnected && address) {
     return (
-      <button onClick={() => disconnect()} className="kf-icon-btn kf-connect on" title="Disconnect">
+      <button onClick={() => setWalletOpen(true)} className="kf-icon-btn kf-connect on" title="Wallet">
         <span className="kf-dot" />
         {`${address.slice(0, 4)}…${address.slice(-4)}`}
       </button>
@@ -46,6 +49,8 @@ export function BaseHeader() {
   const nav = useNavigate();
   const loc = useLocation();
   const [sheet, setSheet] = useState(false);
+  const walletOpen = useUi((s) => s.walletOpen);
+  const setWalletOpen = useUi((s) => s.setWalletOpen);
 
   // A successful launch navigates to the new token page; close the sheet on
   // any route change so it never lingers over the next screen.
@@ -104,6 +109,8 @@ export function BaseHeader() {
           </div>
         </div>
       ) : null}
+
+      <WalletSheet open={walletOpen} onClose={() => setWalletOpen(false)} />
     </>
   );
 }

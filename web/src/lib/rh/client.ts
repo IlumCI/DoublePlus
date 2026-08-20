@@ -16,6 +16,12 @@ import { baseStockUsd, resolveBaseRoute } from "../base/routes";
 const Q96 = 2n ** 96n;
 const TOTAL_SUPPLY = 1_000_000_000n * 10n ** 18n;
 
+// Minimal ERC-20 surface for wallet balances and transfers.
+const erc20MiniAbi = [
+  { type: "function", name: "balanceOf", stateMutability: "view", inputs: [{ type: "address" }], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "transfer", stateMutability: "nonpayable", inputs: [{ type: "address" }, { type: "uint256" }], outputs: [{ type: "bool" }] },
+] as const;
+
 const SWAP_TOPIC = toEventSelector(poolSwapEvent as any);
 // Receipt-scanner window: how far back the first scan reaches, and the most
 // blocks any single catch-up will walk (Arc blocks are ~0.5s).
@@ -943,6 +949,39 @@ export class RhClient {
       abi: routerAbi,
       functionName: "sell",
       args: [token, amount, route.sell, minOut],
+    });
+  }
+
+  /** Balance of an asset for `owner`. Native ETH when `asset` is the zero
+   *  address, else the ERC-20 balance. */
+  async assetBalance(asset: Address, owner: Address): Promise<bigint> {
+    if (asset === "0x0000000000000000000000000000000000000000") {
+      return this.publicClient.getBalance({ address: owner });
+    }
+    return (await this.publicClient.readContract({
+      address: asset,
+      abi: erc20MiniAbi,
+      functionName: "balanceOf",
+      args: [owner],
+    })) as bigint;
+  }
+
+  /** Send `amount` of an asset to `to`: a native ETH transfer when `asset` is
+   *  the zero address, else an ERC-20 transfer. Non-custodial — the connected
+   *  wallet signs. */
+  async transferAsset(asset: Address, to: Address, amount: bigint): Promise<`0x${string}`> {
+    const wc = this.requireWallet();
+    const account = this.account();
+    if (asset === "0x0000000000000000000000000000000000000000") {
+      return wc.sendTransaction({ account, chain: wc.chain, to, value: amount });
+    }
+    return wc.writeContract({
+      account,
+      chain: wc.chain,
+      address: asset,
+      abi: erc20MiniAbi,
+      functionName: "transfer",
+      args: [to, amount],
     });
   }
 
