@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useTokens } from "@launchpad/sdk/react";
 import type { TokenSummary } from "@launchpad/sdk";
@@ -13,28 +13,11 @@ import { PREVIEW, PREVIEW_ON } from "../lib/base/preview";
 
 const ord = (n: number) => ["th", "st", "nd", "rd"][n % 10 > 3 || (n % 100 >= 11 && n % 100 <= 13) ? 0 : n % 10];
 
-/** hh:mm:ss until the next daily payout (UTC midnight). */
-function useCountdown() {
-  const calc = () => {
-    const now = new Date();
-    const next = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
-    const s = Math.max(0, Math.floor((next - now.getTime()) / 1000));
-    return [Math.floor(s / 3600), Math.floor((s % 3600) / 60), s % 60].map((x) => String(x).padStart(2, "0"));
-  };
-  const [t, setT] = useState(calc);
-  useEffect(() => {
-    const id = setInterval(() => setT(calc()), 1000);
-    return () => clearInterval(id);
-  }, []);
-  return t;
-}
-
 /**
- * Pool party — the daily payout page: blue hero with the countdown to the next
+ * Rewards — the realtime holder-reward page: blue hero explaining the
  * reward cycle, today's leading coins, and the full ranking below.
  */
 export function BaseParty() {
-  const [hh, mm, ss] = useCountdown();
   const { data: byVolume } = useTokens(client, { sort: "volume", limit: 100 });
 
   const all = useMemo(() => {
@@ -53,27 +36,16 @@ export function BaseParty() {
   return (
     <div className="kf kf-page">
       <section className="kf-hero">
-        <h1 className="kf-hero-title-xl">Daily payout</h1>
+        <h1 className="kf-hero-title-xl">Rewards</h1>
         <p className="kf-hero-copy">
-          Every koi.fun trade streams the paired stock to holders. Each day, the top coins by volume and market cap lead the payout.
+          Every koi.fun trade streams the paired asset to holders in real time — no snapshots, no waiting. The more a coin trades, the more its holders earn.
         </p>
-        <div className="kf-party-count">
-          <h3>Next payout in:</h3>
-          <div className="kf-count-row">
-            <span className="kf-count-box">{hh}</span>
-            <span className="kf-count-sep">:</span>
-            <span className="kf-count-box">{mm}</span>
-            <span className="kf-count-sep">:</span>
-            <span className="kf-count-box">{ss}</span>
-          </div>
-          <p className="kf-party-note">Rankings freeze at the payout, then rewards stream out.</p>
-        </div>
       </section>
 
       <div className="kf-sec-head" style={{ paddingBottom: 4 }}>
-        <h2 className="kf-sec-title" style={{ fontSize: 22 }}>Today's leaders</h2>
+        <h2 className="kf-sec-title" style={{ fontSize: 22 }}>Top reward pools</h2>
       </div>
-      <p className="kf-sec-sub">The top coins by volume and market cap lead today's payout. Everything below is ranked, not yet winning.</p>
+      <p className="kf-sec-sub">The coins streaming the most to holders right now, ranked by 24h volume.</p>
 
       <div className="kf-win-scroll">
         {winners.length === 0
@@ -100,7 +72,7 @@ export function BaseParty() {
       </div>
 
       <div className="kf-sec-head" style={{ paddingBottom: 6 }}>
-        <h2 className="kf-sec-title" style={{ fontSize: 22 }}>Full ranking</h2>
+        <h2 className="kf-sec-title" style={{ fontSize: 22 }}>All coins</h2>
       </div>
       <div className="kf-rank-list">
         {ranked.slice(0, 25).map((t, i) => {

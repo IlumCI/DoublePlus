@@ -61,8 +61,8 @@ export function BaseLeaderboard() {
     <div className="kf kf-page">
       <section className="kf-hero">
         <h1 className="kf-hero-title-xl">Leaderboard</h1>
-        <p className="kf-hero-copy">Every creator on koi.fun, ranked by volume on the coins they launch.</p>
-        <p className="kf-hero-note">Your rank will help determine your eligibility for future rewards.</p>
+        <p className="kf-hero-copy">Every creator on koi.fun, ranked by the trading volume of the coins they launch.</p>
+        <p className="kf-hero-note">More volume means more rewards streamed to holders — this is who's driving it.</p>
         <div className="kf-pod-scroll">
           {podium.length === 0
             ? [...Array(2)].map((_, i) => <div key={i} className="kf-pod-card" style={{ height: 128 }} />)
