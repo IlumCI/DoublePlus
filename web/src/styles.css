@@ -1079,10 +1079,8 @@ button.bg-accent:disabled {
   --pop-pink: #ff3da6;
 }
 :root[data-brand="base"] body {
-  background:
-    radial-gradient(120% 55% at 50% -6%, rgba(30, 162, 255, .10), transparent 60%),
-    radial-gradient(90% 40% at 50% 106%, rgba(255, 61, 166, .06), transparent 60%),
-    var(--color-bg);
+  /* Flat #09090b like the reference — no glow wash. */
+  background: var(--color-bg);
   color: var(--color-ink);
   font-family: var(--font-body);
   letter-spacing: 0;
