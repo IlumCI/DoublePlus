@@ -1050,7 +1050,7 @@ button.bg-accent:disabled {
   --color-panel-3: #1e232b;
   --color-edge: #ffffff12;
   --color-edge-2: #ffffff1f;
-  --color-ink: #ffffff;
+  --color-ink: #eceef0;
   --color-ink-2: #8b93a0;
   --color-ink-3: #5a6270;
   --color-accent: #ff3da6;
@@ -2570,3 +2570,8 @@ button.bg-accent:disabled {
 :root[data-brand="base"] .kf-field .hint { font-size: 13px; color: var(--color-ink-2); }
 :root[data-brand="base"] .kf-drop-zone { border-radius: 14px; }
 :root[data-brand="base"] .kf-sheet { padding-left: 20px; padding-right: 20px; }
+
+/* Form text sits a notch below the UI ink so labels read calm, not glaring. */
+:root[data-brand="base"] .kf-field label { color: #dfe3e6; }
+:root[data-brand="base"] .kf-field input[type="text"], :root[data-brand="base"] .kf-field textarea { color: #e6e9eb; }
+:root[data-brand="base"] .kf-launch-h1 { color: #f2f4f5; }
