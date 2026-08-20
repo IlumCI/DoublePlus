@@ -289,9 +289,6 @@ export function LaunchBase({ onCancel }: { onCancel?: () => void } = {}) {
         </div>
 
         <div className="kf-divider" />
-        <div className="kf-field">
-          <p className="hint" style={{ marginTop: 0 }}>Starting market cap $4,000 · Supply 1,000,000,000 · Holder reward {selected.symbol} (50% of the tax)</p>
-        </div>
 
         {tried && nameError ? <p className="kf-form-summary">Fix the highlighted fields to launch.</p> : null}
         <div className="kf-btnrow">
