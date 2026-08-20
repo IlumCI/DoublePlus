@@ -563,12 +563,13 @@ export class RhClient {
     const supplyWhole = Number(core.totalSupply) / 1e18;
     const usd = await this.pairUsdOf(core.stock);
     const priceUsdPerToken = pricePairPerToken * usd;
-    // A coin seeds at the STARTING_MCAP; if the pool price can't be read yet
-    // (a brand-new launch with no trades), fall back to that so it never shows
-    // a zero market cap before its first buy.
+    // Every coin seeds at the STARTING_MCAP. Until it has trades, show exactly
+    // that — the raw pool read is denominated in the pair token's own decimals
+    // (18 for WETH, 6 for USDC, 8 for stocks) and the price math assumes 18, so
+    // a tradeless non-WETH pool would otherwise read as a fraction of a cent.
     const STARTING_MCAP = 4000;
     const computed = priceUsdPerToken * supplyWhole;
-    const mcapUsd = computed > 0 ? computed : (trades.length === 0 ? STARTING_MCAP : 0);
+    const mcapUsd = trades.length > 0 && computed > 0 ? computed : STARTING_MCAP;
     // ETH-per-coin equivalent for the trade ticket: buys pay ETH and sells
     // receive ETH (the router auto-routes through the pair), so quotes and
     // minOut must be in native units, not pair units.
