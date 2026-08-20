@@ -1,0 +1,13 @@
+{
+  "name": "quiver-keeper",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Scheduled harvest keeper for the Quiver V4 launchpad.",
+  "scripts": {
+    "start": "node keeper.mjs"
+  },
+  "dependencies": {
+    "ethers": "^6.13.4"
+  }
+}

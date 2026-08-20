@@ -1,0 +1,25 @@
+{
+  "network": "stable",
+  "chainId": 988,
+  "startBlock": 32965422,
+  "deployer": "0xd6F0e8943421E19f3d800542A2aC056bA929c8ac",
+  "owner": "0x5dddea56774f01fc9d207bbd7b7633596a2f4a0b",
+  "feeRecipient": "0x5dddea56774f01fc9d207bbd7b7633596a2f4a0b",
+  "uniswapV3": {
+    "factory": "0x88F0a512eF09175D456bc9547f914f48C013E4aA",
+    "positionManager": "0x3BdC3437405f7D801b6036532713fc1F179136a6",
+    "swapRouter": "0x32eaf9B5d5F2CD7361c5012890C943D7de84C22a",
+    "wrappedNative": "0x779Ded0c9e1022225f8E0630b35a9b54bE713736"
+  },
+  "contracts": {
+    "tokenDeployer": "0x79Fb68b0bFCd335f27E2dAF95716Fb49f38452C3",
+    "factory": "0x95472BE7fEE74fc819Ba762cd4F254301ba497D7"
+  },
+  "config": {
+    "totalSupply": "1000000000e18",
+    "poolFeeTier": 10000,
+    "creatorFeeBps": 8000,
+    "platformFeeBps": 2000,
+    "defaultMarketCapUsd": 3000
+  }
+}

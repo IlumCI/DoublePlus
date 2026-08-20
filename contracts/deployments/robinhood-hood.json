@@ -1,0 +1,14 @@
+{
+  "chainId": 4663,
+  "admin": "0x5DdDEa56774f01fc9d207BBD7B7633596a2f4A0b",
+  "startBlock": 27456214,
+  "contracts": {
+    "hookDeployer": "0x383Bfb36A728CDC81F115252ee1600565996Ba9F",
+    "hook": "0x0A39aE6542aDdC1294c09a2B4Caa1eAb66dCC044",
+    "factory": "0x2A992C57AD63e4cC856C5Dc2F89f5Bc34eC00965",
+    "router": "0x26490b524a8eaB733562d3F349c9ad4Ed6D7C4ac",
+    "poolManager": "0x8366a39cc670b4001a1121b8f6a443a643e40951",
+    "weth": "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73",
+    "v3Router": "0xCaf681a66D020601342297493863E78C959E5cb2"
+  }
+}

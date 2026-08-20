@@ -1,0 +1,166 @@
+/* ============================================================
+   hammr.fun — auction-house design system.
+   Charcoal parlor, brass accents, serif lot names, mono prices.
+   Deliberately unlike the neon board: calm ground, one warm
+   accent, generous space, price as the hero.
+   ============================================================ */
+
+:root[data-brand="hammr"] {
+  --h-bg: #0d0b08;
+  --h-panel: #15120d;
+  --h-panel-2: #1d1913;
+  --h-edge: #2b251b;
+  --h-edge-2: #3d3526;
+  --h-ink: #f3eee3;
+  --h-ink-2: #a89c87;
+  --h-ink-3: #6f6553;
+  --h-brass: #f0b429;
+  --h-brass-2: #ffd166;
+  --h-brass-fg: #201500;
+  --h-live: #ff4d4d;
+  --h-up: #58d68d;
+  --h-serif: Georgia, "Times New Roman", serif;
+  --h-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  /* Map the app-wide tokens so shared bits (toasts, inputs) blend in. */
+  --color-bg: var(--h-bg);
+  --color-panel: var(--h-panel);
+  --color-panel-2: var(--h-panel-2);
+  --color-edge: var(--h-edge);
+  --color-edge-2: var(--h-edge-2);
+  --color-ink: var(--h-ink);
+  --color-ink-2: var(--h-ink-2);
+  --color-ink-3: var(--h-ink-3);
+  --color-accent: var(--h-brass);
+  --color-accent-2: var(--h-brass-2);
+  --color-accent-ink: var(--h-brass-2);
+  --color-accent-fg: var(--h-brass-fg);
+}
+
+:root[data-brand="hammr"] body {
+  background:
+    radial-gradient(1100px 500px at 50% -10%, #f0b42912, transparent 60%),
+    var(--h-bg);
+  color: var(--h-ink);
+}
+:root[data-brand="hammr"] ::selection { background: #f0b42940; }
+
+/* ---- chrome ---- */
+.hm-header {
+  position: sticky; top: 0; z-index: 40;
+  border-bottom: 1px solid var(--h-edge);
+  background: color-mix(in srgb, var(--h-bg) 86%, transparent);
+  backdrop-filter: blur(10px);
+}
+.hm-shell { max-width: 1120px; margin: 0 auto; padding: 0 20px; }
+.hm-nav a {
+  padding: 8px 14px; border-radius: 10px; font-size: 13px; font-weight: 600;
+  color: var(--h-ink-2); transition: color .15s, background .15s;
+}
+.hm-nav a:hover { color: var(--h-ink); }
+.hm-nav a.on { color: var(--h-brass-2); background: #f0b42914; }
+.hm-word { font-family: var(--h-serif); font-size: 21px; letter-spacing: -0.02em; color: var(--h-ink); }
+.hm-word b { color: var(--h-brass); font-weight: 700; }
+.hm-connect {
+  border: 1px solid #f0b42955; color: var(--h-brass-2); background: #f0b4290d;
+  padding: 7px 16px; border-radius: 999px; font-size: 12.5px; font-weight: 700;
+  transition: background .15s;
+}
+.hm-connect:hover { background: #f0b4291f; }
+
+/* ---- hero lot ---- */
+.hm-hero {
+  border: 1px solid var(--h-edge); border-radius: 22px; overflow: hidden;
+  background: linear-gradient(170deg, var(--h-panel-2), var(--h-panel) 55%);
+  box-shadow: 0 30px 80px -40px #000;
+}
+.hm-lotname { font-family: var(--h-serif); font-size: clamp(26px, 4.4vw, 40px); line-height: 1.05; letter-spacing: -0.01em; }
+.hm-lot-no { font-family: var(--h-mono); font-size: 11px; letter-spacing: .22em; color: var(--h-ink-3); text-transform: uppercase; }
+.hm-price { font-family: var(--h-mono); font-variant-numeric: tabular-nums; font-weight: 700; }
+.hm-price-big { font-size: clamp(30px, 5vw, 46px); line-height: 1; color: var(--h-brass-2); text-shadow: 0 0 30px #f0b42933; }
+
+.hm-live {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 10.5px; font-weight: 800; letter-spacing: .18em;
+  color: var(--h-live); text-transform: uppercase;
+}
+.hm-live i {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--h-live);
+  animation: hm-pulse 1.4s ease-in-out infinite;
+}
+@keyframes hm-pulse { 50% { opacity: .35; transform: scale(.8); } }
+
+.hm-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid var(--h-edge-2); border-radius: 999px; padding: 4px 12px;
+  font-size: 11.5px; font-weight: 600; color: var(--h-ink-2); background: var(--h-panel);
+}
+.hm-hammered {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1.5px solid var(--h-brass); color: var(--h-brass-2);
+  border-radius: 8px; padding: 3px 10px; font-size: 10.5px; font-weight: 800;
+  letter-spacing: .14em; transform: rotate(-3deg);
+}
+
+/* falling price track */
+.hm-track { position: relative; height: 6px; border-radius: 999px; background: var(--h-panel-2); border: 1px solid var(--h-edge); overflow: hidden; }
+.hm-track > i { position: absolute; inset: 0; width: var(--pct, 0%); background: linear-gradient(90deg, #f0b429, #ffd166); border-radius: 999px; transition: width 1s linear; }
+
+/* countdown */
+.hm-count { font-family: var(--h-mono); font-variant-numeric: tabular-nums; font-size: 15px; color: var(--h-ink); }
+.hm-count b { color: var(--h-brass-2); }
+
+/* ---- buy panel ---- */
+.hm-field {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  border: 1px solid var(--h-edge-2); background: var(--h-panel); border-radius: 14px; padding: 12px 14px;
+}
+.hm-field input {
+  background: none; border: none; outline: none; width: 100%;
+  font-family: var(--h-mono); font-size: 20px; font-weight: 700; color: var(--h-ink);
+}
+.hm-field input::placeholder { color: var(--h-ink-3); }
+.hm-cta {
+  width: 100%; border: none; cursor: pointer; border-radius: 14px; padding: 14px;
+  font-size: 15px; font-weight: 800; color: var(--h-brass-fg);
+  background: linear-gradient(180deg, var(--h-brass-2), var(--h-brass));
+  box-shadow: 0 8px 26px -8px #f0b429aa;
+  transition: transform .08s, filter .15s;
+}
+.hm-cta:hover { filter: brightness(1.06); }
+.hm-cta:active { transform: translateY(1px); }
+.hm-cta:disabled { opacity: .5; cursor: default; }
+.hm-cta-ghost {
+  width: 100%; cursor: pointer; border-radius: 14px; padding: 13px;
+  font-size: 14px; font-weight: 700; color: var(--h-brass-2);
+  background: none; border: 1px solid #f0b42955;
+}
+
+/* ---- grid cards ---- */
+.hm-card {
+  display: block; border: 1px solid var(--h-edge); border-radius: 18px; overflow: hidden;
+  background: var(--h-panel); transition: transform .15s, border-color .15s, box-shadow .2s;
+}
+.hm-card:hover { transform: translateY(-3px); border-color: #f0b42966; box-shadow: 0 18px 50px -24px #f0b42944; }
+.hm-card-art { aspect-ratio: 16/10; background: var(--h-panel-2); position: relative; overflow: hidden; }
+.hm-card-art img { width: 100%; height: 100%; object-fit: cover; }
+
+/* fills table */
+.hm-rows { font-size: 13px; }
+.hm-rows .r { display: flex; justify-content: space-between; gap: 10px; padding: 9px 0; border-bottom: 1px dashed var(--h-edge); }
+.hm-rows .r:last-child { border-bottom: none; }
+
+/* form */
+.hm-input {
+  width: 100%; border: 1px solid var(--h-edge-2); background: var(--h-panel); border-radius: 12px;
+  padding: 11px 13px; font-size: 14px; color: var(--h-ink); outline: none; transition: border-color .15s;
+}
+.hm-input:focus { border-color: #f0b42988; }
+.hm-label { font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--h-ink-3); }
+
+.hm-footer { border-top: 1px solid var(--h-edge); color: var(--h-ink-3); font-size: 12.5px; }
+.hm-footer a { color: var(--h-ink-2); font-weight: 600; }
+.hm-footer a:hover { color: var(--h-brass-2); }
+
+@keyframes hm-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.hm-rise { animation: hm-rise .35s ease both; }

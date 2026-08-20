@@ -1,0 +1,10 @@
+{
+  "network": "robinhood",
+  "chainId": 4663,
+  "note": "Uniswap V4 infrastructure discovered on-chain (Robinhood Chain).",
+  "v4": {
+    "poolManager": "0x8366a39cc670b4001a1121b8f6a443a643e40951",
+    "positionManager": "0x58daec3116aae6d93017baaea7749052e8a04fa7",
+    "permit2": "0x000000000022D473030F116dDEE9F6B43aC78BA3"
+  }
+}

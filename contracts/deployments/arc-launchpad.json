@@ -1,0 +1,25 @@
+{
+  "network": "arc",
+  "chainId": 5042,
+  "startBlock": 12947216,
+  "deployer": "0xd6F0e8943421E19f3d800542A2aC056bA929c8ac",
+  "owner": "0x5dddea56774f01fc9d207bbd7b7633596a2f4a0b",
+  "feeRecipient": "0x5dddea56774f01fc9d207bbd7b7633596a2f4a0b",
+  "uniswapV3": {
+    "factory": "0x95472BE7fEE74fc819Ba762cd4F254301ba497D7",
+    "positionManager": "0x79A6D0bA42EFCaADF6Fe25187C5CC5c664aD5a74",
+    "swapRouter": "0x9AAa64af3f315ab47B2f5336C5A90af11d458836",
+    "wrappedNative": "0x3600000000000000000000000000000000000000"
+  },
+  "contracts": {
+    "tokenDeployer": "0x72A2aFC701A9A957DEEB304025635394372df774",
+    "factory": "0xBf1010f8aF1FA8CE2F3B8441e3Ca411EEE398507"
+  },
+  "config": {
+    "totalSupply": "1000000000e18",
+    "poolFeeTier": 10000,
+    "creatorFeeBps": 8000,
+    "platformFeeBps": 2000,
+    "defaultMarketCapUsd": 3000
+  }
+}

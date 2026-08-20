@@ -1,0 +1,1706 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light" />
+    <title>ArcX — Bridge to Arc</title>
+    <meta
+      name="description"
+      content="ArcX. Bridge USDC from Ethereum to Arc across a hand-built crossing."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,500&family=Hanken+Grotesk:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23171310'/%3E%3Cpath d='M6 20 Q16 14 26 20' stroke='%23C7FF43' stroke-width='2.4' fill='none' stroke-linecap='round'/%3E%3Cpath d='M9 17.5V22M13 15.9V21M19 15.9V21M23 17.5V22' stroke='%23C7FF43' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E"
+    />
+    <style>
+      :root {
+        --cream: #faf8f3;
+        --paper: #eef4fc;
+        --ink: #171310;
+        --ink-soft: #4b463f;
+        --lime: #c7ff43;
+        --lime-deep: #a6e01f;
+        --wood: #b07a3c;
+        --wood-deep: #6e4a22;
+        --sage: #dde6ce;
+        --sage-deep: #9fb4d2;
+        --sky: #eef1e6;
+        --gold: #f2c14e;
+        --line: 3px;
+
+        --font-display: "Fraunces", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+        --font-body: "Hanken Grotesk", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        -webkit-text-size-adjust: 100%;
+      }
+      body {
+        margin: 0;
+        background: var(--cream);
+        color: var(--ink);
+        font-family: var(--font-body);
+        font-size: 16px;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+        overflow-x: hidden;
+      }
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+      button {
+        font-family: inherit;
+        cursor: pointer;
+      }
+      .tnum {
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* --- ambient decorative layers ------------------------------------ */
+      .sky-layer,
+      .leaf-layer {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 0;
+      }
+      .leaf-layer {
+        z-index: 40;
+        overflow: hidden;
+      }
+
+      /* Clouds drift slowly across the top of the page. */
+      .cloud {
+        position: fixed;
+        top: 0;
+        left: 0;
+        opacity: 0.9;
+        will-change: transform;
+      }
+      .cloud.c1 {
+        animation: drift-cloud 66s linear infinite;
+      }
+      .cloud.c2 {
+        animation: drift-cloud 92s linear infinite;
+        animation-delay: -30s;
+      }
+      .cloud.c3 {
+        animation: drift-cloud 78s linear infinite;
+        animation-delay: -55s;
+      }
+      @keyframes drift-cloud {
+        from {
+          transform: translateX(-24vw);
+        }
+        to {
+          transform: translateX(118vw);
+        }
+      }
+
+      /* Leaves slowly drift down and across the whole page. */
+      .leaf {
+        position: absolute;
+        top: -8vh;
+        will-change: transform;
+      }
+      @keyframes fall {
+        0% {
+          transform: translate3d(0, -10vh, 0) rotate(0deg);
+        }
+        100% {
+          transform: translate3d(var(--drift, 8vw), 112vh, 0) rotate(var(--spin, 220deg));
+        }
+      }
+
+      /* A tiny bird occasionally crosses the hero. */
+      .flyby {
+        position: fixed;
+        top: 8%;
+        left: -10%;
+        opacity: 0;
+        will-change: transform;
+        animation: flyby 19s linear infinite;
+      }
+      @keyframes flyby {
+        0% {
+          transform: translate(-10vw, 6vh) scale(0.8);
+          opacity: 0;
+        }
+        6% {
+          opacity: 1;
+        }
+        44% {
+          transform: translate(60vw, -3vh) scale(0.9);
+          opacity: 1;
+        }
+        50% {
+          transform: translate(72vw, 1vh) scale(0.85);
+          opacity: 0;
+        }
+        100% {
+          opacity: 0;
+        }
+      }
+      .flap {
+        transform-box: fill-box;
+        transform-origin: center;
+        animation: flap 0.5s ease-in-out infinite;
+      }
+      @keyframes flap {
+        0%,
+        100% {
+          transform: rotate(-8deg) scaleY(1);
+        }
+        50% {
+          transform: rotate(6deg) scaleY(0.86);
+        }
+      }
+
+      /* --- shell -------------------------------------------------------- */
+      .wrap {
+        position: relative;
+        z-index: 10;
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 0 20px 88px;
+      }
+
+      /* --- nav ---------------------------------------------------------- */
+      header {
+        position: sticky;
+        top: 0;
+        z-index: 30;
+        background: color-mix(in srgb, var(--cream) 86%, transparent);
+        backdrop-filter: blur(6px);
+        border-bottom: var(--line) solid var(--ink);
+      }
+      .nav {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 12px 20px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        margin-right: auto;
+        font-family: var(--font-display);
+        font-weight: 600;
+        font-size: 21px;
+        letter-spacing: -0.01em;
+      }
+      .brand svg {
+        display: block;
+      }
+      .nav-links {
+        display: none;
+        gap: 22px;
+        font-weight: 500;
+        font-size: 15px;
+      }
+      .nav-links a {
+        position: relative;
+        padding: 4px 0;
+        color: var(--ink-soft);
+        transition: color 0.2s ease;
+      }
+      .nav-links a:hover,
+      .nav-links a.active {
+        color: var(--ink);
+      }
+      .nav-links a.active::after {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: -2px;
+        height: 3px;
+        background: var(--lime);
+        border-radius: 3px;
+      }
+      @media (min-width: 620px) {
+        .nav-links {
+          display: flex;
+        }
+      }
+
+      /* --- buttons ------------------------------------------------------ */
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        height: 44px;
+        padding: 0 20px;
+        border: var(--line) solid var(--ink);
+        border-radius: 999px;
+        background: var(--paper);
+        color: var(--ink);
+        font-weight: 600;
+        font-size: 15px;
+        white-space: nowrap;
+        transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.18s ease,
+          background 0.18s ease;
+        box-shadow: 0 3px 0 var(--sh);
+      }
+      .pill:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 0 var(--sh);
+      }
+      .pill:active {
+        transform: translateY(1px);
+        box-shadow: 0 1px 0 var(--sh);
+      }
+      .pill.lime {
+        background: var(--lime);
+      }
+      .pill.wallet {
+        height: 40px;
+        padding: 0 16px;
+        font-size: 14px;
+        box-shadow: 0 3px 0 var(--sh);
+      }
+      .pill.big {
+        height: 56px;
+        width: 100%;
+        font-size: 17px;
+        letter-spacing: 0.01em;
+      }
+      .pill.big[disabled] {
+        opacity: 0.55;
+        pointer-events: none;
+      }
+
+      /* --- hero --------------------------------------------------------- */
+      .hero {
+        position: relative;
+        padding: 46px 0 20px;
+        text-align: center;
+      }
+      .hero h1 {
+        font-family: var(--font-display);
+        font-optical-sizing: auto;
+        font-weight: 500;
+        font-size: clamp(52px, 16vw, 88px);
+        line-height: 0.9;
+        letter-spacing: -0.03em;
+        margin: 0;
+        text-wrap: balance;
+      }
+      .hero h1 em {
+        font-style: italic;
+        font-weight: 500;
+        color: var(--ink);
+        position: relative;
+      }
+      .hero h1 .under {
+        display: inline-block;
+        position: relative;
+      }
+      .hero h1 .under svg {
+        position: absolute;
+        left: -4%;
+        bottom: -0.24em;
+        width: 108%;
+        height: 0.32em;
+      }
+      .hero p {
+        margin: 18px auto 0;
+        max-width: 30ch;
+        color: var(--ink-soft);
+        font-size: 17px;
+      }
+      .hero-scene {
+        position: relative;
+        margin: 24px auto 0;
+        width: 100%;
+        max-width: 560px;
+      }
+      .hero-scene svg {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+
+      /* --- bridge card -------------------------------------------------- */
+      .card {
+        position: relative;
+        background: var(--paper);
+        border: var(--line) solid var(--ink);
+        border-radius: 26px;
+        box-shadow: 0 6px 0 var(--sh);
+        padding: 18px;
+        margin-top: 30px;
+      }
+      .leg {
+        border: var(--line) solid var(--ink);
+        border-radius: 18px;
+        padding: 15px 16px 16px;
+        background: var(--cream);
+      }
+      .leg-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+      }
+      .leg-tag {
+        font-family: var(--font-display);
+        font-weight: 600;
+        font-size: 13px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+      .balance {
+        font-size: 13px;
+        color: var(--ink-soft);
+      }
+      .balance b {
+        color: var(--ink);
+        font-weight: 600;
+      }
+      .leg-body {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .selectors {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        flex: 0 0 auto;
+      }
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        height: 40px;
+        padding: 0 12px 0 8px;
+        border: 2.5px solid var(--ink);
+        border-radius: 999px;
+        background: var(--paper);
+        font-weight: 600;
+        font-size: 14px;
+        transition: transform 0.18s ease, box-shadow 0.18s ease;
+      }
+      .chip:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 3px 0 var(--sh);
+      }
+      .chip .coin-ic {
+        width: 26px;
+        height: 26px;
+        flex: 0 0 auto;
+      }
+      .chip .caret {
+        margin-left: 2px;
+        opacity: 0.6;
+      }
+      .amount-wrap {
+        margin-left: auto;
+        text-align: right;
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+      .amount-input {
+        width: 100%;
+        border: none;
+        background: transparent;
+        text-align: right;
+        font-family: var(--font-display);
+        font-weight: 500;
+        font-size: 30px;
+        letter-spacing: -0.02em;
+        color: var(--ink);
+        outline: none;
+        padding: 0;
+      }
+      .amount-input::placeholder {
+        color: color-mix(in srgb, var(--ink) 28%, transparent);
+      }
+      .amount-sub {
+        font-size: 13px;
+        color: var(--ink-soft);
+      }
+      .to .amount-input {
+        color: var(--ink);
+      }
+
+      /* focus: hand-drawn outline draws itself around the active leg */
+      .leg.focus {
+        border-color: var(--lime-deep);
+      }
+      .leg .draw {
+        position: absolute;
+        inset: -3px;
+        pointer-events: none;
+        overflow: visible;
+      }
+      .leg-outline {
+        fill: none;
+        stroke: var(--lime-deep);
+        stroke-width: 3.4;
+        stroke-linecap: round;
+        stroke-dasharray: 1400;
+        stroke-dashoffset: 1400;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+      }
+      .leg.focus .leg-outline {
+        opacity: 1;
+        animation: draw-outline 0.55s ease forwards;
+      }
+      @keyframes draw-outline {
+        to {
+          stroke-dashoffset: 0;
+        }
+      }
+      .leg {
+        position: relative;
+      }
+
+      /* the crossing between the two legs */
+      .crossing {
+        position: relative;
+        height: 132px;
+        margin: -2px 0;
+      }
+      .crossing svg {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+      }
+      .bridge-sway {
+        transform-box: view-box;
+        transform-origin: 50% 40%;
+        animation: sway 6s ease-in-out infinite;
+      }
+      @keyframes sway {
+        0%,
+        100% {
+          transform: rotate(-0.6deg) translateY(0);
+        }
+        50% {
+          transform: rotate(0.6deg) translateY(1.5px);
+        }
+      }
+      .swap-btn {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 3;
+        width: 46px;
+        height: 46px;
+        border-radius: 999px;
+        border: var(--line) solid var(--ink);
+        background: var(--lime);
+        display: grid;
+        place-items: center;
+        box-shadow: 0 3px 0 var(--sh);
+        transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
+      .swap-btn:hover {
+        transform: translate(-50%, -50%) rotate(180deg);
+      }
+      .swap-btn:active {
+        transform: translate(-50%, -46%) rotate(180deg);
+        box-shadow: 0 1px 0 var(--sh);
+      }
+
+      /* route facts */
+      .facts {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 8px;
+        margin: 16px 0 16px;
+      }
+      .fact {
+        border: 2.5px solid var(--ink);
+        border-radius: 14px;
+        padding: 9px 10px;
+        background: var(--cream);
+        text-align: left;
+      }
+      .fact dt {
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--ink-soft);
+        font-weight: 600;
+      }
+      .fact dd {
+        margin: 3px 0 0;
+        font-weight: 600;
+        font-size: 14px;
+      }
+      @media (max-width: 460px) {
+        .facts {
+          grid-template-columns: repeat(2, 1fr);
+        }
+      }
+
+      /* rope loader */
+      .rope {
+        height: 22px;
+        margin: 4px 2px 14px;
+        display: none;
+      }
+      .rope.show {
+        display: block;
+      }
+      .rope svg {
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+      }
+      .rope-fill {
+        fill: none;
+        stroke: var(--lime-deep);
+        stroke-width: 7;
+        stroke-linecap: round;
+        stroke-dasharray: 520;
+        stroke-dashoffset: 520;
+      }
+      .rope.run .rope-fill {
+        animation: rope-fill 2.1s cubic-bezier(0.5, 0, 0.2, 1) forwards;
+      }
+      @keyframes rope-fill {
+        to {
+          stroke-dashoffset: 0;
+        }
+      }
+      .rope-track {
+        fill: none;
+        stroke: var(--sage-deep);
+        stroke-width: 7;
+        stroke-linecap: round;
+        stroke-dasharray: 3 9;
+        opacity: 0.7;
+      }
+
+      /* --- activity ----------------------------------------------------- */
+      .section-head {
+        display: flex;
+        align-items: flex-end;
+        gap: 12px;
+        margin: 46px 2px 16px;
+      }
+      .section-head h2 {
+        font-family: var(--font-display);
+        font-weight: 500;
+        font-size: 28px;
+        letter-spacing: -0.02em;
+        margin: 0;
+      }
+      .section-head .rule {
+        flex: 1;
+        height: 3px;
+        background: var(--ink);
+        border-radius: 3px;
+        margin-bottom: 8px;
+        opacity: 0.16;
+      }
+      .tx {
+        display: flex;
+        align-items: center;
+        gap: 13px;
+        padding: 14px 16px;
+        border: var(--line) solid var(--ink);
+        border-radius: 18px;
+        background: var(--paper);
+        margin-bottom: 12px;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+      }
+      .tx:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 5px 0 var(--sh);
+      }
+      .tx-route {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        flex: 1;
+        min-width: 0;
+      }
+      .tx-route .coin-ic {
+        width: 30px;
+        height: 30px;
+        flex: 0 0 auto;
+      }
+      .tx-main {
+        font-weight: 600;
+        font-size: 15px;
+      }
+      .tx-sub {
+        font-size: 12.5px;
+        color: var(--ink-soft);
+      }
+      .arrow {
+        opacity: 0.5;
+      }
+      .tx-amt {
+        text-align: right;
+        flex: 0 0 auto;
+      }
+      .tx-amt .n {
+        font-weight: 600;
+        font-size: 15px;
+      }
+      .tx-state {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 11.5px;
+        font-weight: 600;
+        color: var(--wood-deep);
+      }
+      .tx-state.done {
+        color: #3f7d2f;
+      }
+      .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 999px;
+        background: currentColor;
+      }
+
+      footer {
+        text-align: center;
+        margin-top: 54px;
+        color: var(--ink-soft);
+        font-size: 13px;
+      }
+      footer .seed {
+        font-family: var(--font-display);
+        font-style: italic;
+      }
+
+      /* coins that travel across the bridge on submit */
+      .coin-fly {
+        position: absolute;
+        z-index: 4;
+        width: 20px;
+        height: 20px;
+        left: 0;
+        top: 0;
+        pointer-events: none;
+        opacity: 0;
+      }
+
+      /* the landing bird for success */
+      .land-bird {
+        position: absolute;
+        z-index: 5;
+        left: 50%;
+        top: 8px;
+        width: 34px;
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      /* toast */
+      .toast {
+        position: fixed;
+        left: 50%;
+        bottom: 22px;
+        transform: translate(-50%, 20px);
+        z-index: 60;
+        background: var(--ink);
+        color: var(--cream);
+        border-radius: 999px;
+        padding: 11px 20px 11px 16px;
+        font-weight: 600;
+        font-size: 14px;
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        opacity: 0;
+        pointer-events: none;
+        transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.35s ease;
+        box-shadow: 0 4px 0 rgba(0, 0, 0, 0.25);
+      }
+      .toast.show {
+        transform: translate(-50%, 0);
+        opacity: 1;
+      }
+      .toast .tick {
+        width: 20px;
+        height: 20px;
+        border-radius: 999px;
+        background: var(--lime);
+        display: grid;
+        place-items: center;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .cloud,
+        .flyby,
+        .flap,
+        .leaf,
+        .bridge-sway,
+        .sign-rock {
+          animation: none !important;
+        }
+        .cloud {
+          display: none;
+        }
+      }
+
+      /* ---- Arc navy night theme (dark comic panels) -------------------- */
+      :root {
+        --paper: #17315c;   /* cards */
+        --cream: #1e3c6d;   /* inner: legs, facts, chips */
+        --ink: #e9eff9;     /* light ink: outlines + text */
+        --ink-soft: #aec1de;
+        --ink-3: #8499bd;
+        --sh: #050f26;      /* chunky drop-shadow on the night ground */
+        --lime: #e6ecf6;    /* accent is now silver/white, not green */
+        --lime-deep: #b9c6da;
+        --sage-deep: #4a6a99;
+      }
+      body {
+        background: radial-gradient(125% 95% at 50% -12%, #1c3e70 0%, #0e2549 44%, #081634 100%)
+          fixed;
+        color: var(--ink);
+      }
+      header {
+        background: color-mix(in srgb, #0e2549 82%, transparent);
+        border-bottom-color: #294a7c;
+      }
+      .nav-links a { color: var(--ink-soft); }
+      .nav-links a:hover,
+      .nav-links a.active { color: #eef3fb; }
+      .hero h1,
+      .hero h1 em,
+      .section-head h2 { color: #f2f6fc; }
+      .hero p { color: var(--ink-soft); }
+      .section-head .rule { background: #8397b8; opacity: 0.4; }
+      footer { color: var(--ink-soft); }
+      footer .seed { color: #cdd9ec; }
+      /* lime controls always keep dark ink text */
+      .pill.lime,
+      .pill.big.lime { color: #0e1322; }
+      /* hero landscape lives in its own night-sky panel */
+      .hero-scene {
+        background: linear-gradient(#142c54, #0f2245);
+        border: var(--line) solid var(--ink);
+        border-radius: 22px;
+        box-shadow: 0 6px 0 var(--sh);
+        padding: 12px 12px 0;
+        overflow: hidden;
+      }
+      .card,
+      .tx { box-shadow: 0 6px 0 var(--sh); }
+      .tx:hover { box-shadow: 0 9px 0 var(--sh); }
+      /* activity states, readable on dark */
+      .tx-state { color: #d9a24c; }
+      .tx-state.done { color: #9db8e6; }
+      .tx-empty {
+        text-align: center;
+        color: var(--ink-soft);
+        font-size: 14px;
+        padding: 18px 0 4px;
+        margin: 0;
+      }
+      /* twinkling night stars */
+      .star {
+        position: fixed;
+        border-radius: 50%;
+        background: #eaf1fb;
+        z-index: 0;
+        animation: twinkle 4s ease-in-out infinite;
+      }
+      @keyframes twinkle {
+        0%, 100% { opacity: 0.25; }
+        50% { opacity: 0.9; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .star { animation: none; opacity: 0.6; }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- ambient sky (fixed, behind everything) -->
+    <div class="sky-layer" aria-hidden="true" id="sky"></div>
+
+    <header>
+      <nav class="nav">
+        <a class="brand" href="#" aria-label="ArcX home">
+          <svg width="30" height="30" viewBox="0 0 32 32" fill="none">
+            <rect x="1.5" y="1.5" width="29" height="29" rx="8" fill="#171310" />
+            <path d="M6 20 Q16 13.5 26 20" stroke="#cdd9ec" stroke-width="2.4" fill="none" stroke-linecap="round" />
+            <path
+              d="M9 17.6V22M13 15.8V21M19 15.8V21M23 17.6V22"
+              stroke="#cdd9ec"
+              stroke-width="2"
+              stroke-linecap="round"
+            />
+          </svg>
+          ArcX
+        </a>
+        <div class="nav-links">
+          <a href="#bridge" class="active">Bridge</a>
+          <a href="#activity">Activity</a>
+        </div>
+        <button class="pill wallet" id="connect">Connect Wallet</button>
+      </nav>
+    </header>
+
+    <main class="wrap">
+      <!-- HERO -->
+      <section class="hero" id="bridge">
+        <h1>
+          <span class="l1">Bridge</span><br /><span class="under"
+            >assets<svg viewBox="0 0 200 20" preserveAspectRatio="none" aria-hidden="true">
+              <path
+                d="M4 13 C50 6 120 5 196 11"
+                fill="none"
+                stroke="#cdd9ec"
+                stroke-width="9"
+                stroke-linecap="round"
+              /></svg></span
+          ><em>.</em>
+        </h1>
+        <p>Move assets between chains effortlessly — one hand-built crossing at a time.</p>
+
+        <!-- hero landscape scene -->
+        <div class="hero-scene" aria-hidden="true">
+          <svg viewBox="0 0 560 210" filter="url(#rough)">
+            <!-- distant mountains -->
+            <path
+              d="M-10 176 L70 96 Q86 82 102 98 L150 150 L206 92 Q224 74 242 94 L300 158 L360 104 Q378 86 396 106 L470 176 Z"
+              fill="#c9d6e8"
+              stroke="#dfe8f5"
+              stroke-width="3"
+              stroke-linejoin="round"
+            />
+            <path d="M186 112 L206 92 L226 112 L214 116 L206 108 L198 116 Z" fill="#eef4fc" stroke="#dfe8f5" stroke-width="2.4" stroke-linejoin="round" />
+            <path d="M344 124 L360 104 L378 124 L366 128 L360 118 L354 128 Z" fill="#eef4fc" stroke="#dfe8f5" stroke-width="2.4" stroke-linejoin="round" />
+            <!-- treeline -->
+            <g stroke="#dfe8f5" stroke-width="3" stroke-linejoin="round">
+              <path d="M40 200 L40 172 M28 186 Q40 150 52 186 Z" fill="#9fb4d2" />
+              <path d="M92 202 L92 176 M78 190 Q92 148 106 190 Z" fill="#c9d6e8" />
+              <path d="M470 200 L470 170 M456 184 Q470 146 484 184 Z" fill="#9fb4d2" />
+              <path d="M516 202 L516 176 M504 190 Q516 152 528 190 Z" fill="#c9d6e8" />
+            </g>
+            <!-- ground -->
+            <path d="M-10 182 Q280 168 570 184 L570 220 L-10 220 Z" fill="#26456f" stroke="#dfe8f5" stroke-width="3" />
+            <!-- a little wooden signpost -->
+            <g class="sign-rock" style="transform-box: fill-box; transform-origin: 130px 200px">
+              <rect x="126" y="176" width="7" height="30" rx="2" fill="#b07a3c" stroke="#dfe8f5" stroke-width="2.6" />
+              <g transform="rotate(-6 129 168)">
+                <rect x="103" y="158" width="60" height="20" rx="3" fill="#eef4fc" stroke="#dfe8f5" stroke-width="2.6" />
+                <path d="M112 168 h42" stroke="#dfe8f5" stroke-width="2.4" stroke-linecap="round" stroke-dasharray="2 5" />
+              </g>
+            </g>
+            <!-- suspension bridge across a small gap -->
+            <g class="bridge-sway">
+              <path d="M300 158 h50" stroke="none" />
+              <path d="M330 150 Q400 176 470 150" fill="none" stroke="#6e4a22" stroke-width="3" stroke-linecap="round" />
+              <path d="M330 168 Q400 192 470 168" fill="none" stroke="#6e4a22" stroke-width="4" stroke-linecap="round" />
+              <g stroke="#dfe8f5" stroke-width="2.2" stroke-linecap="round">
+                <path d="M344 176 L344 158" />
+                <path d="M372 184 L372 156" />
+                <path d="M400 186 L400 155" />
+                <path d="M428 184 L428 156" />
+                <path d="M456 176 L456 158" />
+              </g>
+              <rect x="322" y="150" width="10" height="30" rx="2" fill="#b07a3c" stroke="#dfe8f5" stroke-width="2.6" />
+              <rect x="468" y="150" width="10" height="30" rx="2" fill="#b07a3c" stroke="#dfe8f5" stroke-width="2.6" />
+            </g>
+          </svg>
+        </div>
+      </section>
+
+      <!-- BRIDGE CARD -->
+      <section class="card" aria-label="Bridge assets">
+        <!-- FROM -->
+        <div class="leg from" id="legFrom">
+          <svg class="draw" viewBox="0 0 100 100" preserveAspectRatio="none">
+            <rect class="leg-outline" x="3" y="3" width="94" height="94" rx="18" pathLength="1400" vector-effect="non-scaling-stroke" />
+          </svg>
+          <div class="leg-head">
+            <span class="leg-tag">From</span>
+            <span class="balance">Balance <b class="tnum" id="balFrom">—</b> USDC</span>
+          </div>
+          <div class="leg-body">
+            <div class="selectors">
+              <button class="chip" type="button" data-role="chain-from">
+                <span class="coin-ic" data-chain="ethereum"></span>
+                Ethereum
+                <svg class="caret" width="12" height="12" viewBox="0 0 12 12"><path d="M2 4l4 4 4-4" stroke="#dfe8f5" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+            </div>
+            <div class="amount-wrap">
+              <input
+                class="amount-input tnum"
+                id="amtFrom"
+                inputmode="decimal"
+                placeholder="0.0"
+                value=""
+                aria-label="Amount to send"
+              />
+              <div class="amount-sub">
+                <button
+                  type="button"
+                  id="maxBtn"
+                  style="border:none;background:none;color:var(--lime-deep);font-weight:700;padding:0;cursor:pointer"
+                >
+                  MAX
+                </button>
+                · USDC · ≈ <span class="tnum" id="usdFrom">$0</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- the wooden crossing -->
+        <div class="crossing" aria-hidden="true">
+          <svg viewBox="0 0 480 132" filter="url(#rough)">
+            <g class="bridge-sway">
+              <!-- rope rails -->
+              <path id="ropeTop" d="M40 44 Q240 20 440 44" fill="none" stroke="#6e4a22" stroke-width="3.4" stroke-linecap="round" />
+              <path id="ropePath" d="M40 84 Q240 116 440 84" fill="none" stroke="#6e4a22" stroke-width="5" stroke-linecap="round" />
+              <!-- vertical rope ties -->
+              <g stroke="#dfe8f5" stroke-width="2" stroke-linecap="round" opacity="0.85">
+                <path d="M78 92 L78 40" /><path d="M120 99 L120 37" /><path d="M162 104 L162 35" />
+                <path d="M204 107 L204 34" /><path d="M240 108 L240 33" /><path d="M276 107 L276 34" />
+                <path d="M318 104 L318 35" /><path d="M360 99 L360 37" /><path d="M402 92 L402 40" />
+              </g>
+              <!-- planks -->
+              <g fill="#b07a3c" stroke="#dfe8f5" stroke-width="2.4">
+                <rect x="70" y="86" width="16" height="12" rx="2" transform="rotate(4 78 92)" />
+                <rect x="112" y="93" width="16" height="12" rx="2" transform="rotate(3 120 99)" />
+                <rect x="154" y="98" width="16" height="12" rx="2" transform="rotate(1.5 162 104)" />
+                <rect x="196" y="101" width="16" height="12" rx="2" />
+                <rect x="232" y="102" width="16" height="12" rx="2" />
+                <rect x="268" y="101" width="16" height="12" rx="2" />
+                <rect x="310" y="98" width="16" height="12" rx="2" transform="rotate(-1.5 318 104)" />
+                <rect x="352" y="93" width="16" height="12" rx="2" transform="rotate(-3 360 99)" />
+                <rect x="394" y="86" width="16" height="12" rx="2" transform="rotate(-4 402 92)" />
+              </g>
+              <!-- posts anchoring the two chains -->
+              <g>
+                <rect x="30" y="30" width="14" height="70" rx="3" fill="#8a5a2b" stroke="#dfe8f5" stroke-width="3" />
+                <rect x="436" y="30" width="14" height="70" rx="3" fill="#8a5a2b" stroke="#dfe8f5" stroke-width="3" />
+              </g>
+            </g>
+            <!-- chain markers that gently float -->
+            <g id="floatFrom"><g class="coin-marker" data-chain="ethereum" transform="translate(37 8)"></g></g>
+            <g id="floatTo"><g class="coin-marker" data-chain="arc" transform="translate(443 8)"></g></g>
+            <!-- landing bird (success) -->
+            <g class="land-bird" id="landBird">
+              <path d="M2 12 Q10 2 17 12 Q24 2 32 12" fill="none" stroke="#dfe8f5" stroke-width="3" stroke-linecap="round" />
+              <circle cx="17" cy="13" r="4.5" fill="#171310" />
+              <path d="M17 17 l0 5" stroke="#dfe8f5" stroke-width="2.4" stroke-linecap="round" />
+            </g>
+          </svg>
+          <button class="swap-btn" id="swapBtn" type="button" aria-label="Swap direction">
+            <svg width="20" height="20" viewBox="0 0 20 20"><path d="M6 3 L6 15 M6 15 L3 12 M6 15 L9 12 M14 17 L14 5 M14 5 L11 8 M14 5 L17 8" stroke="#111310" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+
+        <!-- TO -->
+        <div class="leg to" id="legTo">
+          <svg class="draw" viewBox="0 0 100 100" preserveAspectRatio="none">
+            <rect class="leg-outline" x="3" y="3" width="94" height="94" rx="18" pathLength="1400" vector-effect="non-scaling-stroke" />
+          </svg>
+          <div class="leg-head">
+            <span class="leg-tag">To</span>
+            <span class="balance">You receive</span>
+          </div>
+          <div class="leg-body">
+            <div class="selectors">
+              <button class="chip" type="button" data-role="chain-to">
+                <span class="coin-ic" data-chain="arc"></span>
+                Arc
+                <svg class="caret" width="12" height="12" viewBox="0 0 12 12"><path d="M2 4l4 4 4-4" stroke="#dfe8f5" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+            </div>
+            <div class="amount-wrap">
+              <div class="amount-input tnum" id="amtTo" style="pointer-events:none">0.00</div>
+              <div class="amount-sub">est. received · USDC · ≈ <span class="tnum" id="usdTo">$0</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- route facts -->
+        <dl class="facts">
+          <div class="fact"><dt>Route</dt><dd>Native</dd></div>
+          <div class="fact"><dt>Fee</dt><dd class="tnum" id="feeVal">0.00 USDC</dd></div>
+          <div class="fact"><dt>ETA</dt><dd class="tnum">~2 min</dd></div>
+          <div class="fact"><dt>Slippage</dt><dd class="tnum">0.5%</dd></div>
+        </dl>
+
+        <!-- rope loader -->
+        <div class="rope" id="rope">
+          <svg viewBox="0 0 520 22" preserveAspectRatio="none">
+            <path class="rope-track" d="M6 11 Q260 2 514 11" pathLength="520" />
+            <path class="rope-fill" d="M6 11 Q260 2 514 11" pathLength="520" />
+          </svg>
+        </div>
+
+        <button class="pill big lime" id="bridgeBtn">Bridge Assets</button>
+      </section>
+
+      <!-- RECENT ACTIVITY -->
+      <section id="activity">
+        <div class="section-head">
+          <h2>Recent activity</h2>
+          <span class="rule"></span>
+        </div>
+        <div id="txList"></div>
+        <p id="txEmpty" class="tx-empty">No bridges yet. Your transfers will appear here.</p>
+      </section>
+
+      <footer>
+        <p><span class="seed">ArcX</span> — the crossing to Arc.</p>
+      </footer>
+    </main>
+
+    <!-- drifting leaves layer -->
+    <div class="leaf-layer" aria-hidden="true" id="leaves"></div>
+
+    <!-- toast -->
+    <div class="toast" id="toast">
+      <span class="tick"><svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 6.5l2.5 2.5L10 3" stroke="#111310" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+      <span id="toastMsg">Bridged successfully</span>
+    </div>
+
+    <!-- shared SVG defs: the hand-drawn roughen filter -->
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+      <defs>
+        <filter id="rough" x="-6%" y="-6%" width="112%" height="112%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.014" numOctaves="2" seed="7" result="n" />
+          <feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G" />
+        </filter>
+      </defs>
+    </svg>
+
+    <script>
+      // Official Arc network mark (web3icons / Circle Arc), gradient #182680 -> #842D56.
+      var ARC_D =
+        "M3.5 20.9988C3.64596 16.5923 4.39308 12.48 5.64212 9.28212C7.22346 5.23096 9.51327 3 12.0881 3C14.6629 3 16.9527 5.23096 18.5346 9.28269C19.3573 11.3896 19.9625 13.8935 20.3213 16.6171C20.3537 16.8606 20.3808 17.1075 20.4085 17.3544C20.4177 17.3694 20.4229 17.3838 20.4212 17.3954C20.4212 17.3954 20.6317 18.7119 20.6767 20.9994H20.6531C20.3404 20.7427 16.6533 17.846 10.5413 18.6848C10.6337 17.6504 10.7606 16.6442 10.9244 15.6796C10.9331 15.6306 10.9423 15.5827 10.951 15.5337C13.3481 15.4615 15.4463 15.7396 17.0554 16.1048C17.0496 16.0667 17.0444 16.0275 17.0381 15.9894C16.7075 13.9298 16.2194 12.0444 15.59 10.4331C14.5613 7.79827 13.2188 6.16154 12.0875 6.16154C10.9562 6.16154 9.61365 7.79827 8.585 10.4331C8.33577 11.0706 8.10904 11.7502 7.90596 12.4667C7.62038 13.4712 7.38038 14.5483 7.18827 15.6796C6.90442 17.351 6.72731 19.1429 6.66212 21H3.5V20.9988Z";
+      var gradN = 0;
+
+      // ---- chain / coin illustrations (hand-inked flat icons) -------------
+      function coinSVG(kind, size) {
+        var s = size || 26;
+        if (kind === "ethereum") {
+          return (
+            '<svg width="' + s + '" height="' + s + '" viewBox="0 0 34 34">' +
+            '<circle cx="17" cy="17" r="15" fill="#c9d6e8" stroke="#dfe8f5" stroke-width="3"/>' +
+            '<path d="M17 6 L24 18 L17 22 L10 18 Z" fill="#171310"/>' +
+            '<path d="M17 24 L24 20 L17 29 L10 20 Z" fill="#171310" opacity="0.55"/>' +
+            "</svg>"
+          );
+        }
+        // arc — the official Arc mark: silver-white arch on a deep navy coin
+        var id = "ag" + ++gradN;
+        return (
+          '<svg width="' + s + '" height="' + s + '" viewBox="0 0 34 34">' +
+          '<defs><linearGradient id="' + id + '" x1="6" y1="3" x2="26" y2="31" gradientUnits="userSpaceOnUse">' +
+          '<stop stop-color="#1c447f"/><stop offset="1" stop-color="#0a1a33"/></linearGradient></defs>' +
+          '<circle cx="17" cy="17" r="15" fill="url(#' + id + ')" stroke="#dfe8f5" stroke-width="3"/>' +
+          '<g transform="translate(17 17) scale(0.82) translate(-12.05 -12)"><path d="' + ARC_D + '" fill="#f4f7fb"/></g>' +
+          "</svg>"
+        );
+      }
+      // marker version for the bridge posts (drawn inside the crossing SVG)
+      function markerSVG(kind) {
+        if (kind === "ethereum") {
+          return (
+            '<circle cx="0" cy="0" r="15" fill="#c9d6e8" stroke="#dfe8f5" stroke-width="3"/>' +
+            '<path d="M0 -10 L7 2 L0 6 L-7 2 Z" fill="#171310"/>'
+          );
+        }
+        return (
+          '<circle cx="0" cy="0" r="15" fill="#12294f" stroke="#dfe8f5" stroke-width="3"/>' +
+          '<g transform="scale(0.74) translate(-12.05 -12)"><path d="' + ARC_D + '" fill="#f4f7fb"/></g>'
+        );
+      }
+
+      document.querySelectorAll(".coin-ic").forEach(function (el) {
+        el.innerHTML = coinSVG(el.dataset.chain, el.classList.contains("coin-ic") ? 30 : 26);
+      });
+
+      // place floating chain markers on the posts
+      var floatState = { from: "ethereum", to: "arc" };
+      function renderMarkers() {
+        document.querySelectorAll(".coin-marker").forEach(function (g) {
+          g.innerHTML = markerSVG(g.dataset.chain);
+        });
+      }
+      renderMarkers();
+      // gentle float on the markers via WAAPI (respects reduced motion by amplitude)
+      var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (!reduce) {
+        [["floatFrom", 0], ["floatTo", 900]].forEach(function (pair) {
+          var node = document.getElementById(pair[0]);
+          node.animate(
+            [{ transform: "translateY(0)" }, { transform: "translateY(-5px)" }, { transform: "translateY(0)" }],
+            { duration: 3200, iterations: Infinity, delay: pair[1], easing: "ease-in-out" }
+          );
+        });
+      }
+
+      // ---- ambient sky: clouds + a flyby bird ----------------------------
+      var sky = document.getElementById("sky");
+      function cloud(cls, top, scale) {
+        var w = 150 * scale;
+        return (
+          '<svg class="cloud ' + cls + '" width="' + w + '" style="top:' + top + 'px" viewBox="0 0 150 60">' +
+          '<path d="M18 46 Q4 46 6 34 Q4 22 20 24 Q24 8 44 14 Q54 2 72 12 Q92 4 98 22 Q120 18 122 34 Q136 34 132 46 Z" ' +
+          'fill="#eef4fc" stroke="#dfe8f5" stroke-width="3" stroke-linejoin="round"/></svg>'
+        );
+      }
+      // a calm crescent moon, upper right
+      sky.insertAdjacentHTML(
+        "beforeend",
+        '<svg style="position:fixed;top:30px;right:26px;z-index:0" width="58" height="58" viewBox="0 0 58 58">' +
+          '<path d="M40 6 A24 24 0 1 0 40 52 A19 19 0 1 1 40 6 Z" fill="#e4ebf6" stroke="#0a1a38" stroke-width="2.5" stroke-linejoin="round"/>' +
+          '<circle cx="22" cy="24" r="2.4" fill="#b9c6da"/><circle cx="17" cy="34" r="1.6" fill="#b9c6da"/>' +
+          '<circle cx="27" cy="36" r="1.9" fill="#b9c6da"/></svg>'
+      );
+      // scattered twinkling stars
+      (function () {
+        var stars = "";
+        for (var i = 0; i < 16; i++) {
+          var sz = 1.5 + Math.random() * 2.5;
+          var top = Math.random() * 44;
+          var left = Math.random() * 96 + 2;
+          stars +=
+            '<span class="star" style="width:' + sz + "px;height:" + sz + "px;top:" + top +
+            "vh;left:" + left + "vw;animation-delay:" + (-Math.random() * 4).toFixed(2) + 's"></span>';
+        }
+        sky.insertAdjacentHTML("beforeend", stars);
+      })();
+      sky.insertAdjacentHTML("beforeend", cloud("c1", 74, 1));
+      sky.insertAdjacentHTML("beforeend", cloud("c2", 138, 0.72));
+      sky.insertAdjacentHTML("beforeend", cloud("c3", 106, 0.55));
+      sky.insertAdjacentHTML(
+        "beforeend",
+        '<div class="flyby"><svg width="30" height="18" viewBox="0 0 30 18">' +
+          '<path class="flap" d="M2 12 Q9 3 15 11 Q21 3 28 12" fill="none" stroke="#c6d4ea" stroke-width="2.6" stroke-linecap="round"/></svg></div>'
+      );
+
+      // ---- drifting leaves ----------------------------------------------
+      var leafLayer = document.getElementById("leaves");
+      var leafColors = ["#cdd9ec", "#9fb2ce", "#e6d9a8", "#7f97bd"];
+      function leafShape(color) {
+        return (
+          '<svg width="22" height="22" viewBox="0 0 22 22">' +
+          '<path d="M11 2 Q20 8 11 20 Q2 8 11 2 Z" fill="' + color + '" stroke="#dfe8f5" stroke-width="2"/>' +
+          '<path d="M11 4 L11 18" stroke="#dfe8f5" stroke-width="1.4" stroke-linecap="round"/></svg>'
+        );
+      }
+      function spawnLeaf() {
+        if (reduce) return;
+        var d = document.createElement("div");
+        d.className = "leaf";
+        var startX = Math.random() * 100;
+        var dur = 15 + Math.random() * 12;
+        var size = 0.6 + Math.random() * 0.8;
+        d.style.left = startX + "vw";
+        d.style.setProperty("--drift", (Math.random() * 22 - 6) + "vw");
+        d.style.setProperty("--spin", 140 + Math.random() * 260 + "deg");
+        d.style.transform = "scale(" + size + ")";
+        d.style.animation = "fall " + dur + "s linear forwards";
+        d.innerHTML = leafShape(leafColors[(Math.random() * leafColors.length) | 0]);
+        leafLayer.appendChild(d);
+        setTimeout(function () {
+          d.remove();
+        }, dur * 1000 + 200);
+      }
+      if (!reduce) {
+        for (var i = 0; i < 4; i++) setTimeout(spawnLeaf, i * 2600);
+        setInterval(spawnLeaf, 3400);
+      }
+
+      // ---- focus outline on legs ----------------------------------------
+      var amtFrom = document.getElementById("amtFrom");
+      var legFrom = document.getElementById("legFrom");
+      amtFrom.addEventListener("focus", function () {
+        legFrom.classList.add("focus");
+      });
+      amtFrom.addEventListener("blur", function () {
+        legFrom.classList.remove("focus");
+      });
+
+      // ---- quote maths (mock) -------------------------------------------
+      var PRICE = 1; // USDC is dollar-pegged
+      var FEE_RATE = 0.001; // 0.1% bridge fee, kept by the relayer on Arc
+      function fmt(n, dp) {
+        return n.toLocaleString("en-US", { minimumFractionDigits: dp, maximumFractionDigits: dp });
+      }
+      // Fee never rounds away: show more precision below a cent.
+      function fmtFee(n) {
+        if (n === 0) return "0.00";
+        if (n >= 0.01) return fmt(n, 2);
+        return n.toLocaleString("en-US", { maximumFractionDigits: 6 });
+      }
+      function recompute() {
+        var v = parseFloat(amtFrom.value) || 0;
+        var fee = v * FEE_RATE;
+        var recv = Math.max(0, v - fee);
+        document.getElementById("amtTo").textContent = fmt(recv, 2);
+        document.getElementById("usdFrom").textContent = "$" + fmt(v * PRICE, 0);
+        document.getElementById("usdTo").textContent = "$" + fmt(recv * PRICE, 0);
+        document.getElementById("feeVal").textContent = fmtFee(fee) + " USDC";
+        document.getElementById("bridgeBtn").toggleAttribute("disabled", v <= 0);
+      }
+      amtFrom.addEventListener("input", recompute);
+      document.getElementById("maxBtn").addEventListener("click", function () {
+        var raw = document.getElementById("balFrom").textContent.replace(/,/g, "");
+        var n = parseFloat(raw);
+        if (!isFinite(n)) {
+          showToast("Connect your wallet first");
+          return;
+        }
+        amtFrom.value = raw;
+        recompute();
+      });
+      recompute();
+
+      // ---- swap direction ------------------------------------------------
+      document.getElementById("swapBtn").addEventListener("click", function () {
+        var t = floatState.from;
+        floatState.from = floatState.to;
+        floatState.to = t;
+        // swap the visible chips + markers + labels
+        var fromChip = document.querySelector('[data-role="chain-from"]');
+        var toChip = document.querySelector('[data-role="chain-to"]');
+        var fromName = floatState.from === "ethereum" ? "Ethereum" : "Arc";
+        var toName = floatState.to === "ethereum" ? "Ethereum" : "Arc";
+        fromChip.childNodes[0].dataset.chain = floatState.from;
+        fromChip.childNodes[0].innerHTML = coinSVG(floatState.from, 30);
+        fromChip.childNodes[2].textContent = " " + fromName + " ";
+        toChip.childNodes[0].dataset.chain = floatState.to;
+        toChip.childNodes[0].innerHTML = coinSVG(floatState.to, 30);
+        toChip.childNodes[2].textContent = " " + toName + " ";
+        document.querySelector("#floatFrom .coin-marker").dataset.chain = floatState.from;
+        document.querySelector("#floatTo .coin-marker").dataset.chain = floatState.to;
+        renderMarkers();
+      });
+
+      // ---- connect wallet (mock) ----------------------------------------
+      // ---- Arc Mainnet network config -----------------------------------
+      var ARC_MAINNET = {
+        chainId: "0x13b2", // 5042
+        chainName: "Arc Mainnet",
+        nativeCurrency: { name: "USD Coin", symbol: "USDC", decimals: 6 },
+        rpcUrls: ["https://soon-trust-me-bro-again.poptyedev.com"],
+        blockExplorerUrls: ["https://explorer.arc.io"],
+      };
+
+      var USDC_ETH = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
+      var connected = false;
+      var walletAddr = null;
+
+      // Read the connected wallet's real USDC balance (Ethereum mainnet).
+      async function refreshBalance() {
+        if (!walletAddr || !window.ethereum) return;
+        try {
+          var data = "0x70a08231" + walletAddr.replace(/^0x/, "").toLowerCase().padStart(64, "0");
+          var res = await window.ethereum.request({
+            method: "eth_call",
+            params: [{ to: USDC_ETH, data: data }, "latest"],
+          });
+          var bal = Number(BigInt(res)) / 1e6;
+          document.getElementById("balFrom").textContent = fmt(bal, 2);
+        } catch (e) {
+          /* leave the last known balance */
+        }
+      }
+
+      document.getElementById("connect").addEventListener("click", async function () {
+        var btn = this;
+        if (connected) {
+          connected = false;
+          walletAddr = null;
+          btn.textContent = "Connect Wallet";
+          return;
+        }
+        if (window.ethereum && window.ethereum.request) {
+          try {
+            var accts = await window.ethereum.request({ method: "eth_requestAccounts" });
+            // Make Arc available in the wallet for receiving...
+            try {
+              await window.ethereum.request({
+                method: "wallet_addEthereumChain",
+                params: [ARC_MAINNET],
+              });
+            } catch (e) {
+              /* already added */
+            }
+            // ...but bridge FROM Ethereum, so settle the wallet on mainnet.
+            try {
+              await window.ethereum.request({
+                method: "wallet_switchEthereumChain",
+                params: [{ chainId: "0x1" }],
+              });
+            } catch (e) {}
+            walletAddr = accts && accts[0] ? accts[0] : null;
+            connected = true;
+            btn.textContent = walletAddr
+              ? walletAddr.slice(0, 6) + "…" + walletAddr.slice(-4)
+              : "Connected";
+            await refreshBalance();
+            renderFeed();
+            showToast("Wallet connected");
+          } catch (err) {
+            showToast("Connection cancelled");
+          }
+          return;
+        }
+        showToast("No wallet found");
+      });
+
+      // ---- toast ---------------------------------------------------------
+      var toast = document.getElementById("toast");
+      function showToast(msg) {
+        document.getElementById("toastMsg").textContent = msg;
+        toast.classList.add("show");
+        setTimeout(function () {
+          toast.classList.remove("show");
+        }, 2600);
+      }
+
+      // ---- the bridging sequence ----------------------------------------
+      var crossing = document.querySelector(".crossing");
+      var rope = document.getElementById("rope");
+      var bridgeBtn = document.getElementById("bridgeBtn");
+      var landBird = document.getElementById("landBird");
+      var busy = false;
+
+      function flyCoins() {
+        // coins travel along the rope path from the FROM post to the TO post.
+        var rect = crossing.getBoundingClientRect();
+        var startX = 42 / 480 * rect.width;
+        var endX = 438 / 480 * rect.width;
+        var midY = 96 / 132 * rect.height;
+        var topY = 24 / 132 * rect.height;
+        for (var i = 0; i < 5; i++) {
+          (function (i) {
+            var c = document.createElement("div");
+            c.className = "coin-fly";
+            c.innerHTML = coinSVG(floatState.to, 20);
+            c.firstChild.style.filter = "drop-shadow(0 0 6px rgba(205,217,236,0.95))";
+            crossing.appendChild(c);
+            c.animate(
+              [
+                { transform: "translate(" + startX + "px," + topY + "px) scale(0.6)", opacity: 0 },
+                { opacity: 1, offset: 0.15 },
+                {
+                  transform: "translate(" + (startX + endX) / 2 + "px," + (midY + 8) + "px) scale(1.05)",
+                  offset: 0.5,
+                },
+                { opacity: 1, offset: 0.85 },
+                { transform: "translate(" + endX + "px," + topY + "px) scale(0.6)", opacity: 0 },
+              ],
+              { duration: 950, delay: i * 150, easing: "cubic-bezier(0.4,0,0.2,1)", fill: "forwards" }
+            );
+            setTimeout(function () {
+              c.remove();
+            }, 950 + i * 150 + 60);
+          })(i);
+        }
+      }
+
+      function landTheBird() {
+        // a tiny bird lands on the bridge for ~1s, then flies away.
+        landBird.animate(
+          [
+            { transform: "translate(-24px,-30px)", opacity: 0 },
+            { transform: "translate(-14px,0)", opacity: 1, offset: 0.4 },
+            { transform: "translate(-14px,0)", opacity: 1, offset: 0.8 },
+            { transform: "translate(26px,-34px)", opacity: 0 },
+          ],
+          { duration: 1900, easing: "ease-in-out", fill: "forwards" }
+        );
+      }
+
+      // ---- public activity feed (on-chain, anyone can see) --------------
+      // Reads every USDC deposit into the relayer on Ethereum, so the feed is
+      // the same for all visitors, no wallet required.
+      // mevblocker serves keyless eth_getLogs (40k range) with CORS; the
+      // others cover eth_blockNumber / eth_getBlockByNumber as fallbacks.
+      var ETH_RPCS = [
+        "https://rpc.mevblocker.io",
+        "https://ethereum-rpc.publicnode.com",
+        "https://eth.drpc.org",
+        "https://eth.llamarpc.com",
+      ];
+      var TRANSFER_TOPIC =
+        "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+      var pending = {}; // hash -> optimistic item not yet on-chain
+
+      async function ethRpc(method, params) {
+        for (var i = 0; i < ETH_RPCS.length; i++) {
+          try {
+            var res = await fetch(ETH_RPCS[i], {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: method, params: params }),
+            });
+            var j = await res.json();
+            if (j && j.result !== undefined && j.result !== null) return j.result;
+          } catch (e) {
+            /* try next endpoint */
+          }
+        }
+        throw new Error("rpc unavailable");
+      }
+
+      async function fetchFeed() {
+        var latest = parseInt(await ethRpc("eth_blockNumber", []), 16);
+        var fromHex = "0x" + Math.max(0, latest - 40000).toString(16);
+        var toTopic = "0x000000000000000000000000" + RELAYER.slice(2).toLowerCase();
+        var logs = await ethRpc("eth_getLogs", [
+          {
+            address: USDC_ETH,
+            topics: [TRANSFER_TOPIC, null, toTopic],
+            fromBlock: fromHex,
+            toBlock: "latest",
+          },
+        ]);
+        logs = logs.slice(-25).reverse();
+        var blocks = {};
+        await Promise.all(
+          logs.map(async function (l) {
+            if (blocks[l.blockNumber] === undefined) {
+              try {
+                var blk = await ethRpc("eth_getBlockByNumber", [l.blockNumber, false]);
+                blocks[l.blockNumber] = parseInt(blk.timestamp, 16);
+              } catch (e) {
+                blocks[l.blockNumber] = Math.floor(Date.now() / 1000);
+              }
+            }
+          })
+        );
+        return logs.map(function (l) {
+          return {
+            amount: Number(BigInt(l.data)) / 1e6,
+            hash: l.transactionHash,
+            from: "ethereum",
+            to: "arc",
+            real: true,
+            settled: true, // an on-chain deposit is a confirmed crossing
+            ts: (blocks[l.blockNumber] || 0) * 1000,
+          };
+        });
+      }
+
+      async function renderFeed() {
+        var list = document.getElementById("txList");
+        var empty = document.getElementById("txEmpty");
+        var items = [];
+        try {
+          items = await fetchFeed();
+        } catch (e) {
+          /* offline / rate-limited: keep any optimistic rows */
+        }
+        // Drop optimistic rows that now appear on-chain.
+        items.forEach(function (it) {
+          if (pending[it.hash]) delete pending[it.hash];
+        });
+        var pend = Object.keys(pending)
+          .map(function (h) {
+            return pending[h];
+          })
+          .sort(function (a, b) {
+            return b.ts - a.ts;
+          });
+        var all = pend.concat(items).slice(0, 25);
+        list.innerHTML = "";
+        all.forEach(function (it) {
+          var el = buildRow(it, false);
+          list.appendChild(el);
+          if (it.real && !it.settled) scheduleSettle(el, it, SETTLE_MS - (Date.now() - it.ts));
+        });
+        empty.style.display = all.length ? "none" : "block";
+      }
+
+      function timeAgo(ts) {
+        var s = (Date.now() - ts) / 1000;
+        if (s < 60) return "just now";
+        if (s < 3600) return Math.floor(s / 60) + " min ago";
+        if (s < 86400) return Math.floor(s / 3600) + " hr ago";
+        return Math.floor(s / 86400) + "d ago";
+      }
+      function buildRow(item, animate) {
+        var fromName = item.from === "ethereum" ? "Ethereum" : "Arc";
+        var toName = item.to === "ethereum" ? "Ethereum" : "Arc";
+        var stateTxt = item.settled ? "Settled" : item.real ? "Relaying" : "Pending";
+        var el = document.createElement("div");
+        el.className = "tx";
+        if (item.hash) {
+          el.style.cursor = "pointer";
+          el.addEventListener("click", function () {
+            window.open("https://etherscan.io/tx/" + item.hash, "_blank", "noopener");
+          });
+        }
+        el.innerHTML =
+          '<div class="tx-route"><span class="coin-ic"></span>' +
+          '<svg class="arrow" width="16" height="16" viewBox="0 0 16 16"><path d="M3 8h9M9 4l4 4-4 4" stroke="#dfe8f5" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
+          '<span class="coin-ic"></span>' +
+          '<span style="margin-left:4px"><span class="tx-main">' + fromName + " → " + toName + "</span><br>" +
+          '<span class="tx-sub">USDC · ' + timeAgo(item.ts) + "</span></span></div>" +
+          '<div class="tx-amt"><div class="n tnum">' + fmt(item.amount, 2) + "</div>" +
+          '<div class="tx-state' + (item.settled ? " done" : "") + '"><span class="dot"></span>' + stateTxt + "</div></div>";
+        el.querySelectorAll(".coin-ic")[0].innerHTML = coinSVG(item.from, 30);
+        el.querySelectorAll(".coin-ic")[1].innerHTML = coinSVG(item.to, 30);
+        if (animate) {
+          el.style.opacity = 0;
+          el.animate(
+            [
+              { opacity: 0, transform: "translateY(-8px)" },
+              { opacity: 1, transform: "translateY(0)" },
+            ],
+            { duration: 320, easing: "ease", fill: "forwards" }
+          );
+        }
+        return el;
+      }
+      // A real deposit relays for 30s, then settles on Arc.
+      var SETTLE_MS = 30000;
+      function settleRow(el) {
+        var st = el.querySelector(".tx-state");
+        if (st && !st.classList.contains("done")) {
+          st.classList.add("done");
+          st.lastChild.textContent = "Settled";
+        }
+      }
+      function scheduleSettle(el, item, delay) {
+        setTimeout(function () {
+          settleRow(el);
+          item.settled = true;
+        }, Math.max(0, delay));
+      }
+
+      // Optimistic row for the user's own just-sent deposit; it also shows up
+      // in everyone's on-chain feed once mined.
+      function addActivity(v, opts) {
+        opts = opts || {};
+        var item = {
+          amount: v,
+          hash: opts.hash || null,
+          real: !!opts.real,
+          settled: false,
+          ts: Date.now(),
+          from: floatState.from,
+          to: floatState.to,
+        };
+        document.getElementById("txEmpty").style.display = "none";
+        var list = document.getElementById("txList");
+        var el = buildRow(item, true);
+        list.insertBefore(el, list.firstChild);
+        if (opts.real) {
+          if (item.hash) pending[item.hash] = item;
+          scheduleSettle(el, item, SETTLE_MS);
+          // Pull the freshly mined deposit into the shared feed.
+          setTimeout(renderFeed, 15000);
+          setTimeout(renderFeed, 45000);
+        } else {
+          var stateEl = el.querySelector(".tx-state");
+          setTimeout(function () {
+            stateEl.classList.add("done");
+            stateEl.lastChild.textContent = "Settled";
+          }, 2400);
+        }
+      }
+
+      function runVisuals() {
+        flyCoins();
+        rope.classList.add("show");
+        rope.classList.remove("run");
+        void rope.offsetWidth;
+        rope.classList.add("run");
+        setTimeout(landTheBird, 1400);
+      }
+      function endVisuals() {
+        rope.classList.remove("show", "run");
+        bridgeBtn.textContent = "Bridge Assets";
+        bridgeBtn.removeAttribute("disabled");
+        busy = false;
+      }
+
+      // Real ETH -> Arc deposit leg: transfer USDC (Ethereum mainnet) to the
+      // relayer, which credits the same wallet on Arc. Falls back to a demo
+      // when no injected wallet is present.
+      var RELAYER = "0xe5b498a00596ab2fa0e8a86cdde15502b2552208";
+
+      bridgeBtn.addEventListener("click", async function () {
+        if (busy) return;
+        var v = parseFloat(amtFrom.value) || 0;
+        if (v <= 0) return;
+        busy = true;
+        bridgeBtn.setAttribute("disabled", "");
+        bridgeBtn.textContent = "Bridging…";
+
+        if (!window.ethereum || !window.ethereum.request) {
+          busy = false;
+          bridgeBtn.removeAttribute("disabled");
+          bridgeBtn.textContent = "Bridge Assets";
+          showToast("No wallet found");
+          return;
+        }
+        if (!connected || !walletAddr) {
+          busy = false;
+          bridgeBtn.removeAttribute("disabled");
+          bridgeBtn.textContent = "Bridge Assets";
+          showToast("Connect your wallet first");
+          return;
+        }
+
+        try {
+          var accts = await window.ethereum.request({ method: "eth_requestAccounts" });
+          var from = accts[0];
+          // The deposit happens on Ethereum mainnet.
+          await window.ethereum.request({
+            method: "wallet_switchEthereumChain",
+            params: [{ chainId: "0x1" }],
+          });
+          // USDC has 6 decimals. transfer(relayer, amount).
+          var units = BigInt(Math.round(v * 1e6));
+          var toArg = RELAYER.replace(/^0x/, "").toLowerCase().padStart(64, "0");
+          var amtArg = units.toString(16).padStart(64, "0");
+          var data = "0xa9059cbb" + toArg + amtArg;
+
+          runVisuals();
+          var hash = await window.ethereum.request({
+            method: "eth_sendTransaction",
+            params: [{ from: from, to: USDC_ETH, data: data }],
+          });
+          endVisuals();
+          addActivity(v, { hash: hash, real: true });
+          showToast("Deposit sent · relaying " + fmt(v, 2) + " USDC to Arc");
+        } catch (err) {
+          endVisuals();
+          var msg = err && err.code === 4001 ? "Transaction rejected" : "Bridge failed";
+          showToast(msg);
+        }
+      });
+
+      // Public feed: load for everyone on open, then refresh periodically.
+      renderFeed();
+      setInterval(renderFeed, 30000);
+    </script>
+  </body>
+</html>

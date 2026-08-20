@@ -1,0 +1,17 @@
+{
+  "name": "launchpad-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Production token launchpad for Robinhood Chain: direct Uniswap V3 launches with anti-whale protection",
+  "workspaces": [
+    "contracts",
+    "sdk",
+    "backend",
+    "web"
+  ],
+  "scripts": {
+    "build": "npm run build -w sdk && npm run build -w backend && npm run build -w web",
+    "test": "npm run test -w contracts",
+    "compile": "npm run compile -w contracts"
+  }
+}

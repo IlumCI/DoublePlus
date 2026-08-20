@@ -1,0 +1,20 @@
+{
+  "network": "robinhood",
+  "chainId": 4663,
+  "startBlock": 25787705,
+  "deployer": "0xd6F0e8943421E19f3d800542A2aC056bA929c8ac",
+  "feeRecipient": "0x5dddea56774f01fc9d207bbd7b7633596a2f4a0b",
+  "protocolAdmin": "0x5dddea56774f01fc9d207bbd7b7633596a2f4a0b",
+  "note": "Buyback model: 50% creator / 40% official-token buyback-burn / 10% platform. Coin pairs against a stock or meme. First launch = official token (set via hook.setMainToken).",
+  "v4": {
+    "poolManager": "0x8366a39cc670b4001a1121b8f6a443a643e40951",
+    "weth": "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73",
+    "v3Router": "0xCaf681a66D020601342297493863E78C959E5cb2"
+  },
+  "contracts": {
+    "hookDeployer": "0x422E09FeDFd81202877cda779Ba308e4B5c97b4b",
+    "hook": "0x22B5ce4AD93c128FdE0A00d84E4b06Da11f48044",
+    "factory": "0xC257a2e24af4CEA1320808070333b52bA9A4928A",
+    "router": "0xEA3dC62EbB16CAEB848c316a89D54a90Fc348301"
+  }
+}

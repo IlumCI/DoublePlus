@@ -1,0 +1,20 @@
+# One-click deploy from GitHub on Render (https://render.com).
+# New + -> Blueprint -> pick this repo. Render builds gateway/Dockerfile and
+# gives an https URL. Set ACCESS_KEY in the dashboard for a private endpoint.
+#
+# Note: Render's free web services sleep after ~15 min idle and cold-start in
+# ~30-60s. Fine for occasional use; for an always-on RPC use Koyeb (see README)
+# or the Starter plan.
+services:
+  - type: web
+    name: arc-tor-rpc
+    runtime: docker
+    rootDir: gateway
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /
+    envVars:
+      - key: PORT
+        value: "8080"
+      - key: ACCESS_KEY
+        sync: false
