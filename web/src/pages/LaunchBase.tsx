@@ -40,7 +40,8 @@ export function LaunchBase({ onCancel }: { onCancel?: () => void } = {}) {
     telegram: "",
   });
   const [stock, setStock] = useState(PAIRS[0].address);
-  const [taxPct, setTaxPct] = useState(1);
+  // Trade tax is fixed platform-side (like the reference), not a launch control.
+  const taxPct = 1;
   const [busy, setBusy] = useState(false);
   const [logoData, setLogoData] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
@@ -218,8 +219,34 @@ export function LaunchBase({ onCancel }: { onCancel?: () => void } = {}) {
         </div>
 
         <div className="kf-field">
-          <label>Description <i>(optional)</i></label>
-          <textarea value={form.description} onChange={set("description")} placeholder="What is this coin about?" maxLength={500} rows={3} />
+          <label>X URL <i>(optional)</i></label>
+          <input type="text" value={form.twitter} onChange={set("twitter")} placeholder="https://x.com/user/status/..." />
+        </div>
+
+        <div className="kf-field">
+          <label>Website <i>(optional)</i></label>
+          <input type="text" value={form.website} onChange={set("website")} placeholder="https://yourproject.com" />
+        </div>
+
+        <div className="kf-field">
+          <label>Fee Recipient <i>(optional)</i></label>
+          <div className="kf-seg2">
+            <button type="button" className={feeMode === "twitter" ? "on" : ""} onClick={() => setFeeMode("twitter")}>
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden><path d="M17.9 3h3l-6.6 7.6L22 21h-6.1l-4.8-6.3L5.6 21h-3l7.1-8.1L2 3h6.2l4.3 5.7L17.9 3Zm-1.1 16.2h1.7L7.3 4.7H5.5l11.3 14.5Z" /></svg>
+              Twitter
+            </button>
+            <button type="button" className={feeMode === "wallet" ? "on" : ""} onClick={() => setFeeMode("wallet")}>
+              <KoiIcon name="wallet" size={16} />
+              Wallet / ENS
+            </button>
+          </div>
+          <input
+            type="text"
+            value={feeRecipient}
+            onChange={(e) => setFeeRecipient(e.target.value)}
+            placeholder={feeMode === "twitter" ? "@username" : "0x... or name.eth"}
+          />
+          <p className="hint">Leave blank to keep fees for yourself.</p>
         </div>
 
         {/* Pool pairing — the coin trades against this asset and holders earn it */}
@@ -259,50 +286,6 @@ export function LaunchBase({ onCancel }: { onCancel?: () => void } = {}) {
           <input type="range" min={0} max={devMax} step={devMax / 100} value={Math.min(devBuy, devMax)}
             onChange={(e) => setDevBuy(Number(e.target.value))} aria-label={`Dev buy amount in ${devSym}`} />
           <div className="kf-devbuy-row muted"><span>0 {devSym}</span><span>{devMax}+ {devSym}</span></div>
-        </div>
-
-        {/* Trade tax */}
-        <div className="kf-field">
-          <label>Trade tax <i>· {taxPct}%</i></label>
-          <input type="range" min={1} max={10} step={1} value={taxPct} onChange={(e) => setTaxPct(Number(e.target.value))}
-            aria-label="Trade tax percent" />
-          <p className="hint">Half goes to holders as {selected.symbol}, half to you. The platform takes a small cut.</p>
-        </div>
-
-        <div className="kf-field">
-          <label>X URL <i>(optional)</i></label>
-          <input type="text" value={form.twitter} onChange={set("twitter")} placeholder="https://x.com/user/status/..." />
-        </div>
-
-        <div className="kf-field">
-          <label>Website <i>(optional)</i></label>
-          <input type="text" value={form.website} onChange={set("website")} placeholder="https://yourproject.com" />
-        </div>
-
-        <div className="kf-field">
-          <label>Telegram <i>(optional)</i></label>
-          <input type="text" value={form.telegram} onChange={set("telegram")} placeholder="https://t.me/..." />
-        </div>
-
-        <div className="kf-field">
-          <label>Fee Recipient <i>(optional)</i></label>
-          <div className="kf-seg2">
-            <button type="button" className={feeMode === "twitter" ? "on" : ""} onClick={() => setFeeMode("twitter")}>
-              <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden><path d="M17.9 3h3l-6.6 7.6L22 21h-6.1l-4.8-6.3L5.6 21h-3l7.1-8.1L2 3h6.2l4.3 5.7L17.9 3Zm-1.1 16.2h1.7L7.3 4.7H5.5l11.3 14.5Z" /></svg>
-              Twitter
-            </button>
-            <button type="button" className={feeMode === "wallet" ? "on" : ""} onClick={() => setFeeMode("wallet")}>
-              <KoiIcon name="wallet" size={16} />
-              Wallet / ENS
-            </button>
-          </div>
-          <input
-            type="text"
-            value={feeRecipient}
-            onChange={(e) => setFeeRecipient(e.target.value)}
-            placeholder={feeMode === "twitter" ? "@username" : "0x... or name.eth"}
-          />
-          <p className="hint">Leave blank to keep fees for yourself.</p>
         </div>
 
         <div className="kf-divider" />
