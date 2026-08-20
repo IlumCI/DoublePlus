@@ -4,9 +4,9 @@ import { useHolders, useToken } from "@launchpad/sdk/react";
 import type { Address, TokenSummary } from "@launchpad/sdk";
 
 // The chart is lazy-loaded so the token header, stats and trade panel paint
-// immediately and the lightweight-charts price view streams in a beat later.
+// immediately and the TradingView chart streams in a beat later.
 const TVChart = lazy(() =>
-  import("../components/base/KoiChart").then((m) => ({ default: m.KoiChart })),
+  import("../components/TVChart").then((m) => ({ default: m.TVChart })),
 );
 import { AnimatedNumber } from "../components/AnimatedNumber";
 import { Icon } from "../components/Icon";
