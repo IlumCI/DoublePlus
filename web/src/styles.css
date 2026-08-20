@@ -2765,7 +2765,8 @@ button.bg-accent:disabled {
 :root[data-brand="base"] .kf-chart-type button { width: 32px; height: 30px; display: grid; place-items: center; border: 0; border-radius: 8px; background: transparent; color: #71717a; cursor: pointer; transition: background .12s, color .12s; }
 :root[data-brand="base"] .kf-chart-type button:hover { color: #f7f7f7; }
 :root[data-brand="base"] .kf-chart-type button.on { background: #27272a; color: #ec4899; }
-:root[data-brand="base"] .kf-chart-canvas { position: relative; width: 100%; height: 340px; border-radius: 12px; overflow: hidden; }
+:root[data-brand="base"] .kf-chart-canvas { position: relative; width: 100%; height: 360px; border-radius: 12px; overflow: hidden; }
+@media (min-width: 1024px) { :root[data-brand="base"] .kf-chart-canvas { height: 440px; } }
 :root[data-brand="base"] .kf-chart-empty { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 0 24px; color: #71717a; font-size: 13px; pointer-events: none; }
 
 :root[data-brand="base"] .kf-sheet { background: #141416; }

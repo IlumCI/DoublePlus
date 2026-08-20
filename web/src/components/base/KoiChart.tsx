@@ -20,6 +20,25 @@ const DOWN = "#f87171";
 const UP_VOL = "rgba(74,222,128,.35)";
 const DOWN_VOL = "rgba(248,113,113,.35)";
 
+// Compact axis/crosshair labels: "$24.5K", "$1.2M", or a few sig-figs for tiny
+// prices — so the scale reads like the reference, not raw decimals.
+const fmtAxis = (v: number) => {
+  if (!isFinite(v)) return "";
+  const a = Math.abs(v);
+  if (a >= 1e9) return `$${(v / 1e9).toFixed(2)}B`;
+  if (a >= 1e6) return `$${(v / 1e6).toFixed(2)}M`;
+  if (a >= 1e3) return `$${(v / 1e3).toFixed(1)}K`;
+  if (a >= 1) return `$${v.toFixed(2)}`;
+  if (a === 0) return "$0";
+  return `$${v.toPrecision(3)}`;
+};
+const fmtVol = (v: number) => {
+  const a = Math.abs(v);
+  if (a >= 1e6) return `${(v / 1e6).toFixed(1)}M`;
+  if (a >= 1e3) return `${(v / 1e3).toFixed(1)}K`;
+  return v.toFixed(0);
+};
+
 type Raw = { time: number; open: number; high: number; low: number; close: number; volume: number };
 
 /**
@@ -70,18 +89,18 @@ export function KoiChart({ token, symbol }: { token: Address; symbol: string }) 
     const bars = rawRef.current.map((c) => ({ time: c.time as UTCTimestamp, open: c.open * k, high: c.high * k, low: c.low * k, close: c.close * k, volume: c.volume }));
     setEmpty(bars.length === 0);
 
-    const fmt = { type: "price" as const, precision: 6, minMove: 0.000001 };
+    const fmt = { type: "custom" as const, formatter: fmtAxis, minMove: denom === "mcap" ? 0.01 : 1e-9 };
     if (type === "candles") {
-      const s = chart.addCandlestickSeries({ upColor: UP, downColor: DOWN, borderUpColor: UP, borderDownColor: DOWN, wickUpColor: UP, wickDownColor: DOWN, priceFormat: fmt });
+      const s = chart.addCandlestickSeries({ upColor: UP, downColor: DOWN, borderUpColor: UP, borderDownColor: DOWN, wickUpColor: UP, wickDownColor: DOWN, priceFormat: fmt, priceLineColor: "#3f3f46", priceLineStyle: LineStyle.Dashed });
       s.setData(bars.map((b) => ({ time: b.time, open: b.open, high: b.high, low: b.low, close: b.close })));
       priceRef.current = s;
     } else {
-      const s = chart.addLineSeries({ color: "#ec4899", lineWidth: 2, priceFormat: fmt, lastValueVisible: true, priceLineVisible: true });
+      const s = chart.addLineSeries({ color: "#ec4899", lineWidth: 2, priceFormat: fmt, lastValueVisible: true, priceLineVisible: true, priceLineColor: "#3f3f46", priceLineStyle: LineStyle.Dashed, crosshairMarkerBorderColor: "#ec4899" });
       s.setData(bars.map((b) => ({ time: b.time, value: b.close })));
       priceRef.current = s;
     }
 
-    const vol = chart.addHistogramSeries({ priceFormat: { type: "volume" }, priceScaleId: "vol" });
+    const vol = chart.addHistogramSeries({ priceFormat: { type: "custom", formatter: fmtVol, minMove: 0.01 }, priceScaleId: "vol" });
     vol.priceScale().applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
     vol.setData(bars.map((b) => ({ time: b.time, value: b.volume, color: b.close >= b.open ? UP_VOL : DOWN_VOL })));
     volRef.current = vol;
