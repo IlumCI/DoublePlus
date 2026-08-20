@@ -2521,23 +2521,34 @@ button.bg-accent:disabled {
 :root[data-brand="base"] .kf-feed-head > span:first-child, :root[data-brand="base"] .kf-feed-head > span:first-child img,
 :root[data-brand="base"] .kf-win-top > span:first-child, :root[data-brand="base"] .kf-win-top > span:first-child img { border-radius: 50%; }
 
-/* Header parity: flush-left brand, all-white wordmark (the mark carries the
-   pink), no glow, reference-sized actions. */
+/* Header parity, measured from the reference chrome: every action is h-8
+   (32px) with 8px radius and 12px text, icons are size-4 (16px), the logo is
+   32px tall (40px from lg), and the bar sits on a translucent #09090b with a
+   backdrop blur and a #27272a hairline. Flush-left brand, all-white wordmark
+   (the mark carries the pink), no glow. */
+:root[data-brand="base"] .kf-hdr {
+  border-bottom: 1px solid #27272a;
+  background: rgba(9, 9, 11, .8);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+}
 :root[data-brand="base"] .kf-hdr .kf-tld { color: var(--color-ink); }
-:root[data-brand="base"] .kf-brand-mark { filter: none; width: 30px; height: 30px; }
-:root[data-brand="base"] .kf-brand-name { font-size: 21px; letter-spacing: -.02em; }
-:root[data-brand="base"] .kf-icon-btn { height: 42px; }
-:root[data-brand="base"] .kf-rocket { width: 54px; border-radius: 14px; }
-:root[data-brand="base"] .kf-rocket svg { width: 19px; height: 19px; }
-:root[data-brand="base"] .kf-connect { font-size: 14px; border-radius: 14px; padding: 0 16px 0 13px; }
-:root[data-brand="base"] .kf-connect svg { width: 17px; height: 17px; }
-
-/* Final chrome parity: heavier wordmark, larger rocket, pure-black ground. */
-:root[data-brand="base"] .kf-brand-name { font-size: 24px; font-weight: 800; }
-:root[data-brand="base"] .kf-brand-mark { width: 34px; height: 34px; }
-:root[data-brand="base"] .kf-rocket svg { width: 21px; height: 21px; }
+:root[data-brand="base"] .kf-brand-mark { filter: none; width: 28px; height: 28px; }
+:root[data-brand="base"] .kf-brand-name { font-size: 19px; font-weight: 800; letter-spacing: -.02em; }
+:root[data-brand="base"] .kf-icon-btn { height: 32px; }
+:root[data-brand="base"] .kf-rocket { width: auto; padding: 0 14px; border-radius: 8px; }
+:root[data-brand="base"] .kf-rocket svg { width: 16px; height: 16px; }
+:root[data-brand="base"] .kf-rocket-label { font-size: 12px; font-weight: 500; margin-left: 6px; }
+:root[data-brand="base"] .kf-connect { font-size: 12px; font-weight: 500; border-radius: 8px; padding: 0 12px; gap: 6px; }
+:root[data-brand="base"] .kf-connect svg { width: 16px; height: 16px; }
+:root[data-brand="base"] .kf-connect .kf-dot { width: 7px; height: 7px; }
+:root[data-brand="base"] .kf-nav-links a { font-size: 12px; font-weight: 500; padding: 0 16px; height: 32px; display: inline-flex; align-items: center; border-radius: 8px; }
 :root[data-brand="base"] body { background: var(--color-bg); }
-:root[data-brand="base"] .kf-rocket { color: #1c0a13; }
+:root[data-brand="base"] .kf-rocket { color: #09090b; }
+/* Logo steps up to 40px tall from lg, matching the reference. */
+@media (min-width: 1024px) {
+  :root[data-brand="base"] .kf-brand-mark { width: 34px; height: 34px; }
+  :root[data-brand="base"] .kf-brand-name { font-size: 22px; }
+}
 
 /* Launch form parity: validation states, pairing toggles, dev-buy, buttons. */
 :root[data-brand="base"] .kf-field input.err { box-shadow: inset 0 0 0 1.5px var(--color-down); background: rgba(255, 77, 94, .1); }
