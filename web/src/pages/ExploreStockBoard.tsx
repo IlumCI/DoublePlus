@@ -156,16 +156,7 @@ const BASE_MARK = (
     <path d="M24 2.45 A18 18 0 1 0 24 37.55 Z" fill="#0052FF" />
   </svg>
 );
-/** Tiny koi mark used inline beside names and tickers. */
-function KoiMini({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 40 40" fill="none" aria-hidden>
-      <path d="M20 3c-6.5 4-9 8.7-9 14.5 0 3.4 1.6 6.2 4.2 7.9-2.9.5-5.2 2.3-6.7 5.1 3.6 4.2 8 6.5 12.8 6.5 3.4 0 6-1.9 6-5 0-2.2-1.3-3.9-3.4-4.7 4.7-1.9 7.6-6 7.6-11.3C31.5 12.8 27.4 6.7 20 3Z" fill="#ff3da6" />
-      <circle cx="17.4" cy="15.6" r="2.2" fill="#fff" />
-    </svg>
-  );
-}
-const FIRE = <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className="kf-fire"><path d="M12 2.5C8.7 6.7 6.2 9.7 6.2 13.4a5.8 5.8 0 0 0 11.6 0c0-3.7-2.5-6.7-5.8-10.9Zm0 16.3a3 3 0 0 1-3-3c0-1.4 1.1-2.8 3-4.2 1.9 1.4 3 2.8 3 4.2a3 3 0 0 1-3 3Z" /></svg>;
+const FIRE =<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className="kf-fire"><path d="M12 2.5C8.7 6.7 6.2 9.7 6.2 13.4a5.8 5.8 0 0 0 11.6 0c0-3.7-2.5-6.7-5.8-10.9Zm0 16.3a3 3 0 0 1-3-3c0-1.4 1.1-2.8 3-4.2 1.9 1.4 3 2.8 3 4.2a3 3 0 0 1-3 3Z" /></svg>;
 const CUP = <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className="kf-cup"><path d="M7 3h10v2h3.5v2.2A3.8 3.8 0 0 1 16.7 11h-.3a5 5 0 0 1-3.4 2.9V16h3v2.5H8V16h3v-2.1A5 5 0 0 1 7.6 11h-.3a3.8 3.8 0 0 1-3.8-3.8V5H7V3Zm-1.5 4.2c0 1 .8 1.8 1.8 1.8h-.1A6.9 6.9 0 0 1 7 5.5H5.5v1.7ZM18.5 7.2V5.5H17c.1 1.2 0 2.4-.2 3.5h-.1c1 0 1.8-.8 1.8-1.8Z" /></svg>;
 const UP_TRI = <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden><path d="M12 6l7 12H5z" /></svg>;
 const DN_TRI = <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden><path d="M12 18 5 6h14z" /></svg>;
@@ -295,7 +286,6 @@ export function ExploreStockBoard() {
                       {logoSrc(t) ? <img src={logoSrc(t)!} alt="" /> : <span style={{ fontSize: 14 }}>{(t.symbol || "?")[0].toUpperCase()}</span>}
                     </span>
                     <span className="kf-lb-name">${t.symbol}</span>
-                    <KoiMini className="kf-lb-fish" />
                   </div>
                   <div className="kf-lb-stats">
                     <div className="kf-stat"><div className="k">Market Cap</div><div className="v">{Number(t.marketCapUsd) > 0 ? fmtUsd(t.marketCapUsd) : "—"}</div></div>
@@ -378,7 +368,6 @@ export function ExploreStockBoard() {
                     {(hot || official) && <span className="kf-flags">{hot && FIRE}{official && CUP}</span>}
                   </span>
                   <span className="kf-pool-sub">
-                    <KoiMini className="kf-sub-fish" />
                     <span className="kf-tk">{t.symbol}</span>
                     {volUsd(t) > 0 ? <span className="kf-vol">· {fmtUsd(volUsd(t))} vol</span> : null}
                   </span>
