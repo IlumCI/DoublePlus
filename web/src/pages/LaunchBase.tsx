@@ -14,6 +14,7 @@ const PAIRS: BaseStock[] = [
   ...BASE_STOCKS,
 ];
 import { ensureSdkWallet, errorText, useWallet } from "../lib/useWallet";
+import { KoiIcon } from "../components/base/KoiIcon";
 import { useUi } from "../store";
 
 const LAUNCHED_TOPIC = keccak256(toHex("Launched(address,address,address,uint16,bytes32)"));
@@ -281,8 +282,14 @@ export function LaunchBase({ onCancel }: { onCancel?: () => void } = {}) {
         <div className="kf-field">
           <label>Fee Recipient <i>(optional)</i></label>
           <div className="kf-seg2">
-            <button type="button" className={feeMode === "twitter" ? "on" : ""} onClick={() => setFeeMode("twitter")}>𝕏 Twitter</button>
-            <button type="button" className={feeMode === "wallet" ? "on" : ""} onClick={() => setFeeMode("wallet")}>Wallet / ENS</button>
+            <button type="button" className={feeMode === "twitter" ? "on" : ""} onClick={() => setFeeMode("twitter")}>
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden><path d="M17.9 3h3l-6.6 7.6L22 21h-6.1l-4.8-6.3L5.6 21h-3l7.1-8.1L2 3h6.2l4.3 5.7L17.9 3Zm-1.1 16.2h1.7L7.3 4.7H5.5l11.3 14.5Z" /></svg>
+              Twitter
+            </button>
+            <button type="button" className={feeMode === "wallet" ? "on" : ""} onClick={() => setFeeMode("wallet")}>
+              <KoiIcon name="wallet" size={16} />
+              Wallet / ENS
+            </button>
           </div>
           <input
             type="text"
