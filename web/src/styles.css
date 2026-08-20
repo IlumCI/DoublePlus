@@ -1044,21 +1044,21 @@ button.bg-accent:disabled {
 /* koi.fun — playful pro discovery dashboard: near-black ground, electric-blue
    hero, pink primary action, green/red movement, lime launch badge. */
 :root[data-brand="base"], :root[data-brand="base"][data-nb="dark"] {
-  --color-bg: #07080b;
-  --color-panel: #14171d;
-  --color-panel-2: #191d24;
-  --color-panel-3: #1e232b;
-  --color-edge: #ffffff12;
-  --color-edge-2: #ffffff1f;
-  --color-ink: #eceef0;
-  --color-ink-2: #8b93a0;
-  --color-ink-3: #5a6270;
-  --color-accent: #ff3da6;
-  --color-accent-2: #ff5fb6;
-  --color-accent-ink: #ff5fb6;
+  --color-bg: #09090b;
+  --color-panel: #141416;
+  --color-panel-2: #18181b;
+  --color-panel-3: #27272a;
+  --color-edge: #27272a;
+  --color-edge-2: #3f3f46;
+  --color-ink: #f7f7f7;
+  --color-ink-2: #a1a1aa;
+  --color-ink-3: #71717a;
+  --color-accent: #ec4899;
+  --color-accent-2: #db2777;
+  --color-accent-ink: #f472b6;
   --color-accent-fg: #ffffff;
-  --color-up: #2fd07e;
-  --color-down: #ff4d5e;
+  --color-up: #4ade80;
+  --color-down: #f87171;
   --nb-blue: #1ea2ff;
   --nb-orange: #ff3da6;
   --nb-sh: #00000099;
@@ -2628,3 +2628,26 @@ button.bg-accent:disabled {
 @media (min-width: 640px) {
   :root[data-brand="base"] .kf-field input[type="text"], :root[data-brand="base"] .kf-field textarea { font-size: 14px; }
 }
+
+/* Measured button treatment: flat brand pink with near-black text, gray
+   secondary, violet focus ring, zinc borders, muted placeholders. */
+:root[data-brand="base"] .kf-rocket { background: #ec4899; box-shadow: none; color: #09090b; }
+:root[data-brand="base"] .kf-rocket:hover { background: #db2777; }
+:root[data-brand="base"] .kf-btnrow .kf-submit, :root[data-brand="base"] .kf-submit {
+  background: #ec4899; color: #09090b; box-shadow: none; font-weight: 600;
+}
+:root[data-brand="base"] .kf-submit:hover { background: #db2777; }
+:root[data-brand="base"] .kf-cancel { background: #27272a; box-shadow: none; color: #f7f7f7; font-weight: 600; }
+:root[data-brand="base"] .kf-field input[type="text"], :root[data-brand="base"] .kf-field input[type="url"],
+:root[data-brand="base"] .kf-field textarea { box-shadow: inset 0 0 0 1px #27272a; }
+:root[data-brand="base"] .kf-field input:focus, :root[data-brand="base"] .kf-field textarea:focus { box-shadow: inset 0 0 0 1.5px #6d28d9; }
+:root[data-brand="base"] .kf-field input::placeholder, :root[data-brand="base"] .kf-field textarea::placeholder { color: #71717a; }
+:root[data-brand="base"] .kf-seg2 button, :root[data-brand="base"] .kf-pairgrid button { box-shadow: inset 0 0 0 1px #27272a; background: transparent; }
+:root[data-brand="base"] .kf-seg2 button.on, :root[data-brand="base"] .kf-pairgrid button.on { box-shadow: inset 0 0 0 1.5px #6d28d9; background: rgba(109, 40, 217, .08); }
+:root[data-brand="base"] .kf-field input.err { box-shadow: inset 0 0 0 1.5px #ef4444; background: rgba(69, 10, 10, .55); }
+:root[data-brand="base"] .kf-err-msg, :root[data-brand="base"] .kf-form-summary { color: #f87171; }
+:root[data-brand="base"] .kf-drop-zone { border-color: #27272a; }
+:root[data-brand="base"] .kf-drop-row input { box-shadow: inset 0 0 0 1px #27272a !important; }
+:root[data-brand="base"] .kf-clip { box-shadow: inset 0 0 0 1px #27272a; color: #a1a1aa; }
+:root[data-brand="base"] .kf-sheet { background: #09090b; }
+:root[data-brand="base"] .kf-tick b { color: #ec4899; }
