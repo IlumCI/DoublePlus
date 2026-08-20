@@ -2556,9 +2556,11 @@ button.bg-accent:disabled {
 :root[data-brand="base"] .kf-btnrow .kf-submit { border-radius: 13px; }
 :root[data-brand="base"] .kf-form input[type="range"] { accent-color: #ffffff; }
 
-/* Launch form: flat and full-width like the reference — the sheet supplies the
-   surface, so the form is no longer a boxed card; type steps down a notch. */
-:root[data-brand="base"] .kf-form { background: transparent; box-shadow: none; padding: 0; gap: 20px; }
+/* Launch form: boxed card on the page like the reference (bg-surface #141416,
+   #27272a border, 16px radius, 24/32 padding); inside the sheet it goes flat
+   because the sheet already supplies the surface. */
+:root[data-brand="base"] .kf-form { background: #141416; box-shadow: inset 0 0 0 1px #27272a; border-radius: 16px; padding: 32px 24px; gap: 20px; }
+:root[data-brand="base"] .kf-sheet .kf-form { background: transparent; box-shadow: none; border-radius: 0; padding: 0; }
 :root[data-brand="base"] .kf-launch { padding: 4px 16px 24px; }
 :root[data-brand="base"] .kf-sheet .kf-launch { padding: 4px 6px 10px; max-width: none; }
 :root[data-brand="base"] .kf-launch-h1 { font-size: 22px; }
