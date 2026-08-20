@@ -358,6 +358,7 @@ export function ExploreStockBoard() {
             const has = chg != null && isFinite(chg);
             const hot = has && chg! >= 20;
             const official = isOfficial(t.address);
+            const fresh = !!t.createdAt && Date.now() / 1000 - t.createdAt < 86400;
             const tint = has ? (chg! >= 0 ? "tint-up" : "tint-dn") : "";
             return (
               <Link to={`/token/${t.address}`} key={t.address} className={`kf-pool ${tint}`}>
@@ -366,6 +367,7 @@ export function ExploreStockBoard() {
                   <span className="kf-pool-name-row">
                     <span className="kf-pool-name">{t.name}</span>
                     {(hot || official) && <span className="kf-flags">{hot && FIRE}{official && CUP}</span>}
+                    {fresh && <span className="kf-new-badge">New</span>}
                   </span>
                   <span className="kf-pool-sub">
                     <span className="kf-tk">{t.symbol}</span>
