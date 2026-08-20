@@ -177,7 +177,7 @@ export function LaunchBase({ onCancel }: { onCancel?: () => void } = {}) {
       <form onSubmit={submit} className="kf-form">
         <div className="kf-field">
           <label>Token Name</label>
-          <input type="text" value={form.name} onChange={set("name")} placeholder="Enter token name..." maxLength={48} autoFocus
+          <input type="text" value={form.name} onChange={set("name")} placeholder="Enter token name..." maxLength={48}
             className={nameError ? "err" : undefined} aria-invalid={!!nameError} />
           {nameError ? <p className="kf-err-msg">{nameError}</p> : null}
         </div>
