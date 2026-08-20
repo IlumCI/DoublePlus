@@ -2094,8 +2094,9 @@ button.bg-accent:disabled {
 :root[data-brand="base"] .kf-ava { width: 50px; height: 50px; border-radius: 50%; position: relative; overflow: hidden; display: grid; place-items: center; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .08), 0 4px 12px rgba(0, 0, 0, .35); }
 :root[data-brand="base"] .kf-ava img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
 :root[data-brand="base"] .kf-ava span { font-family: var(--font-head); font-weight: 800; font-size: 18px; color: rgba(255, 255, 255, .92); text-shadow: 0 1px 3px rgba(0, 0, 0, .4); letter-spacing: -.02em; }
-:root[data-brand="base"] .kf-badge { position: absolute; right: -3px; bottom: -3px; width: 20px; height: 20px; border-radius: 7px; background: var(--kf-lime); display: grid; place-items: center; box-shadow: 0 0 0 3px var(--color-bg); }
-:root[data-brand="base"] .kf-badge svg { width: 11px; height: 11px; color: #0a2400; }
+:root[data-brand="base"] .kf-logo-wrap { position: relative; display: inline-grid; flex: none; }
+:root[data-brand="base"] .kf-badge { position: absolute; right: -3px; bottom: -3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; display: grid; place-items: center; box-shadow: 0 0 0 2.5px var(--color-bg); overflow: hidden; }
+:root[data-brand="base"] .kf-badge svg { width: 18px; height: 18px; display: block; }
 :root[data-brand="base"] .kf-pool-mid { min-width: 0; }
 :root[data-brand="base"] .kf-pool-name-row { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
 :root[data-brand="base"] .kf-pool-name { font-family: var(--font-head); font-weight: 700; font-size: 16.5px; letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
@@ -2240,7 +2241,7 @@ button.bg-accent:disabled {
 :root[data-brand="base"] .kf-wallet-hrow { display: flex; align-items: center; gap: 11px; padding: 9px 4px; border-radius: 10px; text-decoration: none; color: #f7f7f7; }
 :root[data-brand="base"] .kf-wallet-hrow:hover { background: #18181b; }
 :root[data-brand="base"] .kf-wallet-hav { position: relative; width: 38px; height: 38px; flex: none; border-radius: 50%; display: grid; place-items: center; background: #27272a; color: #f7f7f7; font-weight: 700; font-size: 14px; }
-:root[data-brand="base"] .kf-wallet-hav svg { position: absolute; right: -2px; bottom: -2px; padding: 2px; border-radius: 5px; background: #c9f24e; color: #0a0a0a; }
+:root[data-brand="base"] .kf-wallet-hav svg { position: absolute; right: -2px; bottom: -2px; width: 15px; height: 15px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 2px #141416; }
 :root[data-brand="base"] .kf-wallet-hmid { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 :root[data-brand="base"] .kf-wallet-hsym { font-weight: 700; font-size: 15px; }
 :root[data-brand="base"] .kf-wallet-hname { color: #a1a1aa; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -2480,8 +2481,8 @@ button.bg-accent:disabled {
 :root[data-brand="base"] .kf-pool { padding: 10px 14px; gap: 11px; }
 :root[data-brand="base"] .kf-ava-wrap, :root[data-brand="base"] .kf-ava { width: 42px; height: 42px; }
 :root[data-brand="base"] .kf-ava span { font-size: 15px; }
-:root[data-brand="base"] .kf-badge { width: 17px; height: 17px; border-radius: 6px; }
-:root[data-brand="base"] .kf-badge svg { width: 9px; height: 9px; }
+:root[data-brand="base"] .kf-badge { width: 16px; height: 16px; border-radius: 50%; }
+:root[data-brand="base"] .kf-badge svg { width: 16px; height: 16px; }
 :root[data-brand="base"] .kf-pool-name { font-size: 14.5px; }
 :root[data-brand="base"] .kf-flags svg { width: 12px; height: 12px; }
 :root[data-brand="base"] .kf-pool-sub { font-size: 11.5px; gap: 5px; }

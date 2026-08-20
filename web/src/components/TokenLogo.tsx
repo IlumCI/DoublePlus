@@ -15,7 +15,7 @@ export function TokenLogo({ token, size = 40 }: { token: TokenSummary; size?: nu
       : String(logo)
     : null;
 
-  return (
+  const inner = (
     <span
       className="grid shrink-0 place-items-center overflow-hidden rounded-lg bg-panel-2 ring-1 ring-edge"
       style={{ width: size, height: size }}
@@ -33,6 +33,20 @@ export function TokenLogo({ token, size = 40 }: { token: TokenSummary; size?: nu
       ) : (
         <QuiverMark />
       )}
+    </span>
+  );
+
+  // Larger avatars carry the Base network badge, marking the coin as on Base.
+  if (size < 30) return inner;
+  return (
+    <span className="kf-logo-wrap" style={{ width: size, height: size }}>
+      {inner}
+      <span className="kf-badge">
+        <svg viewBox="0 0 40 40" aria-hidden>
+          <circle cx="20" cy="20" r="20" fill="#fff" />
+          <path d="M24 2.45 A18 18 0 1 0 24 37.55 Z" fill="#0052FF" />
+        </svg>
+      </span>
     </span>
   );
 }

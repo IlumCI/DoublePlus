@@ -12,6 +12,14 @@ import { KoiIcon } from "./KoiIcon";
 
 const ZERO = "0x0000000000000000000000000000000000000000" as Address;
 
+// The Base network brandmark badge shown on each holding avatar.
+const BaseMark = () => (
+  <svg viewBox="0 0 40 40" aria-hidden>
+    <circle cx="20" cy="20" r="20" fill="#fff" />
+    <path d="M24 2.45 A18 18 0 1 0 24 37.55 Z" fill="#0052FF" />
+  </svg>
+);
+
 // The fundable assets on Base, shown as holdings with their USD value.
 const ASSETS: { key: string; sym: string; name: string; address: Address; decimals: number }[] = [
   { key: "eth", sym: "ETH", name: "Ethereum", address: ZERO, decimals: 18 },
@@ -117,7 +125,7 @@ export function WalletSheet({ open, onClose }: { open: boolean; onClose: () => v
               ) : (
                 holdings.map((h) => (
                   <div key={h.key} className="kf-wallet-hrow">
-                    <span className="kf-wallet-hav">{h.sym.slice(0, 1)}<KoiIcon name="wallet" size={11} /></span>
+                    <span className="kf-wallet-hav">{h.sym.slice(0, 1)}<BaseMark /></span>
                     <span className="kf-wallet-hmid">
                       <span className="kf-wallet-hsym">{h.sym}</span>
                       <span className="kf-wallet-hname">{h.name}</span>
@@ -138,7 +146,7 @@ export function WalletSheet({ open, onClose }: { open: boolean; onClose: () => v
               ) : (
                 mine.map((t) => (
                   <a key={t.address} className="kf-wallet-hrow" href={`/token/${t.address}`}>
-                    <span className="kf-wallet-hav">{t.symbol.slice(0, 1)}<KoiIcon name="wallet" size={11} /></span>
+                    <span className="kf-wallet-hav">{t.symbol.slice(0, 1)}<BaseMark /></span>
                     <span className="kf-wallet-hmid">
                       <span className="kf-wallet-hsym">{t.symbol}</span>
                       <span className="kf-wallet-hname">{t.name}</span>

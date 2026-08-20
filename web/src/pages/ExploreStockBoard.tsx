@@ -143,12 +143,19 @@ function Avatar({ t }: { t: TokenSummary }) {
       <span className="kf-ava" style={src ? undefined : { background: avaBg(t.address) }}>
         {src ? <img src={src} alt="" loading="lazy" onError={() => setFailed(true)} /> : <span>{(t.symbol || "?")[0].toUpperCase()}</span>}
       </span>
-      <span className="kf-badge">{FEATHER}</span>
+      <span className="kf-badge">{BASE_MARK}</span>
     </span>
   );
 }
 
-const FEATHER = <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden><path d="M19.8 4.2c-5.8.3-10 3-11.6 8.7l-1.7 5 1.6-.5.9-2.6c.5.1 1 .2 1.6.2 4.6-.4 8-4.6 9.2-10.8Z" /></svg>;
+// The Base network brandmark — a blue disc flattened on the right — marks every
+// coin as launched on Base, replacing the old lime quill.
+const BASE_MARK = (
+  <svg viewBox="0 0 40 40" aria-hidden>
+    <circle cx="20" cy="20" r="20" fill="#fff" />
+    <path d="M24 2.45 A18 18 0 1 0 24 37.55 Z" fill="#0052FF" />
+  </svg>
+);
 /** Tiny koi mark used inline beside names and tickers. */
 function KoiMini({ className }: { className?: string }) {
   return (
