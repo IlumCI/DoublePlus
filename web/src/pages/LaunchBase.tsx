@@ -81,8 +81,15 @@ export function LaunchBase({ onCancel }: { onCancel?: () => void } = {}) {
   const nameError = tried && !form.name.trim() ? "Token name is required." : null;
   const autoSymbol = () => form.name.trim().replace(/[^a-zA-Z0-9]/g, "").slice(0, 6).toUpperCase() || "TOKEN";
   const isEthPair = selected.address.toLowerCase() === BASE_WETH.toLowerCase();
-  // Rough share of supply an atomic dev buy takes at the $4k starting cap.
-  const devPct = devBuy > 0 ? Math.min(99, (devBuy * 1900) / (4000 + devBuy * 1900) * 100) : 0;
+  const isUsdcPair = selected.address.toLowerCase() === BASE_USDC.toLowerCase();
+  // Pair-token decimals: ETH 18, USDC 6, curated "c" stocks 8.
+  const pairDecimals = isEthPair ? 18 : isUsdcPair ? 6 : 8;
+  const devSym = isEthPair ? "ETH" : selected.symbol;
+  // Slider tops out around $1,000 worth of the pair (1 ETH for the ETH pair).
+  const devMax = isEthPair ? 1 : Math.max(1, Math.ceil(1000 / selected.usd));
+  // Rough share of supply the dev buy takes at the $4k starting cap.
+  const devUsd = devBuy * selected.usd;
+  const devPct = devBuy > 0 ? Math.min(99, (devUsd / (4000 + devUsd)) * 100) : 0;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -129,7 +136,20 @@ export function LaunchBase({ onCancel }: { onCancel?: () => void } = {}) {
       const receipt = await client.publicClient.waitForTransactionReceipt({ hash });
       const log = receipt.logs.find((l) => l.topics[0] === LAUNCHED_TOPIC);
       pushToast({ kind: "success", title: "Coin is live", body: "Market open, holders now earn the stock.", txHash: hash });
-      if (log?.topics[1]) navigate(`/token/0x${log.topics[1].slice(26)}`);
+      const tokenAddr = log?.topics[1] ? (`0x${log.topics[1].slice(26)}` as `0x${string}`) : null;
+      // Non-ETH pairs: the dev buy runs as an immediate follow-up trade paid in
+      // the pair token (same route as the trade desk). The launch stands even
+      // if this second transaction is rejected.
+      if (!isEthPair && devBuy > 0 && tokenAddr) {
+        try {
+          const units = BigInt(Math.round(devBuy * 10 ** pairDecimals));
+          const buyHash = await (client as any).buyToken(tokenAddr, units);
+          pushToast({ kind: "info", title: `Dev buy submitted (${devBuy} ${devSym})`, txHash: buyHash });
+        } catch (err) {
+          pushToast({ kind: "error", title: "Dev buy failed", body: errorText(err) });
+        }
+      }
+      if (tokenAddr) navigate(`/token/${tokenAddr}`);
       else navigate("/");
     } catch (err) {
       pushToast({ kind: "error", title: "Launch failed", body: errorText(err) });
@@ -205,19 +225,22 @@ export function LaunchBase({ onCancel }: { onCancel?: () => void } = {}) {
           <p className="hint">Holders earn {selected.symbol} ({selected.name}) on every trade.</p>
         </div>
 
-        {/* Dev buy — atomic initial buy, ETH pair only */}
-        {isEthPair ? (
-          <div className="kf-field">
-            <label>Dev Buy <i>(optional)</i></label>
-            <input type="text" inputMode="decimal" value={devBuy || ""} placeholder="0.0"
-              onChange={(e) => { const v = parseFloat(e.target.value); setDevBuy(isFinite(v) && v >= 0 ? Math.min(v, 5) : 0); }} />
-            <p className="hint">ETH spent buying your own token in the launch transaction.</p>
-            <div className="kf-devbuy-row"><span>Dev buy amount</span><span>Estimated {devPct.toFixed(0)}% of supply</span></div>
-            <input type="range" min={0} max={1} step={0.01} value={Math.min(devBuy, 1)}
-              onChange={(e) => setDevBuy(Number(e.target.value))} className="w-full accent-[color:var(--color-accent)]" />
-            <div className="kf-devbuy-row muted"><span>0 ETH</span><span>1+ ETH</span></div>
-          </div>
-        ) : null}
+        {/* Dev buy — initial buy in the pair token: atomic with the launch on
+            the ETH pair, an immediate follow-up trade on the others. */}
+        <div className="kf-field">
+          <label>Dev Buy <i>(optional)</i></label>
+          <input type="text" inputMode="decimal" value={devBuy || ""} placeholder="0.0"
+            onChange={(e) => { const v = parseFloat(e.target.value); setDevBuy(isFinite(v) && v >= 0 ? Math.min(v, devMax * 5) : 0); }} />
+          <p className="hint">
+            {isEthPair
+              ? "ETH spent buying your own token in the launch transaction."
+              : `${devSym} spent buying your own token right after launch.`}
+          </p>
+          <div className="kf-devbuy-row"><span>Dev buy amount</span><span>Estimated {devPct.toFixed(0)}% of supply</span></div>
+          <input type="range" min={0} max={devMax} step={devMax / 100} value={Math.min(devBuy, devMax)}
+            onChange={(e) => setDevBuy(Number(e.target.value))} className="w-full accent-[color:var(--color-accent)]" />
+          <div className="kf-devbuy-row muted"><span>0 {devSym}</span><span>{devMax}+ {devSym}</span></div>
+        </div>
 
         {/* Trade tax */}
         <div className="kf-field">
