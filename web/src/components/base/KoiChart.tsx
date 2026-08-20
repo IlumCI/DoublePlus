@@ -12,7 +12,7 @@ const TFS: { label: string; interval: CandleInterval }[] = [
   { label: "15m", interval: "15m" },
   { label: "1h", interval: "1h" },
   { label: "4h", interval: "4h" },
-  { label: "1d", interval: "1d" },
+  { label: "1D", interval: "1d" },
 ];
 
 const UP = "#4ade80";
@@ -38,14 +38,26 @@ const fmtVol = (v: number) => {
   if (a >= 1e3) return `${(v / 1e3).toFixed(1)}K`;
   return v.toFixed(0);
 };
+// OHLC legend numbers: "195.79K", "192K" — compact, no leading $ (the row
+// prefixes O/H/L/C), matching the reference legend.
+const fmtLeg = (v: number) => {
+  const a = Math.abs(v);
+  if (a >= 1e9) return `${(v / 1e9).toFixed(2)}B`;
+  if (a >= 1e6) return `${(v / 1e6).toFixed(2)}M`;
+  if (a >= 1e3) return `${(v / 1e3).toFixed(a >= 1e5 ? 0 : 2)}K`;
+  if (a >= 1) return v.toFixed(2);
+  return v.toPrecision(3);
+};
 
 type Raw = { time: number; open: number; high: number; low: number; close: number; volume: number };
+type Leg = { o: number; h: number; l: number; c: number };
 
 /**
  * koi.fun price chart — a lightweight-charts view fed by our on-chain candles,
- * styled and featured to the reference: green/red candles (or a line), a volume
- * histogram docked at the bottom, the last-price line + label, a faint symbol
- * watermark, timeframe pills, a candle/line toggle and an MCap/Price switch.
+ * featured to the reference: an O/H/L/C legend row that tracks the crosshair,
+ * green/red candles (or a line), a docked volume histogram, a coloured
+ * last-price line + label, a faint symbol watermark, timeframe pills, a
+ * candle/line toggle and an MCap/Price switch.
  */
 export function KoiChart({ token, symbol }: { token: Address; symbol: string }) {
   const box = useRef<HTMLDivElement>(null);
@@ -59,13 +71,14 @@ export function KoiChart({ token, symbol }: { token: Address; symbol: string }) 
   const [type, setType] = useState<"candles" | "line">("candles");
   const [denom, setDenom] = useState<"mcap" | "price">("mcap");
   const [empty, setEmpty] = useState(false);
+  const [leg, setLeg] = useState<Leg | null>(null);
 
-  // Build the chart shell once, with the volume scale docked to the bottom.
+  // Build the chart shell once.
   useEffect(() => {
     if (!box.current) return;
     const chart = createChart(box.current, {
       layout: { background: { type: ColorType.Solid, color: "transparent" }, textColor: "#a1a1aa", fontFamily: "Inter, sans-serif", fontSize: 11, attributionLogo: false },
-      grid: { vertLines: { color: "rgba(39,39,42,.45)" }, horzLines: { color: "rgba(39,39,42,.45)" } },
+      grid: { vertLines: { color: "rgba(39,39,42,.35)" }, horzLines: { color: "rgba(39,39,42,.45)" } },
       crosshair: { mode: CrosshairMode.Normal, vertLine: { color: "#3f3f46", width: 1, style: LineStyle.Dashed, labelBackgroundColor: "#27272a" }, horzLine: { color: "#3f3f46", labelBackgroundColor: "#27272a" } },
       rightPriceScale: { borderColor: "#27272a", scaleMargins: { top: 0.1, bottom: 0.26 } },
       timeScale: { borderColor: "#27272a", timeVisible: true, secondsVisible: false },
@@ -73,8 +86,35 @@ export function KoiChart({ token, symbol }: { token: Address; symbol: string }) 
       autoSize: true,
     });
     chartRef.current = chart;
+
+    // Track the crosshair to fill the O/H/L/C legend; fall back to the last bar.
+    chart.subscribeCrosshairMove((param) => {
+      const s = priceRef.current;
+      if (!s || !param.time || !param.seriesData.has(s)) { setLegLast(); return; }
+      const d: any = param.seriesData.get(s);
+      if (d && d.open != null) setLeg({ o: d.open, h: d.high, l: d.low, c: d.close });
+      else if (d && d.value != null) { const b = barAt(Number(param.time)); if (b) setLeg({ o: b.open, h: b.high, l: b.low, c: b.close }); }
+    });
+
     return () => { chart.remove(); chartRef.current = null; priceRef.current = null; volRef.current = null; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [symbol]);
+
+  const barAt = (t: number): Raw | undefined => {
+    const k = denomRef.current === "mcap" ? scaleRef.current : 1;
+    const c = rawRef.current.find((x) => x.time === t);
+    return c ? { ...c, open: c.open * k, high: c.high * k, low: c.low * k, close: c.close * k } : undefined;
+  };
+  const denomRef = useRef(denom);
+  denomRef.current = denom;
+
+  const setLegLast = () => {
+    const arr = rawRef.current;
+    if (!arr.length) { setLeg(null); return; }
+    const k = denomRef.current === "mcap" ? scaleRef.current : 1;
+    const c = arr[arr.length - 1];
+    setLeg({ o: c.open * k, h: c.high * k, l: c.low * k, c: c.close * k });
+  };
 
   // Render the current data into the price + volume series.
   const draw = () => {
@@ -88,24 +128,27 @@ export function KoiChart({ token, symbol }: { token: Address; symbol: string }) 
     const k = denom === "mcap" ? scaleRef.current : 1;
     const bars = rawRef.current.map((c) => ({ time: c.time as UTCTimestamp, open: c.open * k, high: c.high * k, low: c.low * k, close: c.close * k, volume: c.volume }));
     setEmpty(bars.length === 0);
+    const last = bars[bars.length - 1];
+    const lineCol = last ? (last.close >= last.open ? UP : DOWN) : DOWN;
 
     const fmt = { type: "custom" as const, formatter: fmtAxis, minMove: denom === "mcap" ? 0.01 : 1e-9 };
     if (type === "candles") {
-      const s = chart.addCandlestickSeries({ upColor: UP, downColor: DOWN, borderUpColor: UP, borderDownColor: DOWN, wickUpColor: UP, wickDownColor: DOWN, priceFormat: fmt, priceLineColor: "#3f3f46", priceLineStyle: LineStyle.Dashed });
+      const s = chart.addCandlestickSeries({ upColor: UP, downColor: DOWN, borderUpColor: UP, borderDownColor: DOWN, wickUpColor: UP, wickDownColor: DOWN, priceFormat: fmt, priceLineColor: lineCol, priceLineStyle: LineStyle.Dashed, priceLineWidth: 1 });
       s.setData(bars.map((b) => ({ time: b.time, open: b.open, high: b.high, low: b.low, close: b.close })));
       priceRef.current = s;
     } else {
-      const s = chart.addLineSeries({ color: "#ec4899", lineWidth: 2, priceFormat: fmt, lastValueVisible: true, priceLineVisible: true, priceLineColor: "#3f3f46", priceLineStyle: LineStyle.Dashed, crosshairMarkerBorderColor: "#ec4899" });
+      const s = chart.addLineSeries({ color: "#ec4899", lineWidth: 2, priceFormat: fmt, lastValueVisible: true, priceLineVisible: true, priceLineColor: lineCol, priceLineStyle: LineStyle.Dashed, crosshairMarkerBorderColor: "#ec4899" });
       s.setData(bars.map((b) => ({ time: b.time, value: b.close })));
       priceRef.current = s;
     }
 
-    const vol = chart.addHistogramSeries({ priceFormat: { type: "custom", formatter: fmtVol, minMove: 0.01 }, priceScaleId: "vol" });
+    const vol = chart.addHistogramSeries({ priceFormat: { type: "custom", formatter: fmtVol, minMove: 0.01 }, priceScaleId: "vol", lastValueVisible: false, priceLineVisible: false });
     vol.priceScale().applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
     vol.setData(bars.map((b) => ({ time: b.time, value: b.volume, color: b.close >= b.open ? UP_VOL : DOWN_VOL })));
     volRef.current = vol;
 
     chart.timeScale().fitContent();
+    setLegLast();
   };
 
   // Load candles + wire realtime when token / timeframe changes.
@@ -127,10 +170,11 @@ export function KoiChart({ token, symbol }: { token: Address; symbol: string }) 
         const c: Raw = { time: Number(candle.time), open: Number(candle.open), high: Number(candle.high), low: Number(candle.low), close: Number(candle.close), volume: Number(candle.volume) };
         const arr = rawRef.current;
         if (arr.length && arr[arr.length - 1].time === c.time) arr[arr.length - 1] = c; else arr.push(c);
-        const k = denom === "mcap" ? scaleRef.current : 1;
+        const k = denomRef.current === "mcap" ? scaleRef.current : 1;
         if (type === "candles") (priceRef.current as ISeriesApi<"Candlestick">)?.update({ time: c.time as UTCTimestamp, open: c.open * k, high: c.high * k, low: c.low * k, close: c.close * k });
         else (priceRef.current as ISeriesApi<"Line">)?.update({ time: c.time as UTCTimestamp, value: c.close * k });
         volRef.current?.update({ time: c.time as UTCTimestamp, value: c.volume, color: c.close >= c.open ? UP_VOL : DOWN_VOL });
+        setLegLast();
       });
     })();
     return () => { live = false; unsub?.(); };
@@ -140,8 +184,23 @@ export function KoiChart({ token, symbol }: { token: Address; symbol: string }) 
   // Redraw (no refetch) when the series type or MCap/Price denomination flips.
   useEffect(() => { draw(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [type, denom]);
 
+  const chg = leg ? ((leg.c - leg.o) / (leg.o || 1)) * 100 : 0;
+  const up = chg >= 0;
+
   return (
     <div className="kf-chart">
+      {leg ? (
+        <div className="kf-chart-ohlc">
+          <span>O <b>{fmtLeg(leg.o)}</b></span>
+          <span>H <b>{fmtLeg(leg.h)}</b></span>
+          <span>L <b>{fmtLeg(leg.l)}</b></span>
+          <span>C <b>{fmtLeg(leg.c)}</b></span>
+          <span className={up ? "up" : "dn"}>{up ? "+" : ""}{chg.toFixed(2)}%</span>
+        </div>
+      ) : null}
+      <div className="kf-chart-canvas" ref={box}>
+        {empty ? <div className="kf-chart-empty">No trades yet — the chart fills in as {symbol} trades.</div> : null}
+      </div>
       <div className="kf-chart-bar">
         <div className="kf-chart-tfs">
           {TFS.map((t) => (
@@ -162,9 +221,6 @@ export function KoiChart({ token, symbol }: { token: Address; symbol: string }) 
             </button>
           </div>
         </div>
-      </div>
-      <div className="kf-chart-canvas" ref={box}>
-        {empty ? <div className="kf-chart-empty">No trades yet — the chart fills in as {symbol} trades.</div> : null}
       </div>
     </div>
   );

@@ -2749,9 +2749,13 @@ button.bg-accent:disabled {
 :root[data-brand="base"] .tp-cta:not(:disabled):active { transform: scale(.98); box-shadow: 0 6px 16px rgba(0, 0, 0, .35); }
 :root[data-brand="base"] .tp-cta:disabled { background: #27272a; color: #71717a; box-shadow: none; }
 
-/* Price chart (lightweight-charts) — timeframe pills + candle/line toggle over
-   a clean canvas, matching the reference. */
+/* Price chart (lightweight-charts) — an O/H/L/C legend, a clean canvas, then
+   timeframe pills + candle/line + MCap/Price controls, matching the reference. */
 :root[data-brand="base"] .kf-chart { display: flex; flex-direction: column; gap: 8px; }
+:root[data-brand="base"] .kf-chart-ohlc { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; font-family: var(--font-body); font-size: 13px; color: #71717a; }
+:root[data-brand="base"] .kf-chart-ohlc b { color: #f7f7f7; font-weight: 600; margin-left: 2px; font-variant-numeric: tabular-nums; }
+:root[data-brand="base"] .kf-chart-ohlc .up { color: #4ade80; font-weight: 600; }
+:root[data-brand="base"] .kf-chart-ohlc .dn { color: #f87171; font-weight: 600; }
 :root[data-brand="base"] .kf-chart-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 :root[data-brand="base"] .kf-chart-tfs { display: flex; gap: 4px; }
 :root[data-brand="base"] .kf-chart-tfs button { height: 30px; padding: 0 11px; border: 0; border-radius: 8px; background: transparent; color: #a1a1aa; font-family: var(--font-body); font-weight: 500; font-size: 12px; cursor: pointer; transition: background .12s, color .12s; }
