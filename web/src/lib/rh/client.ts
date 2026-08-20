@@ -966,6 +966,13 @@ export class RhClient {
     })) as bigint;
   }
 
+  /** USD price of a fundable asset: ETH (zero address) and WETH price off the
+   *  WETH pool; everything else off its own pair price (USDC ≈ 1). */
+  async assetUsdPrice(asset: Address): Promise<number> {
+    const a = asset === "0x0000000000000000000000000000000000000000" ? this.v4.weth : asset;
+    return this.pairUsdOf(a as Address);
+  }
+
   /** Send `amount` of an asset to `to`: a native ETH transfer when `asset` is
    *  the zero address, else an ERC-20 transfer. Non-custodial — the connected
    *  wallet signs. */
