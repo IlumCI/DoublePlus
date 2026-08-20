@@ -2636,12 +2636,6 @@ button.bg-accent:disabled {
 :root[data-brand="base"] .kf-footnote { text-align: center; font-size: 12px; line-height: 16px; color: #a1a1aa; margin: 0; }
 :root[data-brand="base"] .kf-launch-h1 { font-size: 20px; }
 :root[data-brand="base"] .kf-launch-sub { font-size: 13px; margin: 4px 0 12px; }
-/* In the sheet the button row docks over the scrolling form, like the
-   reference dialog footer. */
-:root[data-brand="base"] .kf-sheet .kf-btnrow {
-  position: sticky; bottom: 0; z-index: 5; padding: 4px 0;
-  background: rgba(9, 9, 11, .95); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-}
 @media (min-width: 640px) {
   :root[data-brand="base"] .kf-field input[type="text"], :root[data-brand="base"] .kf-field textarea { font-size: 14px; }
 }
