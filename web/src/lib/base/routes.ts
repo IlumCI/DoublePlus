@@ -58,9 +58,13 @@ export function resolveBaseRoute(pairRaw: Address): PairRoute {
 // launch); WETH is a rough snapshot, refined by trades once a coin has any.
 const WETH_USD_SNAPSHOT = 1900;
 
-/** USD price of a Base pair token (stock or WETH), from the curated snapshot. */
+/** USD price of a Base pair token (stock, WETH or USDC), from the curated
+ *  snapshot. USDC is a dollar, so a coin paired to it prices without a stock
+ *  entry — otherwise its market cap would read as zero. */
 export function baseStockUsd(pair: Address): number {
-  if (pair.toLowerCase() === BASE_WETH.toLowerCase()) return WETH_USD_SNAPSHOT;
+  const p = pair.toLowerCase();
+  if (p === BASE_WETH.toLowerCase()) return WETH_USD_SNAPSHOT;
+  if (p === BASE_USDC.toLowerCase()) return 1;
   return baseStockOf(pair)?.usd ?? 0;
 }
 
