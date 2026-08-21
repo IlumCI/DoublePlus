@@ -7,8 +7,8 @@ export function BaseTicker() {
   const item = (
     <span className="kf-tick">
       <svg viewBox="0 0 40 40" fill="none" aria-hidden>
-        <path d="M20 3c-6.5 4-9 8.7-9 14.5 0 3.4 1.6 6.2 4.2 7.9-2.9.5-5.2 2.3-6.7 5.1 3.6 4.2 8 6.5 12.8 6.5 3.4 0 6-1.9 6-5 0-2.2-1.3-3.9-3.4-4.7 4.7-1.9 7.6-6 7.6-11.3C31.5 12.8 27.4 6.7 20 3Z" fill="#ff3da6" />
-        <circle cx="17.4" cy="15.6" r="2.2" fill="#fff" />
+        <path d="M9 27 L17 19 L22 24 L31 13" stroke="#16a34a" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M31 13 L31 20 M31 13 L24 13" stroke="#16a34a" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
       <b>Hold &amp; earn</b>
       <span>rewards stream to holders in real time</span>

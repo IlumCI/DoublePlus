@@ -140,9 +140,9 @@ export function WalletSheet({ open, onClose }: { open: boolean; onClose: () => v
             </div>
 
             <div className="kf-wallet-tokens">
-              <div className="kf-wallet-th"><span>Your {`koi.fun`} tokens</span><span>{mine.length}</span></div>
+              <div className="kf-wallet-th"><span>Your {`stonked`} tokens</span><span>{mine.length}</span></div>
               {mine.length === 0 ? (
-                <p className="hint">This wallet hasn't deployed or received fees from any koi.fun tokens yet.</p>
+                <p className="hint">This wallet hasn't deployed or received fees from any stonked tokens yet.</p>
               ) : (
                 mine.map((t) => (
                   <a key={t.address} className="kf-wallet-hrow" href={`/token/${t.address}`}>

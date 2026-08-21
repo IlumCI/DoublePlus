@@ -545,11 +545,39 @@ export class RhClient {
 
   /** USD price of a coin's pair token (stock/meme), cached in-memory and
    *  refreshed opportunistically in the background. */
+  private wethUsdCache = { v: 0, at: 0 };
+
+  /** Live ETH/USD from the Chainlink feed on Base, cached ~60s. Falls back to
+   *  the curated snapshot if the read fails. Used so ETH-priced market caps and
+   *  liquidity track the real ETH price instead of a frozen number. */
+  private async wethUsdLive(): Promise<number> {
+    const now = Date.now();
+    if (this.wethUsdCache.v > 0 && now - this.wethUsdCache.at < 60_000) return this.wethUsdCache.v;
+    try {
+      const a = (await this.publicClient.readContract({
+        address: "0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70", // Chainlink ETH/USD, Base
+        abi: [{ type: "function", name: "latestAnswer", stateMutability: "view", inputs: [], outputs: [{ type: "int256" }] }] as const,
+        functionName: "latestAnswer",
+      })) as bigint;
+      const usd = Number(a) / 1e8;
+      if (usd > 0) { this.wethUsdCache = { v: usd, at: now }; return usd; }
+    } catch {
+      /* fall through to snapshot */
+    }
+    return this.wethUsdCache.v > 0 ? this.wethUsdCache.v : baseStockUsd(this.v4.weth);
+  }
+
   private async pairUsdOf(pair: Address): Promise<number> {
     const key = pair.toLowerCase();
     // Base stocks price off the curated snapshot (also what sizes the launch);
-    // the Robinhood-chain Blockscout price source does not cover Base.
+    // the Robinhood-chain Blockscout price source does not cover Base. WETH is
+    // priced live off Chainlink so ETH-denominated caps track the real price.
     if (this.baseStock) {
+      if (key === this.v4.weth.toLowerCase()) {
+        const w = await this.wethUsdLive();
+        this.pairUsdCache.set(key, w);
+        return w;
+      }
       const u = baseStockUsd(pair);
       this.pairUsdCache.set(key, u);
       return u;
@@ -603,17 +631,41 @@ export class RhClient {
     const change = lastP > 0 && refP > 0 && trades.length > 1 ? ((lastP - refP) / refP) * 100 : null;
     const holders = new Set(trades.map((t) => t.trader));
 
-    // WETH in pool ~ liquidity proxy (best-effort read).
-    let wethInPool = 0n;
+    // Pool liquidity. The V4 PoolManager is a singleton holding the pair token
+    // for EVERY pool on the chain, so balanceOf(poolManager) is meaningless
+    // here. Instead value this coin's own concentrated position: read the
+    // factory's seeded position (tick range + L) and the live sqrt price, work
+    // out the pair-token reserve in the range, and express it as WETH-wei so
+    // the existing USD formatting holds for any pair. Liquidity ~ 2x the quote
+    // side (both legs), the usual convention.
+    let liquidityWethWei = 0n;
     try {
-      wethInPool = (await this.publicClient.readContract({
-        address: this.v4.weth,
-        abi: erc20Abi,
-        functionName: "balanceOf",
-        args: [this.v4.poolManager],
-      })) as bigint;
+      const [pos, spot] = (await Promise.all([
+        this.publicClient.readContract({ address: this.v4.factory, abi: baseFactoryV3ViewsAbi, functionName: "positions", args: [core.address] }),
+        this.publicClient.readContract({ address: this.v4.factory, abi: baseFactoryV3ViewsAbi, functionName: "poolSpot", args: [core.address] }),
+      ])) as [readonly [number, number, bigint], readonly [bigint, boolean, number]];
+      const [tickLower, tickUpper, L] = pos;
+      const [sqrtPriceX96, tokenIsCurrency0, pairDecimals] = spot;
+      const Lf = Number(L);
+      if (Lf > 0 && usd > 0 && ethUsd > 0) {
+        const Q96 = 2 ** 96;
+        const sp = Number(sqrtPriceX96) / Q96; // sqrt(price), actual
+        const sa = Math.sqrt(1.0001 ** tickLower);
+        const sb = Math.sqrt(1.0001 ** tickUpper);
+        // amount0 / amount1 of the position at the current price, in each
+        // currency's smallest units (Uniswap concentrated-liquidity formulas).
+        let amount0 = 0, amount1 = 0;
+        if (sp <= sa) { amount0 = Lf * (sb - sa) / (sa * sb); }
+        else if (sp >= sb) { amount1 = Lf * (sb - sa); }
+        else { amount0 = Lf * (sb - sp) / (sp * sb); amount1 = Lf * (sp - sa); }
+        // The pair token is currency1 when the coin sorts first, else currency0.
+        const pairUnits = tokenIsCurrency0 ? amount1 : amount0;
+        const pairReserveWhole = pairUnits / 10 ** pairDecimals;
+        const liquidityUsd = 2 * pairReserveWhole * usd;
+        liquidityWethWei = BigInt(Math.max(0, Math.round((liquidityUsd / ethUsd) * 1e18)));
+      }
     } catch {
-      /* ignore */
+      /* leave liquidity at 0 -> UI shows a dash */
     }
 
     return {
@@ -633,7 +685,7 @@ export class RhClient {
       priceEthWei: BigInt(Math.round(priceEthPerToken * 1e18)).toString(),
       // Plain-dollar string, matching the SDK's usd8() convention (fmtUsd expects dollars).
       marketCapUsd: String(mcapUsd),
-      liquidityWei: wethInPool.toString(),
+      liquidityWei: liquidityWethWei.toString(),
       volume24hWei: vol24.toString(),
       volumeTotalWei: volTotal.toString(),
       txCount24h: dayTrades.length,

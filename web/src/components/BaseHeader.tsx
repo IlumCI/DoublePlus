@@ -73,13 +73,14 @@ export function BaseHeader() {
           <Link to="/" aria-label={BRAND.name} className="kf-brand">
             <svg className="kf-brand-mark" viewBox="0 0 40 40" fill="none" aria-hidden>
               <defs>
-                <linearGradient id="koiMark" x1="6" y1="4" x2="34" y2="36" gradientUnits="userSpaceOnUse">
-                  <stop stopColor="#ff5fb6" /><stop offset="1" stopColor="#ff2f9c" />
+                <linearGradient id="stonkMark" x1="6" y1="34" x2="34" y2="6" gradientUnits="userSpaceOnUse">
+                  <stop stopColor="#22c55e" /><stop offset="1" stopColor="#4ade80" />
                 </linearGradient>
               </defs>
-              <path d="M20 3c-6.5 4-9 8.7-9 14.5 0 3.4 1.6 6.2 4.2 7.9-2.9.5-5.2 2.3-6.7 5.1 3.6 4.2 8 6.5 12.8 6.5 3.4 0 6-1.9 6-5 0-2.2-1.3-3.9-3.4-4.7 4.7-1.9 7.6-6 7.6-11.3C31.5 12.8 27.4 6.7 20 3Z" fill="url(#koiMark)" />
-              <circle cx="17.4" cy="15.6" r="2.5" fill="#fff" />
-              <circle cx="18.1" cy="15.9" r="1.1" fill="#3a0022" />
+              <rect x="3" y="3" width="34" height="34" rx="9" fill="#0a0a0a" />
+              {/* upward stonks line + arrowhead */}
+              <path d="M9 27 L17 19 L22 24 L31 13" stroke="url(#stonkMark)" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M31 13 L31 20 M31 13 L24 13" stroke="url(#stonkMark)" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
             <span className="kf-brand-name">{BRAND.name}<span className="kf-tld">{BRAND.tld}</span></span>
           </Link>
