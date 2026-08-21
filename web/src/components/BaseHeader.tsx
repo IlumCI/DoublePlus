@@ -73,14 +73,20 @@ export function BaseHeader() {
           <Link to="/" aria-label={BRAND.name} className="kf-brand">
             <svg className="kf-brand-mark" viewBox="0 0 40 40" fill="none" aria-hidden>
               <defs>
-                <linearGradient id="stonkMark" x1="6" y1="34" x2="34" y2="6" gradientUnits="userSpaceOnUse">
-                  <stop stopColor="#22c55e" /><stop offset="1" stopColor="#4ade80" />
+                <linearGradient id="stonkMark" x1="6" y1="32" x2="34" y2="8" gradientUnits="userSpaceOnUse">
+                  <stop stopColor="#16a34a" /><stop offset="1" stopColor="#4ade80" />
                 </linearGradient>
               </defs>
               <rect x="3" y="3" width="34" height="34" rx="9" fill="#0a0a0a" />
-              {/* upward stonks line + arrowhead */}
-              <path d="M9 27 L17 19 L22 24 L31 13" stroke="url(#stonkMark)" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M31 13 L31 20 M31 13 L24 13" stroke="url(#stonkMark)" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" />
+              {/* ascending candlesticks */}
+              <g fill="url(#stonkMark)">
+                <rect x="9.1" y="16" width="1.8" height="13" rx="0.9" />
+                <rect x="6.6" y="19" width="6.8" height="8" rx="2" />
+                <rect x="19.1" y="11.5" width="1.8" height="15.5" rx="0.9" />
+                <rect x="16.6" y="14" width="6.8" height="9.5" rx="2" />
+                <rect x="29.1" y="8" width="1.8" height="15" rx="0.9" />
+                <rect x="26.6" y="10" width="6.8" height="10.5" rx="2" />
+              </g>
             </svg>
             <span className="kf-brand-name">{BRAND.name}<span className="kf-tld">{BRAND.tld}</span></span>
           </Link>

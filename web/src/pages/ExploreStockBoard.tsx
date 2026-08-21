@@ -256,13 +256,19 @@ export function ExploreStockBoard() {
           <div>
             <svg className="kf-hero-mascot" viewBox="0 0 40 40" fill="none" aria-hidden>
               <defs>
-                <linearGradient id="stonkHero" x1="6" y1="34" x2="34" y2="6" gradientUnits="userSpaceOnUse">
-                  <stop stopColor="#16a34a" /><stop offset="1" stopColor="#4ade80" />
+                <linearGradient id="stonkHero" x1="6" y1="32" x2="34" y2="8" gradientUnits="userSpaceOnUse">
+                  <stop stopColor="#15803d" /><stop offset="1" stopColor="#22c55e" />
                 </linearGradient>
               </defs>
-              <rect x="3" y="3" width="34" height="34" rx="10" fill="#ffffff" opacity="0.9" />
-              <path d="M9 27 L17 19 L22 24 L31 13" stroke="url(#stonkHero)" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M31 13 L31 20 M31 13 L24 13" stroke="url(#stonkHero)" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round" />
+              <rect x="3" y="3" width="34" height="34" rx="10" fill="#ffffff" opacity="0.92" />
+              <g fill="url(#stonkHero)">
+                <rect x="9.1" y="16" width="1.8" height="13" rx="0.9" />
+                <rect x="6.6" y="19" width="6.8" height="8" rx="2" />
+                <rect x="19.1" y="11.5" width="1.8" height="15.5" rx="0.9" />
+                <rect x="16.6" y="14" width="6.8" height="9.5" rx="2" />
+                <rect x="29.1" y="8" width="1.8" height="15" rx="0.9" />
+                <rect x="26.6" y="10" width="6.8" height="10.5" rx="2" />
+              </g>
             </svg>
             <h1 className="kf-hero-title-xl">Hold &amp; Earn</h1>
             <p className="kf-hero-copy">Every coin pairs a real tokenized stock. Each trade streams that stock to holders, paid out every day.</p>
