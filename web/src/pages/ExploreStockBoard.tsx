@@ -254,6 +254,12 @@ export function ExploreStockBoard() {
     <div className="kf kf-page">
       {/* Hero: headline + copy + today's leaders, all inside the blue card */}
       <section className="kf-hero" aria-label="Today's leaders">
+        {/* Animated water surface — koi-pond shimmer + flowing waves */}
+        <div className="kf-hero-water" aria-hidden>
+          <span className="kf-wave kf-wave-1" />
+          <span className="kf-wave kf-wave-2" />
+          <span className="kf-wave kf-wave-3" />
+        </div>
         <div className="kf-hero-grid">
           <div>
             <svg className="kf-hero-mascot" viewBox="0 0 40 40" fill="none" aria-hidden>

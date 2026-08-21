@@ -2293,6 +2293,38 @@ button.bg-accent:disabled {
   linear-gradient(155deg, #55bfe9 0%, #2ea6dc 55%, #2196cf 100%);
   box-shadow: 0 18px 44px rgba(33, 150, 207, .3), inset 0 1px 0 rgba(255, 255, 255, .4); }
 :root[data-brand="base"] .kf-hero::after { content: none; }
+
+/* ---- Animated koi-pond water surface inside the blue hero ---- */
+:root[data-brand="base"] .kf-hero-grid { position: relative; z-index: 2; }
+:root[data-brand="base"] .kf-hero-water { position: absolute; inset: 0; z-index: 1; overflow: hidden; pointer-events: none; border-radius: inherit; }
+/* Caustics: soft light pooling on the surface, drifting slowly. */
+:root[data-brand="base"] .kf-hero-water::before {
+  content: ""; position: absolute; inset: -25%;
+  background:
+    radial-gradient(30% 26% at 22% 28%, rgba(255, 255, 255, .45), transparent 60%),
+    radial-gradient(26% 22% at 72% 58%, rgba(230, 250, 255, .38), transparent 60%),
+    radial-gradient(34% 30% at 48% 82%, rgba(180, 236, 255, .34), transparent 62%);
+  mix-blend-mode: soft-light;
+  animation: kf-caustic 13s ease-in-out infinite alternate;
+}
+/* Flowing waves along the bottom — three parallax layers. */
+:root[data-brand="base"] .kf-wave {
+  position: absolute; left: 0; bottom: 0; width: calc(100% + 240px); will-change: transform;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='80' viewBox='0 0 240 80' preserveAspectRatio='none'%3E%3Cpath d='M0 20 C 60 4 60 4 120 20 C 180 36 180 36 240 20 L240 80 L0 80 Z' fill='white'/%3E%3C/svg%3E") repeat-x;
+  background-size: 240px 100%;
+}
+:root[data-brand="base"] .kf-wave-1 { height: 52px; opacity: .22; animation: kf-flow 9s linear infinite; }
+:root[data-brand="base"] .kf-wave-2 { height: 72px; opacity: .15; animation: kf-flow 15s linear infinite reverse; }
+:root[data-brand="base"] .kf-wave-3 { height: 36px; opacity: .13; animation: kf-flow 6s linear infinite; }
+@keyframes kf-flow { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(-240px, 0, 0); } }
+@keyframes kf-caustic {
+  from { transform: translate3d(-2%, -1%, 0) scale(1.06); }
+  to { transform: translate3d(3%, 2%, 0) scale(1.14); }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root[data-brand="base"] .kf-wave, :root[data-brand="base"] .kf-hero-water::before { animation: none; }
+}
+
 :root[data-brand="base"] .kf-hero-title-xl { font-family: var(--font-display); font-stretch: 75%; font-weight: 700; font-size: clamp(44px, 12vw, 64px); line-height: .95; letter-spacing: -.01em; color: #0a0a0a; padding: 0 22px; text-wrap: balance; }
 :root[data-brand="base"] .kf-hero-copy { font-family: var(--font-body); font-size: 19px; line-height: 1.5; color: #0d2531; padding: 14px 22px 6px; max-width: 560px; }
 :root[data-brand="base"] .kf-hero-label { font-family: var(--font-head); font-weight: 700; font-size: 19px; color: #0a0a0a; padding: 12px 22px 13px; }
