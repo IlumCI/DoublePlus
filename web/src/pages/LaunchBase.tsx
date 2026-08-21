@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { keccak256, toHex } from "viem";
+import { getAddress, isAddress, keccak256, toHex } from "viem";
 
 import { client } from "../lib/client";
 import { BASE_STOCKS, type BaseStock } from "../lib/base/stocks";
@@ -40,8 +40,9 @@ export function LaunchBase({ onCancel }: { onCancel?: () => void } = {}) {
     telegram: "",
   });
   const [stock, setStock] = useState(PAIRS[0].address);
-  // Trade tax is fixed platform-side (like the reference), not a launch control.
-  const taxPct = 1;
+  // Trade tax is fixed on-chain at 2% (not a launch control): split 50% to
+  // holders (as the paired stock) and 50% to the creator's fee recipient.
+  const taxPct = 2;
   const [busy, setBusy] = useState(false);
   const [logoData, setLogoData] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
@@ -129,12 +130,22 @@ export function LaunchBase({ onCancel }: { onCancel?: () => void } = {}) {
           ? { feeRecipientType: feeMode, feeRecipient: feeRecipient.trim() }
           : {}),
       });
+      // On-chain fee recipient: only a real address can be a payee. When the
+      // creator gives a wallet-mode 0x address, route the 50% creator fee
+      // there; otherwise (blank, ENS, or a Twitter handle) leave it unset and
+      // the contract defaults it to the launcher. Any social handle still
+      // rides along in metadata for attribution.
+      const onchainFeeRecipient =
+        feeMode === "wallet" && isAddress(feeRecipient.trim())
+          ? getAddress(feeRecipient.trim())
+          : undefined;
       const hash = await (client as any).createToken({
         name: form.name.trim(),
         symbol: (form.symbol.trim() || autoSymbol()).toUpperCase(),
         metadataURI: metadata,
         stock: selected.address,
         taxBps: Math.round(taxPct * 100),
+        feeRecipient: onchainFeeRecipient,
         // Size the $4k start from the stock's snapshot USD price (8dp).
         pairUsdPrice8: BigInt(Math.round(selected.usd * 1e8)),
         // Atomic dev buy: ETH sent with the launch buys the coin in the same

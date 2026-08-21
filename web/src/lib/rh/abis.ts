@@ -103,6 +103,55 @@ export const baseFactoryLaunchAbi = [
   },
 ] as const;
 
+// StockFlyFactoryV3.launch: fixed 2% tax (no per-coin choice), no burn/liquidity
+// slices. The tuple carries a `feeRecipient` — where the creator's 50% share of
+// the trade tax is pushed each trade (defaults to msg.sender when zero). The
+// chosen `pair` is the tokenized stock/ETH/USDC holders earn.
+export const baseFactoryV3LaunchAbi = [
+  {
+    type: "function",
+    name: "launch",
+    stateMutability: "payable",
+    inputs: [
+      {
+        name: "p",
+        type: "tuple",
+        components: [
+          { name: "name", type: "string" },
+          { name: "symbol", type: "string" },
+          { name: "metadataURI", type: "string" },
+          { name: "pair", type: "address" },
+          { name: "feeRecipient", type: "address" },
+          { name: "pairUsdPrice8", type: "uint256" },
+        ],
+      },
+      { name: "salt", type: "bytes32" },
+    ],
+    outputs: [
+      { name: "token", type: "address" },
+      { name: "poolId", type: "bytes32" },
+    ],
+  },
+] as const;
+
+// StockFlyFactoryV3 read-only views: authoritative pool spot (decimals-aware)
+// plus the per-coin fee recipient the frontend surfaces on the token page.
+export const baseFactoryV3ViewsAbi = [
+  {
+    type: "function",
+    name: "poolSpot",
+    stateMutability: "view",
+    inputs: [{ name: "token", type: "address" }],
+    outputs: [
+      { name: "sqrtPriceX96", type: "uint160" },
+      { name: "tokenIsCurrency0", type: "bool" },
+      { name: "pairDecimals", type: "uint8" },
+    ],
+  },
+  { type: "function", name: "feeRecipientOf", stateMutability: "view", inputs: [{ type: "address" }], outputs: [{ type: "address" }] },
+  { type: "function", name: "rewardVaultOf", stateMutability: "view", inputs: [{ type: "address" }], outputs: [{ type: "address" }] },
+] as const;
+
 // Uniswap V4 periphery StateView: canonical pool-state reads without logs.
 export const stateViewAbi = [
   {

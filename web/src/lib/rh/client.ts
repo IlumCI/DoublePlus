@@ -9,7 +9,7 @@ import {
 import type { Candle, CandleInterval, HolderRecord, TokenSummary, TradeRecord } from "@launchpad/sdk";
 import { INTERVAL_SECONDS } from "@launchpad/sdk";
 
-import { baseFactoryLaunchAbi, erc20Abi, factoryAbi, hookAbi, poolInitEvent, poolSwapEvent, routerAbi, stateViewAbi, stockTradeRouterAbi, tokenAbi } from "./abis";
+import { baseFactoryV3LaunchAbi, baseFactoryV3ViewsAbi, erc20Abi, factoryAbi, hookAbi, poolInitEvent, poolSwapEvent, routerAbi, stateViewAbi, stockTradeRouterAbi, tokenAbi } from "./abis";
 import { pairUsd, resolvePairRoute } from "./routes";
 import { baseStockUsd, resolveBaseRoute } from "../base/routes";
 
@@ -1053,8 +1053,7 @@ export class RhClient {
     taxBps: number;
     pairUsdPrice8?: bigint; // pair token USD price, 8dp; fetched if omitted
     devBuyWei?: bigint; // optional atomic initial buy, in ETH wei
-    burnBps?: number; // base-stock only: creator-share slice that auto-burns
-    liquidityBps?: number; // base-stock only: creator-share slice single-sided into LP
+    feeRecipient?: Address; // base-stock only: where the creator's 50% fee share is pushed (defaults to the launcher)
   }): Promise<`0x${string}`> {
     const wc = this.requireWallet();
     const creator = this.account();
@@ -1075,21 +1074,23 @@ export class RhClient {
     const salt = `0x${Array.from(saltBytes, (b) => b.toString(16).padStart(2, "0")).join("")}` as `0x${string}`;
 
     if (this.baseStock) {
-      // StockFlyFactoryV2: the creator share splits 50/50 between the creator
-      // and the coin's reward vault. burn/liquidity default off, so the whole
-      // creator share is payable and holders earn the maximum stock.
-      const burnBps = params.burnBps ?? 0;
-      const liquidityBps = params.liquidityBps ?? 0;
+      // StockFlyFactoryV3: a fixed 2% trade tax split 50% to the coin's reward
+      // vault (holders earn the stock) and 50% to the creator's feeRecipient.
+      // No platform cut, no burn, no auto-liquidity. Tax is enforced on-chain,
+      // so taxBps here is ignored. A blank feeRecipient defaults to the launcher.
+      const feeRecipient = (params.feeRecipient ?? "0x0000000000000000000000000000000000000000") as Address;
       return wc.writeContract({
         account: creator,
         chain: wc.chain,
         address: this.v4.factory,
-        abi: baseFactoryLaunchAbi,
+        abi: baseFactoryV3LaunchAbi,
         functionName: "launch",
         args: [
-          { name: params.name, symbol: params.symbol, metadataURI, pair: params.stock, taxBps: params.taxBps, pairUsdPrice8, burnBps, liquidityBps },
+          { name: params.name, symbol: params.symbol, metadataURI, pair: params.stock, feeRecipient, pairUsdPrice8 },
           salt,
         ],
+        // Atomic dev buy: ETH sent with launch is swapped into the new coin in
+        // the same transaction, before anyone else can trade.
         value: params.devBuyWei ?? 0n,
       });
     }

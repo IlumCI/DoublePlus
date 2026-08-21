@@ -204,7 +204,7 @@ export function TradePanel({ token }: { token: TokenSummary }) {
     <div className="tp">
       <div className="term-head">
         Trade desk
-        <span className="term-head-sub">1% flat fee</span>
+        <span className="term-head-sub">{taxBps > 0 ? `${(feeRate * 100).toFixed(taxBps % 100 ? 1 : 0)}% flat fee` : "flat fee"}</span>
       </div>
       <div className="tp-body">
       {/* Buy / Sell segmented control */}
