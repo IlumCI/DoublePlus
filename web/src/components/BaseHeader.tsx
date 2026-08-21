@@ -72,18 +72,22 @@ export function BaseHeader() {
         <div className="kf-hdr-inner">
           <Link to="/" aria-label={BRAND.name} className="kf-brand">
             <svg className="kf-brand-mark" viewBox="0 0 40 40" fill="none" aria-hidden>
-              {/* stonks meme man */}
-              <rect x="2" y="2" width="36" height="36" rx="10" fill="#0f1113" />
-              <g transform="translate(4 4) scale(0.8)">
-                <path d="M6 40 V34.7 C6 30.3 11 27.7 20 27.7 C29 27.7 34 30.3 34 34.7 V40 Z" fill="#c9cdd2" />
-                <path d="M16 27.7 L20 36 L24 27.7 Z" fill="#0f1113" />
-                <path d="M20 35 L18.3 29 H21.7 Z" fill="#22c55e" />
-                <rect x="17.4" y="23" width="5.2" height="6" rx="2" fill="#c9cdd2" />
-                <ellipse cx="9.8" cy="14" rx="1.8" ry="2.8" fill="#c9cdd2" /><ellipse cx="30.2" cy="14" rx="1.8" ry="2.8" fill="#c9cdd2" />
-                <path d="M20 2.4 C13 2.4 10 8 10 14.7 C10 22 14.3 26 20 26 C25.7 26 30 22 30 14.7 C30 8 27 2.4 20 2.4 Z" fill="#c9cdd2" />
-                <ellipse cx="17.3" cy="14" rx="1.05" ry="1.4" fill="#2b2f36" /><ellipse cx="23.3" cy="14" rx="1.05" ry="1.4" fill="#2b2f36" />
-                <path d="M20 14.3 C19.3 17 18.6 18.3 18 19 C18.7 19.7 20.3 19.7 21 19" stroke="#2b2f36" strokeWidth="0.8" fill="none" strokeLinecap="round" opacity="0.7" />
-                <path d="M17.6 21.7 H22.4" stroke="#2b2f36" strokeWidth="0.9" strokeLinecap="round" opacity="0.7" />
+              {/* derpy meme man in a Base hoodie */}
+              <rect x="1.5" y="1.5" width="37" height="37" rx="11" fill="#0f1113" />
+              <g transform="scale(0.3333)">
+                <path d="M4 120 V102 C4 88 22 80 60 80 C98 80 116 88 116 102 V120 Z" fill="#0052FF" />
+                <path d="M60 82 L52 120 H68 Z" fill="#0040cc" />
+                <g transform="translate(60 104)"><circle r="8" fill="#fff" /><path d="M4 -8 A8 8 0 1 0 4 8 Z" fill="#0052FF" /></g>
+                <path d="M16 54 C16 20 34 6 60 6 C86 6 104 20 104 54 C104 74 92 86 74 90 L46 90 C28 86 16 74 16 54 Z" fill="#0052FF" />
+                <rect x="47" y="84" width="3" height="26" rx="1.5" fill="#eef1f5" />
+                <rect x="70" y="84" width="3" height="22" rx="1.5" fill="#eef1f5" />
+                <circle cx="48.5" cy="112" r="2.6" fill="#eef1f5" /><circle cx="71.5" cy="108" r="2.6" fill="#eef1f5" />
+                <ellipse cx="30" cy="50" rx="5" ry="7.5" fill="#c9cdd2" /><ellipse cx="90" cy="50" rx="5" ry="7.5" fill="#c9cdd2" />
+                <path d="M60 18 C40 18 31 32 31 50 C31 70 44 82 60 82 C76 82 89 70 89 50 C89 32 80 18 60 18 Z" fill="#c9cdd2" />
+                <circle cx="50" cy="48" r="6" fill="#fff" stroke="#20242b" strokeWidth="1.5" /><circle cx="53" cy="50" r="2.4" fill="#20242b" />
+                <circle cx="72" cy="46" r="5" fill="#fff" stroke="#20242b" strokeWidth="1.5" /><circle cx="69" cy="48" r="2" fill="#20242b" />
+                <path d="M58 56 C56 62 55 65 53 67 C56 69 61 69 63 67" stroke="#20242b" strokeWidth="2" fill="none" strokeLinecap="round" opacity="0.7" />
+                <path d="M50 72 Q57 78 64 72" stroke="#20242b" strokeWidth="2.4" fill="none" strokeLinecap="round" />
               </g>
             </svg>
             <span className="kf-brand-name">{BRAND.name}<span className="kf-tld">{BRAND.tld}</span></span>
