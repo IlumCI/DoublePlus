@@ -118,18 +118,10 @@ const rewardLabel = (addr?: string) => {
 };
 const rewardOf = (t: TokenSummary) => rewardLabel((t.metadata as any)?.rewardStock as string | undefined);
 
-/* ---- circular avatar: token logo, else a deterministic gradient disc ---- */
-const PALS: [string, string][] = [
-  ["#ff59b0", "#c81f7a"], ["#ffb04a", "#ff5d63"], ["#33d6ff", "#1a6bff"], ["#b9f24e", "#33b06a"],
-  ["#b06bff", "#5b2bd6"], ["#ff7a5c", "#ff3d78"], ["#39e6c0", "#0e9c8a"], ["#ffd24d", "#ff8a1f"],
-  ["#6fc3ff", "#2f7ff0"], ["#ff6f9c", "#e02e6a"],
-];
-function avaBg(addr: string): string {
-  let h = 0;
-  for (let i = 0; i < addr.length; i++) h = (h * 31 + addr.charCodeAt(i)) >>> 0;
-  const [a, b] = PALS[h % PALS.length];
-  return `radial-gradient(60% 55% at 30% 25%, rgba(255,255,255,.5), transparent 55%), linear-gradient(150deg, ${a}, ${b})`;
-}
+/* ---- circular avatar: token logo, else the branded default tile ---- */
+// Default token logo, shown for any coin without its own image (matches the
+// reference, which serves a single branded placeholder rather than initials).
+const DEFAULT_LOGO = "/stonked-default.svg";
 function logoSrc(t: TokenSummary): string | null {
   const logo = OFFICIAL_LOGOS[t.address?.toLowerCase()] ?? t.metadata?.logo;
   if (!logo || !/^(https?:|ipfs:|data:)/.test(String(logo))) return null;
@@ -137,11 +129,11 @@ function logoSrc(t: TokenSummary): string | null {
 }
 function Avatar({ t }: { t: TokenSummary }) {
   const [failed, setFailed] = useState(false);
-  const src = failed ? null : logoSrc(t);
+  const src = (failed ? null : logoSrc(t)) ?? DEFAULT_LOGO;
   return (
     <span className="kf-ava-wrap">
-      <span className="kf-ava" style={src ? undefined : { background: avaBg(t.address) }}>
-        {src ? <img src={src} alt="" loading="lazy" onError={() => setFailed(true)} /> : <span>{(t.symbol || "?")[0].toUpperCase()}</span>}
+      <span className="kf-ava">
+        <img src={src} alt="" loading="lazy" onError={() => setFailed(true)} />
       </span>
       <span className="kf-badge">{BASE_MARK}</span>
     </span>
@@ -288,8 +280,8 @@ export function ExploreStockBoard() {
                 <Link to={`/token/${t.address}`} key={t.address} className="kf-lb-card">
                   <div className="kf-lb-top">
                     <span className="kf-rank">{i + 1}<sup>{ordinal(i + 1)}</sup></span>
-                    <span className="kf-ava" style={{ width: 34, height: 34, ...(logoSrc(t) ? {} : { background: avaBg(t.address) }) }}>
-                      {logoSrc(t) ? <img src={logoSrc(t)!} alt="" /> : <span style={{ fontSize: 14 }}>{(t.symbol || "?")[0].toUpperCase()}</span>}
+                    <span className="kf-ava" style={{ width: 34, height: 34 }}>
+                      <img src={logoSrc(t) ?? DEFAULT_LOGO} alt="" />
                     </span>
                     <span className="kf-lb-name">${t.symbol}</span>
                   </div>
