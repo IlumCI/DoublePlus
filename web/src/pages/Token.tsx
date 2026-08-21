@@ -1,4 +1,5 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import { formatUnits } from "viem";
 import { useParams } from "react-router-dom";
 import { useHolders, useToken } from "@launchpad/sdk/react";
 import type { Address, TokenSummary } from "@launchpad/sdk";
@@ -309,6 +310,73 @@ const CHEV_L = <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke
  * that opens the pair-denominated trade sheet. Same real data and trading as
  * the desktop view, laid out like the discovery board.
  */
+const ERC20_META_ABI = [
+  { type: "function", name: "decimals", stateMutability: "view", inputs: [], outputs: [{ type: "uint8" }] },
+  { type: "function", name: "symbol", stateMutability: "view", inputs: [], outputs: [{ type: "string" }] },
+] as const;
+
+/** Holder-reward claim card: shows the connected wallet's claimable stock for
+ *  this coin (streamed from trades, published by the keeper as a Merkle epoch)
+ *  and lets them claim it. Hidden when there is nothing to claim. */
+function RewardClaimCard({ coin, fallbackSym }: { coin: Address; fallbackSym?: string }) {
+  const { address, isConnected, connectFirst } = useWallet();
+  const pushToast = useUi((s) => s.pushToast);
+  const [claimable, setClaimable] = useState<bigint>(0n);
+  const [dec, setDec] = useState(18);
+  const [sym, setSym] = useState<string>(fallbackSym ?? "");
+  const [busy, setBusy] = useState(false);
+
+  const refresh = useCallback(async () => {
+    if (!address) { setClaimable(0n); return; }
+    try {
+      const info = await (v4Client as any).baseRewards(coin, address as Address);
+      if (!info) { setClaimable(0n); return; }
+      setClaimable(info.claimable);
+      if (info.claimable > 0n && /^0x[0-9a-fA-F]{40}$/.test(info.stock) && !/^0x0+$/.test(info.stock)) {
+        const [d, s] = await Promise.all([
+          (v4Client as any).publicClient.readContract({ address: info.stock, abi: ERC20_META_ABI, functionName: "decimals" }).catch(() => 18),
+          (v4Client as any).publicClient.readContract({ address: info.stock, abi: ERC20_META_ABI, functionName: "symbol" }).catch(() => fallbackSym ?? ""),
+        ]);
+        setDec(Number(d)); setSym(String(s));
+      }
+    } catch { /* leave as-is */ }
+  }, [address, coin, fallbackSym]);
+
+  useEffect(() => { void refresh(); }, [refresh]);
+
+  if (claimable <= 0n) return null;
+  const amount = Number(formatUnits(claimable, dec));
+  const amountStr = amount >= 1 ? amount.toLocaleString(undefined, { maximumFractionDigits: 4 }) : amount.toPrecision(3);
+
+  const claim = async () => {
+    setBusy(true);
+    try {
+      if (!isConnected) { await connectFirst(); return; }
+      if (!(await ensureSdkWallet())) throw new Error("Wallet session expired. Reconnect and try again.");
+      const hashes = await (v4Client as any).claimBaseRewards(coin, address as Address);
+      if (hashes.length === 0) { pushToast({ kind: "info", title: "Nothing to claim yet" }); }
+      else { pushToast({ kind: "success", title: `Claimed ${amountStr} ${sym}`, body: "Sent to your wallet.", txHash: hashes[hashes.length - 1] }); }
+      await refresh();
+    } catch (err) {
+      pushToast({ kind: "error", title: "Claim failed", body: errorText(err) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="kf-reward-claim">
+      <div className="kf-reward-claim-info">
+        <span className="kf-reward-claim-label">Your rewards</span>
+        <span className="kf-reward-claim-amt">{amountStr} {sym}</span>
+      </div>
+      <button className="kf-reward-claim-btn" disabled={busy} onClick={claim}>
+        {busy ? "Claiming…" : "Claim"}
+      </button>
+    </div>
+  );
+}
+
 function BaseTokenView({
   t, meta, extra, usdRate, rewardSym, hasReward,
 }: { t: TokenSummary; meta: any; extra: Extra | null; usdRate: number; rewardSym?: string; hasReward: boolean }) {
@@ -354,6 +422,9 @@ function BaseTokenView({
         <span className="kf-dotsep">·</span>
         <span><b>{compact(t.holderCount)}</b> holders</span>
       </div>
+
+      {/* Holder rewards: claim the paired stock streamed from trades */}
+      {hasReward ? <RewardClaimCard coin={t.address as Address} fallbackSym={rewardSym} /> : null}
 
       {/* Chart */}
       <div className="kf-tk-chart">

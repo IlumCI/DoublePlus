@@ -152,6 +152,30 @@ export const baseFactoryV3ViewsAbi = [
   { type: "function", name: "rewardVaultOf", stateMutability: "view", inputs: [{ type: "address" }], outputs: [{ type: "address" }] },
 ] as const;
 
+// StockRewardVault: per-coin holder-reward vault. Holders claim their share of
+// the paired stock with a Merkle proof the keeper publishes; `claimed` guards
+// double claims and `distributable` is the stock not yet committed to an epoch.
+export const stockRewardVaultAbi = [
+  { type: "function", name: "stock", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
+  { type: "function", name: "coin", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
+  { type: "function", name: "epochCount", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "distributable", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "claimed", stateMutability: "view", inputs: [{ type: "uint256" }, { type: "uint256" }], outputs: [{ type: "bool" }] },
+  {
+    type: "function",
+    name: "claim",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "epochId", type: "uint256" },
+      { name: "index", type: "uint256" },
+      { name: "account", type: "address" },
+      { name: "amount", type: "uint256" },
+      { name: "proof", type: "bytes32[]" },
+    ],
+    outputs: [],
+  },
+] as const;
+
 // Uniswap V4 periphery StateView: canonical pool-state reads without logs.
 export const stateViewAbi = [
   {

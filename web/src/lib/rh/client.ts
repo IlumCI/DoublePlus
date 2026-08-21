@@ -9,7 +9,7 @@ import {
 import type { Candle, CandleInterval, HolderRecord, TokenSummary, TradeRecord } from "@launchpad/sdk";
 import { INTERVAL_SECONDS } from "@launchpad/sdk";
 
-import { baseFactoryV3LaunchAbi, baseFactoryV3ViewsAbi, erc20Abi, factoryAbi, hookAbi, poolInitEvent, poolSwapEvent, routerAbi, stateViewAbi, stockTradeRouterAbi, tokenAbi } from "./abis";
+import { baseFactoryV3LaunchAbi, baseFactoryV3ViewsAbi, erc20Abi, factoryAbi, hookAbi, poolInitEvent, poolSwapEvent, routerAbi, stateViewAbi, stockRewardVaultAbi, stockTradeRouterAbi, tokenAbi } from "./abis";
 import { pairUsd, resolvePairRoute } from "./routes";
 import { baseStockUsd, resolveBaseRoute } from "../base/routes";
 
@@ -38,6 +38,23 @@ export interface V4Addresses {
   usdg: Address;
   /** Uniswap V4 StateView; enables pool-price reads when logs are unavailable. */
   stateView?: Address;
+}
+
+/** A holder's unclaimed reward leaf, resolved from the keeper's manifest. */
+export interface RewardLeaf {
+  epochId: number;
+  index: number;
+  account: Address;
+  amount: bigint;
+  proof: `0x${string}`[];
+}
+
+/** The keeper's per-vault proof manifest at /rewards/base/<vault>.json. */
+interface RewardManifest {
+  vault: string;
+  coin: string;
+  stock: string;
+  epochs: { epoch: number; root: string; block: number; amount: string; leaves: { index: number; account: string; amount: string; proof: string[] }[] }[];
 }
 
 interface Core {
@@ -753,6 +770,80 @@ export class RhClient {
       totalRewards: rewards,
       creatorFees: 0n, // no creator fee in the pair=reward fork
     };
+  }
+
+  /** The coin's holder-reward vault (StockRewardVault) on the V3 factory. */
+  async baseRewardVault(coin: Address): Promise<Address | null> {
+    const v = (await this.publicClient
+      .readContract({ address: this.v4.factory, abi: baseFactoryV3ViewsAbi, functionName: "rewardVaultOf", args: [coin] })
+      .catch(() => null)) as Address | null;
+    if (!v || v === "0x0000000000000000000000000000000000000000") return null;
+    return v;
+  }
+
+  /** A holder's claimable stock reward for a coin: resolves the vault, reads
+   *  the keeper's proof manifest, and filters out anything already claimed
+   *  on-chain. Returns the unclaimed leaves (with proofs) and their total. */
+  async baseRewards(
+    coin: Address,
+    account: Address,
+  ): Promise<{ vault: Address; stock: Address; claimable: bigint; leaves: RewardLeaf[] } | null> {
+    const vault = await this.baseRewardVault(coin);
+    if (!vault) return null;
+    // Proof manifests are published by the keeper. VITE_REWARDS_BASE lets them
+    // be served from a host decoupled from the site build; it defaults to the
+    // site's own /rewards/base, which the build bundles from web/public.
+    const base = (import.meta.env.VITE_REWARDS_BASE ?? "/rewards/base").replace(/\/$/, "");
+    let manifest: RewardManifest | null = null;
+    try {
+      const res = await fetch(`${base}/${vault.toLowerCase()}.json`, { cache: "no-store" });
+      if (res.ok) manifest = (await res.json()) as RewardManifest;
+    } catch {
+      manifest = null;
+    }
+    if (!manifest) return { vault, stock: "0x0000000000000000000000000000000000000000" as Address, claimable: 0n, leaves: [] };
+
+    const acct = account.toLowerCase();
+    const mine: RewardLeaf[] = [];
+    for (const epoch of manifest.epochs) {
+      const leaf = epoch.leaves.find((l) => l.account.toLowerCase() === acct);
+      if (leaf) mine.push({ epochId: epoch.epoch, index: leaf.index, account: leaf.account as Address, amount: BigInt(leaf.amount), proof: leaf.proof as `0x${string}`[] });
+    }
+    if (mine.length === 0) return { vault, stock: manifest.stock as Address, claimable: 0n, leaves: [] };
+
+    // Drop leaves already claimed on-chain.
+    const flags = (await Promise.all(
+      mine.map((l) =>
+        this.publicClient
+          .readContract({ address: vault, abi: stockRewardVaultAbi, functionName: "claimed", args: [BigInt(l.epochId), BigInt(l.index)] })
+          .catch(() => false),
+      ),
+    )) as boolean[];
+    const unclaimed = mine.filter((_, i) => !flags[i]);
+    const claimable = unclaimed.reduce((s, l) => s + l.amount, 0n);
+    return { vault, stock: manifest.stock as Address, claimable, leaves: unclaimed };
+  }
+
+  /** Claim every unclaimed reward leaf for `account` on a coin's vault. Sends
+   *  one claim tx per leaf and returns the hashes. */
+  async claimBaseRewards(coin: Address, account: Address): Promise<`0x${string}`[]> {
+    const wc = this.requireWallet();
+    const info = await this.baseRewards(coin, account);
+    if (!info || info.leaves.length === 0) return [];
+    const hashes: `0x${string}`[] = [];
+    for (const l of info.leaves) {
+      const hash = await wc.writeContract({
+        account,
+        chain: wc.chain,
+        address: info.vault,
+        abi: stockRewardVaultAbi,
+        functionName: "claim",
+        args: [BigInt(l.epochId), BigInt(l.index), l.account, l.amount, l.proof],
+      });
+      await this.publicClient.waitForTransactionReceipt({ hash });
+      hashes.push(hash);
+    }
+    return hashes;
   }
 
   /** USD market cap per unit of pair-per-token price (for the chart axis). */
