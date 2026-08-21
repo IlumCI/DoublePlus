@@ -1,0 +1,19 @@
+{
+  "chainId": 8453,
+  "model": "v3: fixed 2% tax, 50% holders / 50% creator, no platform cut",
+  "admin": "0x5DdDEa56774f01fc9d207BBD7B7633596a2f4A0b",
+  "startBlock": 50245253,
+  "contracts": {
+    "hookDeployer": "0x62F90ff329F7a9D362EFE8133ebAA223059d4c7D",
+    "hook": "0x13742234d89BD803A56eB05BEaA4e73439486044",
+    "factory": "0x3F0C7039f0426E805873513296B24F7540dD7606",
+    "router": "0xd5411E734eB6bCb0247ED0f496d39c87Ef54535f",
+    "poolManager": "0x498581fF718922c3f8e6A244956aF099B2652b2b",
+    "weth": "0x4200000000000000000000000000000000000006",
+    "v3Router": "0x2626664C2603336E57b271C5c0b26F421741E10E",
+    "b20Factory": "0xB20f000000000000000000000000000000000000",
+    "rewardVaultDeployer": "0x3d7068e5f942f34f6575043926e796D39f61c6f5",
+    "keeper": "0x5DdDEa56774f01fc9d207BBD7B7633596a2f4A0b"
+  },
+  "stockPairs": []
+}
