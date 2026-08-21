@@ -1,0 +1,57 @@
+name: Base reward keeper
+
+# Streams holder rewards on the koi.fun V3 Base deployment: converts each
+# coin's vault balance into its paired stock, snapshots holders, posts a
+# Merkle epoch, and publishes the proof manifests so holders can claim.
+#
+# Required repo secret:
+#   KEEPER_PRIVATE_KEY  the on-chain keeper wallet (0x5DdD…4A0b), funded for gas
+# Optional (decoupled proof hosting; without them proofs ship with the site):
+#   REWARDS_VERCEL_TOKEN    a Vercel token
+#   REWARDS_VERCEL_PROJECT  the static project that hosts web/public/rewards
+on:
+  schedule:
+    - cron: "*/30 * * * *" # every 30 min (GitHub cron is best-effort)
+  workflow_dispatch: {}
+
+concurrency:
+  group: base-reward-keeper
+  cancel-in-progress: false
+
+jobs:
+  keep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install keeper deps
+        working-directory: keeper
+        run: npm install --no-audit --no-fund
+      - name: Convert, snapshot, post epochs, write manifests
+        working-directory: keeper
+        env:
+          KEEPER_PRIVATE_KEY: ${{ secrets.KEEPER_PRIVATE_KEY }}
+          BASE_RPC_URL: https://mainnet.base.org
+        run: node base-keeper.mjs
+      - name: Commit refreshed proof manifests
+        run: |
+          git config user.name "koi-keeper"
+          git config user.email "keeper@users.noreply.github.com"
+          git add web/public/rewards/base || true
+          if ! git diff --cached --quiet; then
+            git commit -m "keeper: refresh base reward proof manifests"
+            git push
+          else
+            echo "no manifest changes"
+          fi
+      - name: Publish proofs to the decoupled host (optional)
+        if: ${{ secrets.REWARDS_VERCEL_TOKEN != '' }}
+        run: |
+          npx --yes vercel@latest deploy web/public/rewards --prod --yes \
+            --token="${{ secrets.REWARDS_VERCEL_TOKEN }}" \
+            --scope="${{ secrets.REWARDS_VERCEL_PROJECT }}" || echo "rewards publish skipped/failed (non-fatal)"

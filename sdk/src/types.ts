@@ -172,6 +172,11 @@ export type PriceUpdate = {
   remainingToGraduationUsd: string;
   /** Creator's currently-claimable fees, native wei. Updates live per trade. */
   creatorFeesWei: string;
+  /** Live trading stats; only clients that track them per tick include these. */
+  volume24hWei?: string;
+  volumeTotalWei?: string;
+  txCount24h?: number;
+  holderCount?: number;
 };
 
 export type CandleUpdate = {

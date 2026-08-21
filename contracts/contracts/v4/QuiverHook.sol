@@ -19,21 +19,24 @@ import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
 
 import {IQuiverToken} from "./interfaces/IQuiverToken.sol";
 
+interface IWrappedQuote {
+    function withdraw(uint256) external;
+    function deposit() external payable;
+}
+
 /// @title QuiverHook
 /// @notice Singleton Uniswap V4 hook and fee vault for the Quiver launchpad.
 ///
-///         Launched tokens pair with WETH (the Robinhood Chain convention).
-///         Every swap through a Quiver pool pays a per-token tax (0-10%, fixed
-///         at launch) that the hook skims in `afterSwap` — so the fee is
-///         collected on ALL trades through the pool, not just those routed via
-///         the app. Skimmed fees accrue per token; anyone can then call
-///         `harvest`, which normalises everything to WETH and splits it
-///         50/25/25:
+///         Launched tokens pair with the chain's quote asset (held in the WETH
+///         slot; on Arc this is native USDC). Every swap through a pool pays a
+///         per-token tax fixed at launch that the hook skims in `afterSwap` —
+///         so the fee is collected on ALL trades through the pool, not just
+///         those routed via the app. Skimmed fees accrue per token; anyone can
+///         then call `harvest`, which normalises everything to the quote asset
+///         and splits it 80/20:
 ///
-///           1. holders  — 50%: buys the creator's chosen stock (WETH -> USDG ->
-///                         stock) and distributes it to holders by holdings
-///           2. creator  — 25%: claimable WETH, withdrawn on demand
-///           3. protocol — 25%: WETH sent to the protocol treasury
+///           1. creator  — 80%: pushed straight to the creator's wallet
+///           2. protocol — 20%: sent to the protocol treasury
 ///
 ///         All swaps the hook performs run through the PoolManager's own
 ///         `unlock`, so the hook is its own router and needs no external one.
@@ -42,6 +45,10 @@ contract QuiverHook is BaseHook, Ownable, ReentrancyGuard, IUnlockCallback {
     using PoolIdLibrary for PoolKey;
 
     uint16 internal constant BPS = 10_000;
+
+    /// @notice Creator share of every harvest, in bps. The remainder goes to
+    ///         the protocol treasury.
+    uint16 public constant CREATOR_FEE_BPS = 8_000;
 
     /// @notice The WETH the launchpad pools are quoted in.
     address public immutable WETH;
@@ -215,7 +222,7 @@ contract QuiverHook is BaseHook, Ownable, ReentrancyGuard, IUnlockCallback {
     }
 
     // ---------------------------------------------------------------------
-    // harvest: normalise to WETH, split 25/25/25/25, act
+    // harvest: normalise to the quote asset, split 80/20, push
     // ---------------------------------------------------------------------
 
     /// @notice Permissionless harvest with no slippage bounds on the internal
@@ -237,7 +244,7 @@ contract QuiverHook is BaseHook, Ownable, ReentrancyGuard, IUnlockCallback {
         _harvest(token, minWeth, minStock);
     }
 
-    function _harvest(address token, uint256 minWeth, uint256 minStock) private {
+    function _harvest(address token, uint256 minWeth, uint256 /* minStock, unused */) private {
         PoolConfig storage c = _config[_poolOf[token]];
         if (!c.registered) revert NotRegistered();
 
@@ -256,42 +263,34 @@ contract QuiverHook is BaseHook, Ownable, ReentrancyGuard, IUnlockCallback {
         }
         wethFees[token] = 0;
 
-        // Split 50/25/25: holders 50%, creator 25%, protocol 25% (dust to protocol).
-        uint256 toHolders = total / 2;
-        uint256 toCreator = total / 4;
-        uint256 toProtocol = total - toHolders - toCreator;
+        // Split 80/20: creator 80%, protocol 20% (dust to protocol). Both are
+        // pushed in the same transaction — the creator never has to claim.
+        uint256 toCreator = (total * CREATOR_FEE_BPS) / BPS;
+        uint256 toProtocol = total - toCreator;
 
-        // 1. creator — claimable WETH
-        creatorClaimable[token] += toCreator;
-
-        // 2. holders — buy stock (WETH -> USDG -> stock) and distribute. If the
-        //    stock route isn't configured/liquid, or there are no eligible holders
-        //    to receive it, fold this share into the protocol share so no WETH is
-        //    stranded.
-        bool holderPaid;
-        if (toHolders > 0 && c.stock != address(0) && quote != address(0) && IQuiverToken(token).eligibleSupply() > 0) {
-            uint256 usdgOut = _swap(_quoteKey, _wethSide(_quoteKey), toHolders, 0);
-            if (usdgOut > 0) {
-                uint256 stockOut = _swap(c.stockKey, Currency.wrap(quote), usdgOut, minStock);
-                if (stockOut > 0) {
-                    IERC20(c.stock).safeTransfer(token, stockOut);
-                    IQuiverToken(token).distributeRewards(stockOut);
-                    holderPaid = true;
-                }
-            }
-        }
-        if (!holderPaid) {
-            toProtocol += toHolders;
-            toHolders = 0;
-        }
-
-        // 3. protocol — WETH to treasury
+        _pushQuote(c.creator, toCreator);
         if (toProtocol > 0) {
-            IERC20(WETH).safeTransfer(protocolTreasury, toProtocol);
+            _pushQuote(protocolTreasury, toProtocol);
         }
 
-        emit Harvested(token, toCreator, toHolders, toProtocol);
+        emit Harvested(token, toCreator, 0, toProtocol);
     }
+
+    /// @dev Deliver a fee share as NATIVE quote (unwrap first) so recipients
+    ///      see plain dollars, falling back to the wrapped ERC-20 for
+    ///      recipients that cannot receive native transfers.
+    function _pushQuote(address to, uint256 amount) private {
+        if (amount == 0) return;
+        IWrappedQuote(WETH).withdraw(amount);
+        (bool ok, ) = to.call{value: amount, gas: 30_000}("");
+        if (!ok) {
+            IWrappedQuote(WETH).deposit{value: amount}();
+            IERC20(WETH).safeTransfer(to, amount);
+        }
+    }
+
+    /// @notice Accept native currency from the wrapped-quote unwrap.
+    receive() external payable {}
 
     /// @notice Creator withdraws their accrued WETH fees.
     function claimCreatorFees(address token) external nonReentrant returns (uint256 amount) {

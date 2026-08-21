@@ -1,0 +1,10 @@
+{
+  "network": "arc",
+  "chainId": 5042,
+  "deployer": "0xd6F0e8943421E19f3d800542A2aC056bA929c8ac",
+  "timestamp": "2026-07-30T06:56:03.150Z",
+  "weth": "0x79Fb68b0bFCd335f27E2dAF95716Fb49f38452C3",
+  "factory": "0x95472BE7fEE74fc819Ba762cd4F254301ba497D7",
+  "swapRouter": "0x9AAa64af3f315ab47B2f5336C5A90af11d458836",
+  "positionManager": "0x79A6D0bA42EFCaADF6Fe25187C5CC5c664aD5a74"
+}

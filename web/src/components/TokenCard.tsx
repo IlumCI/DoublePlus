@@ -61,7 +61,7 @@ function TokenCardBase({ token }: { token: TokenSummary }) {
             change == null ? "bg-panel-2 text-ink-3" : change >= 0 ? "bg-up/10 text-up" : "bg-down/10 text-down"
           }`}
         >
-          {change == null ? "—" : fmtPct(change)}
+          {change == null ? "–" : fmtPct(change)}
         </span>
       </div>
 

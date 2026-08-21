@@ -1,0 +1,26 @@
+{
+  "network": "robinhood",
+  "chainId": 4663,
+  "startBlock": 22166802,
+  "deployer": "0xd6F0e8943421E19f3d800542A2aC056bA929c8ac",
+  "owner": "0x5dddea56774f01fc9d207bbd7b7633596a2f4a0b",
+  "feeRecipient": "0x5dddea56774f01fc9d207bbd7b7633596a2f4a0b",
+  "uniswapV3": {
+    "factory": "0x1f7d7550B1b028f7571E69A784071F0205FD2EfA",
+    "positionManager": "0x73991a25C818Bf1f1128dEAaB1492D45638DE0D3",
+    "swapRouter": "0xCaf681a66D020601342297493863E78C959E5cb2",
+    "wrappedNative": "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73"
+  },
+  "contracts": {
+    "tokenDeployer": "0xf2B2d33Ef72FaDCf0e8CDaE0cd348E2fADF2F24a",
+    "factory": "0x8b57E56964486A1eDB8d83bc2ef5ac93497a73b9"
+  },
+  "config": {
+    "totalSupply": "1000000000e18",
+    "poolFeeTier": 10000,
+    "creatorFeeBps": 8000,
+    "platformFeeBps": 2000,
+    "defaultMarketCapUsd": 3000
+  },
+  "note": "Second deployment; first (0x95472BE7...) was retired because its deterministic addresses collided with the Stable deployment and confused cross-chain indexers."
+}

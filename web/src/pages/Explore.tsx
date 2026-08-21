@@ -5,10 +5,15 @@ import type { TokenSummary } from "@launchpad/sdk";
 
 import { Icon } from "../components/Icon";
 import { QuiverMark } from "../components/QuiverMark";
+import { IS_BOARD, IS_STOCK_BOARD } from "../lib/brand";
+import { ExploreBoard } from "./ExploreBoard";
+import { ExploreStockBoard } from "./ExploreStockBoard";
 import { client } from "../lib/client";
 import { env } from "../lib/env";
 import { fmtNative, fmtUsd, shortAddr, timeAgo } from "../lib/format";
 import { isHidden } from "../lib/hiddenTokens";
+import { normalizeSocial } from "../lib/links";
+import { OFFICIAL_LOGOS } from "../lib/officialLogos";
 
 type Sort = "new" | "recent" | "mcap" | "oldest";
 
@@ -20,14 +25,23 @@ const SORTS: { id: Sort; label: string }[] = [
 ];
 
 /**
- * Discover — the market list, laid out like Stackr: a New button beside a
+ * Discover; the market list, laid out like Stackr: a New button beside a
  * search field, a row of sort tabs, then a grid of token cards. Cream theme.
  */
 export function Explore() {
+  // The board brands (Robinhood heist + Base stock launchpad) use a distinct
+  // pump.fun-style live market terminal rather than the default card grid.
+  // The Base stock launchpad has its own "coin exchange" terminal identity.
+  if (IS_STOCK_BOARD) return <ExploreStockBoard />;
+  if (IS_BOARD) return <ExploreBoard />;
+  return <ExploreGrid />;
+}
+
+function ExploreGrid() {
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
   const [sort, setSort] = useState<Sort>("new");
-  const [view, setView] = useState<"one" | "two">("two");
+  const [view, setView] = useState<"one" | "two">("one");
   const { data: byVolume, loading: lv } = useTokens(client, { sort: "volume", limit: 60 });
   const { data: byNew, loading: ln } = useTokens(client, { sort: "new", limit: 60 });
 
@@ -110,7 +124,7 @@ export function Explore() {
         </div>
       </div>
 
-      {/* Grid — inside a container box */}
+      {/* Grid; inside a container box */}
       <div className="mt-3 rounded-2xl border border-edge bg-panel/40 p-2.5 sm:p-3">
         {loading ? (
           <div className={gridCls}>
@@ -130,7 +144,7 @@ export function Explore() {
 
 function TokenCard({ t, row }: { t: TokenSummary; row?: boolean }) {
   const [imgFailed, setImgFailed] = useState(false);
-  const logo = t.metadata?.logo;
+  const logo = OFFICIAL_LOGOS[t.address.toLowerCase()] ?? t.metadata?.logo;
   const ok = !imgFailed && logo && /^(https?:|ipfs:|data:)/.test(String(logo));
   const src = ok
     ? String(logo).startsWith("ipfs://") ? `https://ipfs.io/ipfs/${String(logo).slice(7)}` : String(logo)
@@ -139,8 +153,8 @@ function TokenCard({ t, row }: { t: TokenSummary; row?: boolean }) {
   const to = `/token/${t.address}`;
 
   if (row) {
-    const web = (t.metadata as any)?.website as string | undefined;
-    const x = (t.metadata as any)?.twitter as string | undefined;
+    const web = normalizeSocial((t.metadata as any)?.website);
+    const x = normalizeSocial((t.metadata as any)?.twitter, "x");
     const scan = env.explorerUrl ? `${env.explorerUrl.replace(/\/$/, "")}/token/${t.address}` : null;
     return (
       <div className="rounded-xl border border-edge bg-panel p-3.5">
@@ -262,6 +276,9 @@ function CardSkeleton() {
   );
 }
 
+const IS_STABLE = String(import.meta.env.VITE_PROTOCOL ?? "") === "stable-v3";
+const CREATOR_MODE = IS_STABLE || String(import.meta.env.VITE_FEE_MODE ?? "") === "creator";
+
 function Empty({ q }: { q: string }) {
   return (
     <div className="flex flex-col items-center px-6 py-24 text-center">
@@ -272,7 +289,11 @@ function Empty({ q }: { q: string }) {
         {q ? `No token for “${q}”` : "No tokens launched yet"}
       </p>
       <p className="mt-1.5 max-w-sm text-[14.5px] leading-relaxed text-ink-2">
-        {q ? "Try another name, symbol or address." : "Be the first to open a market — holders earn a real tokenized stock on every trade."}
+        {q
+          ? "Try another name, symbol or address."
+          : CREATOR_MODE
+            ? "Be the first to open a market. Creators earn 80% of every trading fee, paid in dollars."
+            : "Be the first to open a market. Holders earn a real tokenized stock on every trade."}
       </p>
       {!q ? (
         <Link to="/launch" className="mt-6 flex items-center gap-2 rounded-xl bg-accent px-5 py-3 text-[14.5px] font-semibold text-accent-fg transition-colors hover:bg-accent-2">

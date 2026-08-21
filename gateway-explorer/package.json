@@ -1,0 +1,14 @@
+{
+  "name": "arc-tor-gateway",
+  "private": true,
+  "type": "module",
+  "version": "1.0.0",
+  "description": "Clearnet HTTPS gateway that proxies Arc mainnet JSON-RPC to its .onion endpoint over Tor.",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "socks-proxy-agent": "^8.0.4"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "chainId": 8453,
+  "admin": "0x5DdDEa56774f01fc9d207BBD7B7633596a2f4A0b",
+  "version": "v2-holder-rewards",
+  "startMarketCapUsd": 4000,
+  "startBlock": 50169610,
+  "contracts": {
+    "hookDeployer": "0xdDF328Cf02821d7bbd86dcdf8FCf1a0E0E927484",
+    "rewardVaultDeployer": "0xC257a2e24af4CEA1320808070333b52bA9A4928A",
+    "hook": "0x5130c8Fb3B2F8fc1018F78fCC4223aFE8BAD6044",
+    "factory": "0xEA3dC62EbB16CAEB848c316a89D54a90Fc348301",
+    "router": "0xd9fe5F1fade896B7ceC8002D05A4E03D4da0600b",
+    "stockFlyRouter": "0x154B31f895DbBaDB47Cb2bc865Fa29f5109B7634",
+    "slipstreamRouter": "0xBE6D8f0d05cC4be24d5167a3eF062215bE6D18a5",
+    "poolManager": "0x498581fF718922c3f8e6A244956aF099B2652b2b",
+    "weth": "0x4200000000000000000000000000000000000006",
+    "v3Router": "0x2626664C2603336E57b271C5c0b26F421741E10E",
+    "b20Factory": "0xB20f000000000000000000000000000000000000",
+    "stockTradeRouter": "0x9EfAd391f0b0759dF35d9f74FB444f778bF18759"
+  },
+  "keeper": "0x5DdDEa56774f01fc9d207BBD7B7633596a2f4A0b"
+}

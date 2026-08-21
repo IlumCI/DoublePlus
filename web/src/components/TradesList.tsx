@@ -8,8 +8,10 @@ import { explorerAddr, fmtUsd, fmtWei, fmtTokens, shortAddr } from "../lib/forma
 import { EmptyState, Skeleton } from "./ui";
 
 const PER_PAGE = 12;
+/** Venue badge: Uniswap v3 on the Stable protocol, the V4 launchpad elsewhere. */
+const IS_STABLE = String(import.meta.env.VITE_PROTOCOL ?? "") === "stable-v3";
 
-export function TradesList({ token, symbol }: { token: Address; symbol: string }) {
+export function TradesList({ token, symbol, usdRate = 0 }: { token: Address; symbol: string; usdRate?: number }) {
   const { trades, loading } = useTrades(client, token, 120);
   const [scale, setScale] = useState(0);
   const [page, setPage] = useState(0);
@@ -62,7 +64,7 @@ export function TradesList({ token, symbol }: { token: Address; symbol: string }
           <thead>
             <tr className="border-b border-edge text-[9.5px] uppercase tracking-wider text-ink-3">
               <th className="px-3 py-2 font-medium">Side</th>
-              <th className="px-2 py-2 font-medium">{env.nativeSymbol}</th>
+              <th className="px-2 py-2 font-medium">{usdRate > 0 ? "Value" : env.nativeSymbol}</th>
               <th className="px-2 py-2 font-medium">{symbol}</th>
               <th className="px-2 py-2 font-medium">Market cap</th>
               <th className="px-2 py-2 font-medium">Wallet</th>
@@ -74,7 +76,7 @@ export function TradesList({ token, symbol }: { token: Address; symbol: string }
               const d = new Date(t.timestamp * 1000);
               const date = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
               const time = d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
-              const mcap = scale ? fmtUsd((Number(t.priceWei) / 1e18) * scale) : "—";
+              const mcap = scale ? fmtUsd((Number(t.priceWei) / 1e18) * scale) : "–";
               const wallet = wallets[t.txHash] ?? t.trader;
               const explorer = explorerAddr(wallet);
               return (
@@ -84,10 +86,12 @@ export function TradesList({ token, symbol }: { token: Address; symbol: string }
                       <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${t.isBuy ? "bg-up/15 text-up" : "bg-down/15 text-down"}`}>
                         {t.isBuy ? "BUY" : "SELL"}
                       </span>
-                      <span className="text-[9.5px] font-semibold text-ink-3">V4</span>
+                      <span className="text-[9.5px] font-semibold text-ink-3">{IS_STABLE ? "V3" : "V4"}</span>
                     </span>
                   </td>
-                  <td className="mono px-2 py-2.5 text-[12px] text-ink">{fmtWei(t.nativeAmountWei)}</td>
+                  <td className="mono px-2 py-2.5 text-[12px] text-ink">
+                    {usdRate > 0 ? fmtUsd((Number(t.nativeAmountWei) / 1e18) * usdRate) : fmtWei(t.nativeAmountWei)}
+                  </td>
                   <td className="mono px-2 py-2.5 text-[12px] text-ink-2">{fmtTokens(t.tokenAmount)}</td>
                   <td className="mono px-2 py-2.5 text-[12px] text-ink">{mcap}</td>
                   <td className="px-2 py-2.5">

@@ -3,7 +3,7 @@ import { readFileSync } from "fs";
 import { join } from "path";
 
 async function main() {
-  const dep = JSON.parse(readFileSync(join(__dirname, "../deployments/quiver-v4.json"), "utf8"));
+  const dep = JSON.parse(readFileSync(join(__dirname, process.env.DEPLOYMENT ?? "../deployments/quiver-v4.json"), "utf8"));
   const [signer] = await ethers.getSigners();
   const factory = await ethers.getContractAt("QuiverFactory", dep.contracts.factory);
   const factoryAddr = await factory.getAddress();

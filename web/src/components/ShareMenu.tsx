@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import type { Address } from "@launchpad/sdk";
 
+import { BRAND } from "../lib/brand";
 import { env } from "../lib/env";
 import { Icon } from "./Icon";
 
 /**
  * Share a token: post it to X with its cashtag, copy its page link, or jump
- * straight to the Uniswap pool or the block explorer. Uniswap is the venue —
+ * straight to the Uniswap pool or the block explorer. Uniswap is the venue -
  * every Quiverpad token trades in a live Uniswap V4 WETH pool.
  */
 export function ShareMenu({ address, symbol, name }: { address: Address; symbol: string; name: string }) {
@@ -35,7 +36,13 @@ export function ShareMenu({ address, symbol, name }: { address: Address; symbol:
   const uniswapUrl = `https://app.uniswap.org/swap?chain=${env.chainId}&outputCurrency=${address}`;
   const tweet =
     `https://twitter.com/intent/tweet?` +
-    `text=${encodeURIComponent(`$${symbol} — ${name}\nTrading live on Quiverpad, holders earn real stock rewards.`)}` +
+    `text=${encodeURIComponent(
+      String(import.meta.env.VITE_PROTOCOL ?? "") === "stable-v3"
+        ? `$${symbol} · ${name}\nTrading live on ${BRAND.name}, the stable launchpad.`
+        : `$${symbol} · ${name}\nTrading live on ${BRAND.name}, holders earn real ${
+            env.rewardMode === "dollar" ? "dollars" : "stock rewards"
+          }.`,
+    )}` +
     `&url=${encodeURIComponent(pageUrl)}`;
 
   const copyLink = () => {

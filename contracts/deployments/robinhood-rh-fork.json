@@ -1,0 +1,20 @@
+{
+  "network": "robinhood",
+  "chainId": 4663,
+  "startBlock": 25738395,
+  "deployer": "0xd6F0e8943421E19f3d800542A2aC056bA929c8ac",
+  "treasury": "0x5dddea56774f01fc9d207bbd7b7633596a2f4a0b",
+  "protocolAdmin": "0x5dddea56774f01fc9d207bbd7b7633596a2f4a0b",
+  "note": "Pair=reward fork: coin pairs against a chosen stock or meme; 80% of fees to holders in that token, 20% to platform.",
+  "v4": {
+    "poolManager": "0x8366a39cc670b4001a1121b8f6a443a643e40951",
+    "weth": "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73",
+    "v3Router": "0xCaf681a66D020601342297493863E78C959E5cb2"
+  },
+  "contracts": {
+    "hookDeployer": "0x641333196af383983b539CCbEEf1E7045A025Ac6",
+    "hook": "0x6D262ccc039D8E599522E6f455401B23C23Dc044",
+    "factory": "0x6dE8C12324Cd13E40E813B390F8Eea38DBA299b0",
+    "router": "0x24dAa4CAb5067DF5de45c08c255f05F8BB9cB9AD"
+  }
+}

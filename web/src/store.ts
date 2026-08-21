@@ -12,12 +12,16 @@ interface UiState {
   toasts: Toast[];
   pushToast: (t: Omit<Toast, "id">) => void;
   dismissToast: (id: number) => void;
+  walletOpen: boolean;
+  setWalletOpen: (v: boolean) => void;
 }
 
 let nextId = 1;
 
 export const useUi = create<UiState>((set) => ({
   toasts: [],
+  walletOpen: false,
+  setWalletOpen: (v) => set({ walletOpen: v }),
   pushToast: (t) => {
     const id = nextId++;
     set((s) => ({ toasts: [...s.toasts, { ...t, id }] }));

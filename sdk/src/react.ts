@@ -55,7 +55,7 @@ export function useToken(client: LaunchpadClient, token: Address | undefined) {
   useEffect(() => {
     if (!token) return;
     const unsub = client.subscribeToPrice(token, (update: PriceUpdate) => {
-      setLive({
+      const next: Partial<TokenSummary> = {
         priceWei: update.priceWei,
         priceUsd: update.priceUsd,
         marketCapUsd: update.marketCapUsd,
@@ -63,7 +63,14 @@ export function useToken(client: LaunchpadClient, token: Address | undefined) {
         limitsActive: update.limitsActive,
         remainingToGraduationUsd: update.remainingToGraduationUsd,
         creatorFeesWei: update.creatorFeesWei,
-      });
+      };
+      // Live stats are optional on the wire; only override the snapshot when
+      // the client actually tracks them.
+      if (update.volume24hWei !== undefined) next.volume24hWei = update.volume24hWei;
+      if (update.volumeTotalWei !== undefined) next.volumeTotalWei = update.volumeTotalWei;
+      if (update.txCount24h !== undefined) next.txCount24h = update.txCount24h;
+      if (update.holderCount !== undefined) next.holderCount = update.holderCount;
+      setLive(next);
     });
     return unsub;
   }, [client, token]);

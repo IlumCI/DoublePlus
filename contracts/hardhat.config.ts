@@ -16,6 +16,10 @@ const ROBINHOOD_CHAIN_ID = Number(process.env.ROBINHOOD_CHAIN_ID ?? 0);
 const BLOCKSCOUT_URL = process.env.BLOCKSCOUT_URL ?? "";
 const PRIVATE_KEY = process.env.PRIVATE_KEY;
 
+// Stable — the USDT-gas L1 (stable.xyz). Chain id 988, gas paid in USDT0.
+const STABLE_RPC_URL = process.env.STABLE_RPC_URL ?? "https://rpc.stable.xyz";
+const STABLE_CHAIN_ID = Number(process.env.STABLE_CHAIN_ID ?? 988);
+
 const config: HardhatUserConfig = {
   solidity: {
     version: "0.8.26",
@@ -29,7 +33,14 @@ const config: HardhatUserConfig = {
       allowUnlimitedContractSize: false,
       ...(process.env.FORK === "1" && ROBINHOOD_RPC_URL
         ? {
-            forking: { url: ROBINHOOD_RPC_URL },
+            // Pin a recent hardfork so view calls against the forked chain's
+            // latest block execute (Base runs post-Cancun); an optional block
+            // pin (BASE_FORK_BLOCK) makes runs deterministic.
+            hardfork: process.env.FORK_HARDFORK ?? "cancun",
+            forking: {
+              url: ROBINHOOD_RPC_URL,
+              ...(process.env.BASE_FORK_BLOCK ? { blockNumber: Number(process.env.BASE_FORK_BLOCK) } : {}),
+            },
             chainId: ROBINHOOD_CHAIN_ID || undefined,
           }
         : {}),
@@ -43,6 +54,11 @@ const config: HardhatUserConfig = {
           },
         }
       : {}),
+    stable: {
+      url: STABLE_RPC_URL,
+      chainId: STABLE_CHAIN_ID,
+      accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],
+    },
   },
   etherscan: {
     // Blockscout instances accept any non-empty API key string.

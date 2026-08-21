@@ -12,26 +12,45 @@ import { chain, env } from "./env";
  * the injected, WalletConnect and Coinbase connectors from a single project id.
  *
  * The AppKit modal UI (its web components) is heavy, so `createAppKit` is called
- * lazily by `openWalletModal()` the first time a visitor connects — none of that
+ * lazily by `openWalletModal()` the first time a visitor connects; none of that
  * UI weight touches the first paint. Account/session reads go through the normal
  * wagmi hooks, which work off `wagmiConfig` whether or not the modal is open yet.
  */
+// Wallets accept a single RPC endpoint; the app's own reads use the full
+// comma-separated fallback list (see lib/client.ts).
+const primaryRpc = env.rpcUrl.split(",")[0].trim();
+
 const appKitNetwork = defineChain({
   id: chain.id,
   caipNetworkId: `eip155:${chain.id}`,
   chainNamespace: "eip155",
   name: chain.name,
   nativeCurrency: chain.nativeCurrency,
-  rpcUrls: { default: { http: [env.rpcUrl] } },
+  rpcUrls: { default: { http: [primaryRpc] } },
   ...(env.explorerUrl
     ? { blockExplorers: { default: { name: "Explorer", url: env.explorerUrl } } }
     : {}),
 });
 
+// Base mainnet, for the Circle Gateway bridge (deposit side). Registered with
+// the wallet stack so the bridge page can switch networks and transact there.
+const baseNetwork = defineChain({
+  id: 8453,
+  caipNetworkId: "eip155:8453",
+  chainNamespace: "eip155",
+  name: "Base",
+  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+  rpcUrls: { default: { http: ["https://mainnet.base.org"] } },
+  blockExplorers: { default: { name: "BaseScan", url: "https://basescan.org" } },
+});
+
 const wagmiAdapter = new WagmiAdapter({
-  networks: [appKitNetwork],
+  networks: [appKitNetwork, baseNetwork],
   projectId: env.walletConnectProjectId,
-  transports: { [chain.id]: http(env.rpcUrl, { batch: { wait: 16 } }) },
+  transports: {
+    [chain.id]: http(primaryRpc, { batch: { wait: 16 } }),
+    8453: http("https://mainnet.base.org", { batch: { wait: 16 } }),
+  },
 });
 
 export const wagmiConfig = wagmiAdapter.wagmiConfig as Config;
@@ -50,7 +69,7 @@ export function openWalletModal(): Promise<void> {
     modalPromise = import("@reown/appkit/react").then(({ createAppKit }) =>
       createAppKit({
         adapters: [wagmiAdapter],
-        networks: [appKitNetwork],
+        networks: [appKitNetwork, baseNetwork],
         defaultNetwork: appKitNetwork,
         projectId: env.walletConnectProjectId,
         metadata: {

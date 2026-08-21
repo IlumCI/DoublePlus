@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>arcx debug</title>
+<style>
+  body { background: #05070c; color: #e6edf3; font: 14px/1.6 monospace; padding: 16px; }
+  h1 { font-size: 16px; color: #5b9ff0; }
+  .row { margin: 10px 0; padding: 10px; border: 1px solid #1b2735; border-radius: 8px; word-break: break-all; }
+  .ok { color: #4ade80; } .bad { color: #f87171; } .pend { color: #94a3b8; }
+  small { color: #94a3b8; }
+</style>
+</head>
+<body>
+<h1>arcx.fun diagnostics</h1>
+<div id="out"></div>
+<script>
+const out = document.getElementById("out");
+function row(name) {
+  const el = document.createElement("div");
+  el.className = "row";
+  el.innerHTML = "<b>" + name + "</b>: <span class='pend'>testing...</span>";
+  out.appendChild(el);
+  return {
+    ok(msg) { el.innerHTML = "<b>" + name + "</b>: <span class='ok'>OK</span> <small>" + msg + "</small>"; },
+    bad(msg) { el.innerHTML = "<b>" + name + "</b>: <span class='bad'>FAILED</span> <small>" + msg + "</small>"; },
+  };
+}
+function withTimeout(p, ms) {
+  return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error("timeout " + ms + "ms")), ms))]);
+}
+async function rpc(url, method) {
+  const r = await withTimeout(fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: [] }),
+  }), 15000);
+  const text = await r.text();
+  let j; try { j = JSON.parse(text); } catch { throw new Error("HTTP " + r.status + " non-JSON: " + text.slice(0, 80)); }
+  if (j.error) throw new Error("RPC error: " + JSON.stringify(j.error).slice(0, 100));
+  return j.result;
+}
+(async () => {
+  const env = row("Browser");
+  env.ok(navigator.userAgent.slice(0, 120));
+
+  const ver = row("Deployment version");
+  try {
+    const r = await withTimeout(fetch("/version.json?t=" + Date.now(), { cache: "no-store" }), 10000);
+    ver.ok(await r.text());
+  } catch (e) { ver.bad(String(e)); }
+
+  const bundle = row("App bundle served to you");
+  try {
+    const html = await (await withTimeout(fetch("/?t=" + Date.now(), { cache: "no-store" }), 10000)).text();
+    const m = html.match(/assets\/index-[A-Za-z0-9_-]+\.js/);
+    bundle.ok(m ? m[0] : "not found in HTML");
+  } catch (e) { bundle.bad(String(e)); }
+
+  const relay = row("Same-origin relay /api/rpc");
+  try {
+    const cid = await rpc("/api/rpc", "eth_chainId");
+    relay.ok("chainId " + parseInt(cid, 16));
+  } catch (e) { relay.bad(String(e)); }
+
+  const direct = row("Direct RPC (poptyedev)");
+  try {
+    const cid = await rpc("https://real-pump-soon-trust-me-bro-again.poptyedev.com/b71fac7173778c3f6a9148c157b8b4f61d275b447b087327", "eth_chainId");
+    direct.ok("chainId " + parseInt(cid, 16));
+  } catch (e) { direct.bad(String(e)); }
+
+  const tokens = row("Factory totalTokens (via relay)");
+  try {
+    const r = await withTimeout(fetch("/api/rpc", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_call",
+        params: [{ to: "0x3004664a07bDA6CbD416C9486Dc1212eE81fA1fC", data: "0x7e1c0c09" }, "latest"] }),
+    }), 15000);
+    const j = await r.json();
+    if (j.error) throw new Error(JSON.stringify(j.error).slice(0, 100));
+    tokens.ok(parseInt(j.result, 16) + " tokens onchain");
+  } catch (e) { tokens.bad(String(e)); }
+
+  const storage = row("localStorage");
+  try {
+    localStorage.setItem("lp.debug", "1"); localStorage.removeItem("lp.debug");
+    storage.ok("writable");
+  } catch (e) { storage.bad(String(e)); }
+})();
+</script>
+</body>
+</html>

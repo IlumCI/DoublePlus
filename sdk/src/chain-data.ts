@@ -405,7 +405,7 @@ export class ChainDataSource {
     if (filled.length < 2) return filled.slice(-limit);
 
     // Fill empty periods (no trades) with flat candles at the prior close and
-    // zero volume, so the timeline is continuous — standard candle behavior.
+    // zero volume, so the timeline is continuous; standard candle behavior.
     const out: Candle[] = [];
     for (let i = 0; i < filled.length; i++) {
       out.push(filled[i]);

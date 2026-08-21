@@ -53,7 +53,7 @@ async function fetchMcapScale(token: Address): Promise<number> {
  * Custom SVG price-line chart. Renders the market cap over time as a single
  * line with a heatmap-style glow fill beneath it, a live current-price line,
  * a hover crosshair and a light price/time grid. No third-party charting
- * engine — the series loads over REST and the active bucket updates in place
+ * engine; the series loads over REST and the active bucket updates in place
  * from the candle stream.
  */
 export function PriceChart({ token }: { token: Address }) {

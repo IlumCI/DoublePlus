@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 /**
  * Counts smoothly from its previous value to the next whenever `value` changes.
- * Editorial, not flashy — a short eased tween, and it respects reduced-motion.
+ * Editorial, not flashy; a short eased tween, and it respects reduced-motion.
  * `format` maps the interpolated number to the string actually shown.
  */
 export function AnimatedNumber({

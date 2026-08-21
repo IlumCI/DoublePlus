@@ -3,19 +3,28 @@ import {
   type PublicClient,
   type WalletClient,
   concatHex,
+  decodeEventLog,
   encodeAbiParameters,
   getContractAddress,
   keccak256,
   parseEther,
+  toEventSelector,
 } from "viem";
 import type { Candle, CandleInterval, HolderRecord, TokenSummary, TradeRecord } from "@launchpad/sdk";
 import { INTERVAL_SECONDS } from "@launchpad/sdk";
 
-import { erc20Abi, factoryAbi, hookAbi, poolInitEvent, poolSwapEvent, routerAbi, tokenAbi } from "./abis";
+import { erc20Abi, factoryAbi, hookAbi, poolInitEvent, poolSwapEvent, routerAbi, stateViewAbi, tokenAbi } from "./abis";
 import { QUIVER_TOKEN_BYTECODE } from "./tokenBytecode";
 
 const Q96 = 2n ** 96n;
 const TOTAL_SUPPLY = 1_000_000_000n * 10n ** 18n;
+
+const SWAP_TOPIC = toEventSelector(poolSwapEvent as any);
+// Receipt-scanner window: how far back the first scan reaches, and the most
+// blocks any single catch-up will walk (Arc blocks are ~0.5s).
+const RECEIPT_BACKFILL = 240n;
+const RECEIPT_MAX_CATCHUP = 900n;
+const RECEIPT_CHUNK = 25;
 
 export interface V4Addresses {
   factory: Address;
@@ -24,6 +33,8 @@ export interface V4Addresses {
   poolManager: Address;
   weth: Address;
   usdg: Address;
+  /** Uniswap V4 StateView; enables pool-price reads when logs are unavailable. */
+  stateView?: Address;
 }
 
 interface Core {
@@ -63,6 +74,11 @@ export class V4Client {
   // (a stale cache is what pinned mcap to the launch price and hid new trades).
   private tradesCache = new Map<string, { records: TradeRecord[]; upTo: bigint }>();
   private blockTsAnchor?: { block: bigint; ts: number; perBlock: number };
+  // Shared receipt scanner, the swap-log source when eth_getLogs is disabled:
+  // one incremental walk over new blocks feeds every pool's trade feed.
+  private receiptUpTo = 0n;
+  private receiptLogsByPool = new Map<string, any[]>();
+  private receiptInflight: Promise<void> | null = null;
 
   constructor(publicClient: PublicClient, v4: V4Addresses, startBlock: bigint) {
     this.publicClient = publicClient;
@@ -108,6 +124,10 @@ export class V4Client {
       .catch(() => undefined);
 
     if (this.coresUpTo !== 0n && latest <= this.coresUpTo) return [...this.cores.values()];
+    // Some Arc RPCs ship with eth_getLogs disabled; the factory's own listings
+    // expose the same data through plain view calls, so skip the doomed (and
+    // slow, retried) log scan entirely while the method is parked.
+    if (Date.now() < this.logsBrokenUntil) return this.loadCoresFromViews(latest);
     let logs: any[];
     try {
       logs = (await this.publicClient.getLogs({
@@ -117,7 +137,8 @@ export class V4Client {
         toBlock: latest,
       })) as any[];
     } catch {
-      return [...this.cores.values()];
+      this.parkLogs();
+      return this.loadCoresFromViews(latest);
     }
 
     for (const log of logs) {
@@ -161,6 +182,76 @@ export class V4Client {
     return [...this.cores.values()];
   }
 
+  /** Log-free discovery: enumerate the factory's `allTokens`/`listings` views.
+   *  Same data as the Launched event except the launch block, which only seeds
+   *  the trades scan and safely falls back to the deployment start block. */
+  private async loadCoresFromViews(latest: bigint): Promise<Core[]> {
+    try {
+      const total = Number(
+        (await this.publicClient.readContract({
+          address: this.v4.factory,
+          abi: factoryAbi,
+          functionName: "totalTokens",
+        })) as bigint,
+      );
+      if (total <= this.cores.size) {
+        this.coresUpTo = latest;
+        return [...this.cores.values()];
+      }
+      const addrs = (await this.publicClient.multicall({
+        allowFailure: false,
+        contracts: Array.from({ length: total }, (_, i) => ({
+          address: this.v4.factory,
+          abi: factoryAbi as any,
+          functionName: "allTokens",
+          args: [BigInt(i)],
+        })),
+      })) as Address[];
+      for (const raw of addrs) {
+        const token = raw.toLowerCase() as Address;
+        if (this.cores.has(token)) continue;
+        try {
+          const [listing, name, symbol, supply, metaURI] = (await this.publicClient.multicall({
+            allowFailure: false,
+            contracts: [
+              { address: this.v4.factory, abi: factoryAbi, functionName: "listings", args: [token] },
+              { address: token, abi: tokenAbi, functionName: "name" },
+              { address: token, abi: tokenAbi, functionName: "symbol" },
+              { address: token, abi: tokenAbi, functionName: "totalSupply" },
+              { address: token, abi: tokenAbi, functionName: "metadataURI" },
+            ],
+          })) as [[Address, Address, number, bigint, `0x${string}`], string, string, bigint, string];
+          let metadata: Record<string, unknown> = {};
+          try {
+            metadata = JSON.parse(metaURI);
+          } catch {
+            metadata = { description: metaURI };
+          }
+          this.cores.set(token, {
+            address: token,
+            creator: listing[0].toLowerCase() as Address,
+            stock: listing[1].toLowerCase() as Address,
+            taxBps: Number(listing[2]),
+            poolId: listing[4],
+            launchBlock: this.startBlock,
+            createdAt: Number(listing[3]),
+            name,
+            symbol,
+            totalSupply: supply,
+            metadata,
+            tokenIsCurrency0: BigInt(token) < BigInt(this.v4.weth),
+          });
+        } catch {
+          // Skip a token that can't be read this pass; picked up next refresh.
+        }
+      }
+      this.coresUpTo = latest;
+    } catch {
+      // Keep whatever we already have; retried on the next refresh.
+    }
+    return [...this.cores.values()];
+  }
+
   private async estTs(block: bigint, latest: bigint): Promise<number> {
     if (!this.blockTsAnchor || this.blockTsAnchor.block !== latest) {
       try {
@@ -191,7 +282,7 @@ export class V4Client {
   }
 
   private async loadTrades(token: Address): Promise<TradeRecord[]> {
-    // Ensure the token's core is loaded — a caller may reach trades/candles
+    // Ensure the token's core is loaded; a caller may reach trades/candles
     // without having listed tokens first (e.g. a serverless endpoint hit cold,
     // or a deep link straight to a token page).
     await this.loadCores();
@@ -201,17 +292,11 @@ export class V4Client {
     const cached = this.tradesCache.get(key);
     try {
       const latest = await this.publicClient.getBlockNumber();
-      // Only scan blocks we haven't seen yet, then append — keeps every read
+      // Only scan blocks we haven't seen yet, then append; keeps every read
       // cheap while staying live. First read starts at the launch block.
       const fromBlock = cached ? cached.upTo + 1n : core.launchBlock;
       if (cached && fromBlock > latest) return cached.records;
-      const logs = (await this.publicClient.getLogs({
-        address: this.v4.poolManager,
-        event: poolSwapEvent as any,
-        args: { id: core.poolId },
-        fromBlock,
-        toBlock: latest,
-      })) as any[];
+      const { logs, upTo } = await this.swapLogs(core, fromBlock, latest);
       const fresh: TradeRecord[] = logs.map((log) => {
         const amount0 = log.args.amount0 as bigint;
         const amount1 = log.args.amount1 as bigint;
@@ -238,11 +323,113 @@ export class V4Client {
         for (const r of fresh) r.timestamp = await this.estTs(BigInt(r.blockNumber), latest);
       }
       const records = cached ? cached.records.concat(fresh) : fresh;
-      this.tradesCache.set(key, { records, upTo: latest });
+      // `upTo` is the height the log source is actually complete to (behind
+      // `latest` while the receipt scanner backfills), so nothing is skipped.
+      this.tradesCache.set(key, { records, upTo });
       return records;
     } catch {
       return this.tradesCache.get(key)?.records ?? [];
     }
+  }
+
+  /** While set (epoch ms), eth_getLogs is considered broken on this RPC and
+   *  every consumer goes straight to view/receipt fallbacks. Persisted so a
+   *  reload doesn't re-pay the multi-second probe before first paint. */
+  private logsBrokenUntil = (() => {
+    try {
+      return Number(globalThis.localStorage?.getItem("lp.logsBrokenUntil") ?? 0) || 0;
+    } catch {
+      return 0;
+    }
+  })();
+  private parkLogs() {
+    this.logsBrokenUntil = Date.now() + 300_000;
+    try {
+      globalThis.localStorage?.setItem("lp.logsBrokenUntil", String(this.logsBrokenUntil));
+    } catch {
+      /* private mode */
+    }
+  }
+
+  /** Swap logs for one pool with the block height the result is complete up
+   *  to. Prefers eth_getLogs; when the RPC has it disabled, serves whatever
+   *  the shared receipt scanner has ingested so far and refreshes it in the
+   *  background; list paints never wait on a block walk. */
+  private async swapLogs(
+    core: Core,
+    fromBlock: bigint,
+    latest: bigint,
+  ): Promise<{ logs: any[]; upTo: bigint }> {
+    if (Date.now() >= this.logsBrokenUntil) {
+      try {
+        const logs = (await this.publicClient.getLogs({
+          address: this.v4.poolManager,
+          event: poolSwapEvent as any,
+          args: { id: core.poolId },
+          fromBlock,
+          toBlock: latest,
+        })) as any[];
+        return { logs, upTo: latest };
+      } catch {
+        this.parkLogs();
+      }
+    }
+    void this.scanReceiptsTo(latest).catch(() => undefined);
+    const upTo = this.receiptUpTo;
+    const logs = (this.receiptLogsByPool.get(core.poolId) ?? [])
+      .filter((lg) => BigInt(lg.blockNumber) >= fromBlock && BigInt(lg.blockNumber) <= upTo)
+      .map((lg) => {
+        const d = decodeEventLog({ abi: [poolSwapEvent] as any, data: lg.data, topics: lg.topics }) as any;
+        return {
+          args: d.args,
+          blockNumber: BigInt(lg.blockNumber),
+          transactionHash: lg.transactionHash,
+          logIndex: Number(lg.logIndex),
+        };
+      });
+    return { logs, upTo };
+  }
+
+  /** Walk block receipts from the last scanned block to `latest` and collect
+   *  PoolManager Swap logs per pool. Shared across all tokens; each block is
+   *  fetched once no matter how many pools are on screen. */
+  private async scanReceiptsTo(latest: bigint): Promise<void> {
+    while (this.receiptInflight) await this.receiptInflight;
+    if (this.receiptUpTo >= latest) return;
+    this.receiptInflight = (async () => {
+      let from = this.receiptUpTo === 0n ? latest - RECEIPT_BACKFILL : this.receiptUpTo + 1n;
+      if (from < 1n) from = 1n;
+      if (latest - from > RECEIPT_MAX_CATCHUP) from = latest - RECEIPT_MAX_CATCHUP;
+      const blocks: bigint[] = [];
+      for (let b = from; b <= latest; b++) blocks.push(b);
+      const pm = this.v4.poolManager.toLowerCase();
+      for (let i = 0; i < blocks.length; i += RECEIPT_CHUNK) {
+        const chunk = blocks.slice(i, i + RECEIPT_CHUNK);
+        const settled = await Promise.allSettled(
+          chunk.map(
+            (b) =>
+              this.publicClient.request({
+                method: "eth_getBlockReceipts" as any,
+                params: [`0x${b.toString(16)}`] as any,
+              }) as Promise<any[]>,
+          ),
+        );
+        for (const r of settled) {
+          if (r.status !== "fulfilled" || !Array.isArray(r.value)) continue;
+          for (const rec of r.value) {
+            for (const lg of rec?.logs ?? []) {
+              if ((lg.address ?? "").toLowerCase() !== pm) continue;
+              if (lg.topics?.[0] !== SWAP_TOPIC || !lg.topics[1]) continue;
+              const arr = this.receiptLogsByPool.get(lg.topics[1]) ?? [];
+              arr.push(lg);
+              this.receiptLogsByPool.set(lg.topics[1], arr);
+            }
+          }
+        }
+      }
+      this.receiptUpTo = latest;
+    })().finally(() => (this.receiptInflight = null));
+    await this.receiptInflight;
   }
 
   private initPriceCache = new Map<string, bigint>();
@@ -268,6 +455,25 @@ export class V4Client {
     }
   }
 
+  /** Current pool price straight from slot0 (StateView), so tokens keep a real
+   *  price and market cap even when swap logs are unavailable. */
+  private async poolPriceNow(core: Core): Promise<bigint> {
+    if (this.v4.stateView) {
+      try {
+        const [sqrtP] = (await this.publicClient.readContract({
+          address: this.v4.stateView,
+          abi: stateViewAbi,
+          functionName: "getSlot0",
+          args: [core.poolId],
+        })) as [bigint, number, number, number];
+        if (sqrtP !== 0n) return this.priceWeiFromSqrt(sqrtP, core.tokenIsCurrency0);
+      } catch {
+        /* fall through to the Initialize-event price */
+      }
+    }
+    return this.initPrice(core);
+  }
+
   private async summarize(core: Core): Promise<TokenSummary> {
     // Surface the reward stock on the metadata so lists can badge it without a
     // second read (the shared TokenSummary type has no dedicated field).
@@ -276,7 +482,7 @@ export class V4Client {
     }
     const trades = await this.loadTrades(core.address);
     const last = trades[trades.length - 1];
-    const priceWei = last ? BigInt(last.priceWei) : await this.initPrice(core);
+    const priceWei = last ? BigInt(last.priceWei) : await this.poolPriceNow(core);
     const priceWethPerToken = Number(priceWei) / 1e18;
     const supplyWhole = Number(core.totalSupply) / 1e18;
     const mcapUsd = priceWethPerToken * supplyWhole * this.nativeUsd;
@@ -515,7 +721,7 @@ export class V4Client {
   }
 
   /** Realize accrued tax into holder stock rewards, creator fees and protocol
-   *  (50/25/25). Permissionless — anyone can trigger it for a token. */
+   *  (50/25/25). Permissionless; anyone can trigger it for a token. */
   async harvest(token: Address): Promise<`0x${string}`> {
     const wc = this.requireWallet();
     return wc.writeContract({

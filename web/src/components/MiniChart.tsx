@@ -9,7 +9,7 @@ const DOWN = "#E5484D";
 
 /**
  * Minimal line sparkline of the market since launch, drawn from real 15m
- * candle closes with a soft area fill. Presentational only — no axes, no
+ * candle closes with a soft area fill. Presentational only; no axes, no
  * interaction. Colored by the direction of the window. Loads lazily and
  * refreshes on an interval, so the strip tracks the market without reloads.
  */

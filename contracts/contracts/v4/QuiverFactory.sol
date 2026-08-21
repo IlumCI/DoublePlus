@@ -25,8 +25,8 @@ import {QuiverHook} from "./QuiverHook.sol";
 /// @notice One-transaction launcher for the Quiver V4 launchpad. It mints a
 ///         fixed-supply token, opens a native/token Uniswap V4 pool bound to
 ///         the Quiver hook, and seeds the entire supply as single-sided
-///         liquidity at a fixed $5,000 starting market cap. Holders of the new
-///         token then earn a chosen tokenized stock from the trading tax; the
+///         liquidity at a fixed $3,000 starting market cap. The creator of the new
+///         token then earns 80% of the trading tax via the hook harvest; the
 ///         creator earns a claimable native share; part of every trade buys
 ///         back and burns the token; the rest funds the protocol.
 contract QuiverFactory is Ownable, ReentrancyGuard, IUnlockCallback {
@@ -34,7 +34,7 @@ contract QuiverFactory is Ownable, ReentrancyGuard, IUnlockCallback {
     using PoolIdLibrary for PoolKey;
 
     uint256 public constant TOTAL_SUPPLY = 1_000_000_000 ether; // 1e27
-    uint256 public constant INITIAL_MARKET_CAP_USD_8 = 5_000 * 1e8; // $5,000, 8dp
+    uint256 public constant INITIAL_MARKET_CAP_USD_8 = 3_000 * 1e8; // $3,000, 8dp
     int24 public constant TICK_SPACING = 60;
     uint24 public constant LP_FEE = 0; // the hook tax is the only fee
     uint16 public constant MAX_TAX_BPS = 1000; // 10%
@@ -216,7 +216,7 @@ contract QuiverFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         ex[1] = address(this);
         qt.initHook(address(hook), ex);
 
-        // 4. Price the pool at the $5,000 start cap and seed the full supply
+        // 4. Price the pool at the $3,000 start cap and seed the full supply
         //    single-sided (token only) in the range adjacent to spot.
         (uint160 sqrtPriceX96, int24 tickLower, int24 tickUpper) = _initialPosition(tokenIsCurrency0);
         poolManager.initialize(key, sqrtPriceX96);

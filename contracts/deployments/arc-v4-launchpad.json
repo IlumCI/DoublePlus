@@ -1,0 +1,28 @@
+{
+  "network": "robinhood",
+  "chainId": 5042,
+  "startBlock": 12955261,
+  "deployer": "0xd6F0e8943421E19f3d800542A2aC056bA929c8ac",
+  "protocolAdmin": "0x5dddea56774f01fc9d207bbd7b7633596a2f4a0b",
+  "treasury": "0x5dddea56774f01fc9d207bbd7b7633596a2f4a0b",
+  "renounced": false,
+  "nativeUsdPrice8": "100000000",
+  "v4": {
+    "poolManager": "0x8366a39CC670B4001A1121B8F6A443A643e40951",
+    "weth": "0xD79aB912c0c5cdDa7FAC89C75deB6ae84028e82e",
+    "usdg": "0xD79aB912c0c5cdDa7FAC89C75deB6ae84028e82e"
+  },
+  "contracts": {
+    "create2Deployer": "0xaDB24Cb272919c8FD6dC6746afB1e2CEE4D18927",
+    "hook": "0xfE1e80495C412cF3f4C0dE305C9Ca1570bbA8044",
+    "factory": "0x3004664a07bDA6CbD416C9486Dc1212eE81fA1fC",
+    "router": "0x6dE8C12324Cd13E40E813B390F8Eea38DBA299b0"
+  },
+  "rewards": [
+    {
+      "symbol": "WUSDT0",
+      "address": "0xD79aB912c0c5cdDa7FAC89C75deB6ae84028e82e",
+      "mode": "dollar"
+    }
+  ]
+}

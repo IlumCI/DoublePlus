@@ -1,0 +1,12 @@
+# Keep the Docker build context tiny: the gateway only needs gateway/.
+.git
+node_modules
+**/node_modules
+web
+contracts
+docs
+sdk
+packages
+**/dist
+**/.vercel
+*.log

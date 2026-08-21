@@ -15,3 +15,5 @@ data/*.db-wal
 data/*.db-shm
 contracts/deployments/localnet.json
 .vercel/
+.vercel
+.env*

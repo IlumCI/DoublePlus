@@ -5,11 +5,23 @@ import { keccak256, toHex } from "viem";
 import { StockLogo } from "../components/StockLogo";
 import { Field, inputClass } from "../components/ui";
 import { client } from "../lib/client";
+import { addresses, env } from "../lib/env";
+import { BRAND_FLAVOR, IS_STOCK_BOARD } from "../lib/brand";
 import { STOCKS } from "../lib/v4/stocks";
 import { ensureSdkWallet, errorText, useWallet } from "../lib/useWallet";
 import { useUi } from "../store";
+import { LaunchBoard } from "./LaunchBoard";
+import { LaunchBase } from "./LaunchBase";
 
 const LAUNCHED_TOPIC = keccak256(toHex("Launched(address,address,address,uint16,bytes32)"));
+const TOKEN_CREATED_TOPIC = keccak256(
+  toHex("TokenCreated(address,address,string,string,string,uint256)"),
+);
+const IS_STABLE = String(import.meta.env.VITE_PROTOCOL ?? "") === "stable-v3";
+/** Creator-fee product: fixed 1% trade fee split 80/20 creator/platform.
+ *  True on the Stable V3 protocol and on V4 deployments with fee mode
+ *  "creator" (Arc). */
+const CREATOR_MODE = IS_STABLE || String(import.meta.env.VITE_FEE_MODE ?? "") === "creator";
 
 /**
  * One-step V4 launch. The creator picks the tokenized stock holders will earn
@@ -17,6 +29,16 @@ const LAUNCHED_TOPIC = keccak256(toHex("Launched(address,address,address,uint16,
  * are fixed protocol rules.
  */
 export function LaunchPage() {
+  // The Base stock launchpad pairs a tokenized stock and pays holders that
+  // stock through a per-coin vault; its launch screen picks the stock.
+  if (IS_STOCK_BOARD) return <LaunchBase />;
+  // The Robinhood-chain board brand pairs against any onchain token and pays
+  // holders 80% of fees in it; that flow has its own launch screen.
+  if (BRAND_FLAVOR === "copair") return <LaunchBoard />;
+  return <LaunchDefault />;
+}
+
+function LaunchDefault() {
   const { isConnected, connectFirst } = useWallet();
   const pushToast = useUi((s) => s.pushToast);
   const navigate = useNavigate();
@@ -29,8 +51,10 @@ export function LaunchPage() {
     twitter: "",
     telegram: "",
   });
-  const [stock, setStock] = useState(STOCKS[0].address);
-  const [taxPct, setTaxPct] = useState(3);
+  const dollarMode = env.rewardMode === "dollar";
+  // Dollar mode: the reward is the wrapped native itself; no picker.
+  const [stock, setStock] = useState(dollarMode ? addresses.weth : STOCKS[0].address);
+  const [taxPct, setTaxPct] = useState(CREATOR_MODE ? 1 : 3);
   const [busy, setBusy] = useState(false);
   const [logoData, setLogoData] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
@@ -53,9 +77,13 @@ export function LaunchPage() {
         const webp = canvas.toDataURL("image/webp", quality);
         return webp.startsWith("data:image/webp") ? webp : canvas.toDataURL("image/jpeg", quality);
       };
-      let out = render(96, 0.8);
-      if (out.length > 12_000) out = render(96, 0.55);
-      if (out.length > 12_000) out = render(64, 0.55);
+      // 256px keeps cards and the token page sharp. The budget bounds the
+      // on-chain string so the launch transaction stays well inside the block
+      // gas limit; quality and size step down only if a busy image needs it.
+      let out = render(256, 0.8);
+      if (out.length > 24_000) out = render(256, 0.62);
+      if (out.length > 24_000) out = render(192, 0.62);
+      if (out.length > 24_000) out = render(128, 0.6);
       setLogoData(out);
     } catch {
       pushToast({ kind: "error", title: "Could not read that image", body: "Try a PNG or JPG file." });
@@ -68,12 +96,22 @@ export function LaunchPage() {
     setBusy(true);
     try {
       if (!(await ensureSdkWallet())) throw new Error("Wallet session expired. Reconnect and try again.");
+      // Store canonical URLs on-chain: "@handle" becomes the platform link and
+      // a bare "x.com/…" gets https:// so it renders as a working link.
+      const url = (raw: string, platform?: "x" | "telegram") => {
+        const s = raw.trim();
+        if (!s) return "";
+        if (s.startsWith("@") && platform) {
+          return platform === "x" ? `https://x.com/${s.slice(1)}` : `https://t.me/${s.slice(1)}`;
+        }
+        return /^https?:\/\//i.test(s) ? s : `https://${s}`;
+      };
       const metadata = JSON.stringify({
         description: form.description.trim(),
         logo: logoData,
-        website: form.website.trim(),
-        twitter: form.twitter.trim(),
-        telegram: form.telegram.trim(),
+        website: url(form.website),
+        twitter: url(form.twitter, "x"),
+        telegram: url(form.telegram, "telegram"),
       });
       const hash = await (client as any).createToken({
         name: form.name.trim(),
@@ -84,7 +122,9 @@ export function LaunchPage() {
       });
       pushToast({ kind: "info", title: "Launch submitted", txHash: hash });
       const receipt = await client.publicClient.waitForTransactionReceipt({ hash });
-      const log = receipt.logs.find((l) => l.topics[0] === LAUNCHED_TOPIC);
+      const log = receipt.logs.find(
+        (l) => l.topics[0] === LAUNCHED_TOPIC || l.topics[0] === TOKEN_CREATED_TOPIC,
+      );
       pushToast({ kind: "success", title: "Token is live", body: "Pool open, trading enabled.", txHash: hash });
       if (log?.topics[1]) navigate(`/token/0x${log.topics[1].slice(26)}`);
       else navigate("/");
@@ -95,14 +135,18 @@ export function LaunchPage() {
     }
   };
 
-  const selectedStock = STOCKS.find((s) => s.address === stock)!;
+  const selectedStock = STOCKS.find((s) => s.address === stock);
 
   return (
     <div className="mx-auto max-w-lg px-4 pb-16 pt-5 sm:px-5">
       <h1 className="text-[18px] font-bold tracking-tight text-ink">Launch a token</h1>
       <p className="mt-1 text-[12.5px] leading-relaxed text-ink-2">
         One transaction mints your token, opens a live market and seeds the full supply. Every trade
-        rewards holders with the stock you pick.
+        {CREATOR_MODE
+          ? " pays you 80% of the pool fee."
+          : dollarMode
+            ? " pays holders real dollars."
+            : " rewards holders with the stock you pick."}
       </p>
 
       <form onSubmit={submit} className="mt-4 space-y-4 rounded-xl border border-edge bg-panel p-4">
@@ -147,38 +191,64 @@ export function LaunchPage() {
             placeholder="What is this token about?" maxLength={500} />
         </Field>
 
-        {/* Reward stock picker */}
-        <div>
-          <label className="mb-1.5 block text-[12.5px] font-medium text-ink">
-            Holders earn <span className="text-ink-3">· {selectedStock.symbol}</span>
-          </label>
-          <div className="grid grid-cols-5 gap-1.5">
-            {STOCKS.map((s) => (
-              <button
-                type="button"
-                key={s.address}
-                onClick={() => setStock(s.address)}
-                title={s.name}
-                className={`flex flex-col items-center gap-1 rounded-lg border py-2 text-[11px] font-bold transition-colors ${
-                  stock === s.address ? "border-accent bg-accent/10 text-accent-ink" : "border-edge text-ink-2 hover:border-edge-2 hover:text-ink"
-                }`}
-              >
-                <StockLogo address={s.address} symbol={s.symbol} size={22} />
-                {s.symbol}
-              </button>
-            ))}
+        {/* Reward; creator-fee note on Stable, stock picker elsewhere */}
+        {CREATOR_MODE ? (
+          <div className="rounded-lg border border-accent/25 bg-accent/[0.04] px-3 py-2.5">
+            <p className="text-[12.5px] font-medium text-ink">
+              You earn <span className="text-accent-ink">· 80% of trading fees</span>
+            </p>
+            <p className="mt-0.5 text-[11.5px] leading-relaxed text-ink-3">
+              Every trade pays the fixed 1% Uniswap pool fee. Harvest it anytime: 80% goes
+              straight to you in {env.nativeSymbol}, 20% to the platform. No taxes on the token
+              itself.
+            </p>
           </div>
-        </div>
+        ) : dollarMode ? (
+          <div className="rounded-lg border border-accent/25 bg-accent/[0.04] px-3 py-2.5">
+            <p className="text-[12.5px] font-medium text-ink">
+              Holders earn <span className="text-accent-ink">· dollars</span>
+            </p>
+            <p className="mt-0.5 text-[11.5px] leading-relaxed text-ink-3">
+              The trade tax is harvested and paid out to holders in {env.nativeSymbol}, straight to
+              their wallets. No stock picking. Every launch pays dollars.
+            </p>
+          </div>
+        ) : (
+          <div>
+            <label className="mb-1.5 block text-[12.5px] font-medium text-ink">
+              Holders earn <span className="text-ink-3">· {selectedStock?.symbol}</span>
+            </label>
+            <div className="grid grid-cols-5 gap-1.5">
+              {STOCKS.map((s) => (
+                <button
+                  type="button"
+                  key={s.address}
+                  onClick={() => setStock(s.address)}
+                  title={s.name}
+                  className={`flex flex-col items-center gap-1 rounded-lg border py-2 text-[11px] font-bold transition-colors ${
+                    stock === s.address ? "border-accent bg-accent/10 text-accent-ink" : "border-edge text-ink-2 hover:border-edge-2 hover:text-ink"
+                  }`}
+                >
+                  <StockLogo address={s.address} symbol={s.symbol} size={22} />
+                  {s.symbol}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
-        {/* Tax slider */}
-        <div>
-          <div className="mb-2 flex items-baseline justify-between">
-            <label className="text-[12.5px] font-medium text-ink">Trade tax</label>
-            <span className="tnum text-[13px] font-bold text-accent-ink">{taxPct}%</span>
+        {/* Tax slider; hidden on Stable: the only trading cost is the fixed
+            1% pool fee, split 80% to the creator / 20% to the platform. */}
+        {!CREATOR_MODE && (
+          <div>
+            <div className="mb-2 flex items-baseline justify-between">
+              <label className="text-[12.5px] font-medium text-ink">Trade tax</label>
+              <span className="tnum text-[13px] font-bold text-accent-ink">{taxPct}%</span>
+            </div>
+            <input type="range" min={0} max={10} step={1} value={taxPct} onChange={(e) => setTaxPct(Number(e.target.value))}
+              className="w-full accent-[color:var(--color-accent)]" />
           </div>
-          <input type="range" min={0} max={10} step={1} value={taxPct} onChange={(e) => setTaxPct(Number(e.target.value))}
-            className="w-full accent-[color:var(--color-accent)]" />
-        </div>
+        )}
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Field label="X"><input className={inputClass} value={form.twitter} onChange={set("twitter")} placeholder="x.com/…" /></Field>
@@ -187,8 +257,9 @@ export function LaunchPage() {
         </div>
 
         <dl className="space-y-1.5 border-t border-edge pt-3 text-[12px]">
-          <Row label="Starting market cap" value="$5,000" />
+          <Row label="Starting market cap" value={CREATOR_MODE ? "$3,000" : "$5,000"} />
           <Row label="Supply" value="1,000,000,000" />
+          {CREATOR_MODE && <Row label="Pool fee" value="1% · 80% to you, 20% platform" />}
         </dl>
 
         <button type="submit" disabled={busy}

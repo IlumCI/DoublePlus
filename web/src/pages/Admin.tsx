@@ -20,13 +20,20 @@ import { useUi } from "../store";
  * Actions here are direct transactions to the factory (pause launches, lift a
  * launches) and the hook (distribute a token's accrued fees).
  */
+// Creator-fee deployments (Arc) split harvests 80/20 and quote in the chain's
+// native dollar; legacy deployments keep the 25% WETH wording.
+const CREATOR_MODE = String(import.meta.env.VITE_FEE_MODE ?? "") === "creator";
+const IS_RH = String(import.meta.env.VITE_PROTOCOL ?? "") === "rh-v4";
+const NATIVE = env.nativeSymbol;
+const WRAPPED = `W${NATIVE}`;
+
 export function AdminPage() {
   const { address, isConnected, connectFirst } = useWallet();
   const { data: walletClient } = useWalletClient();
   const pushToast = useUi((s) => s.pushToast);
   const [busyAction, setBusyAction] = useState<string | null>(null);
 
-  // Access is the immutable protocolAdmin — the only surviving privilege once
+  // Access is the immutable protocolAdmin; the only surviving privilege once
   // ownership is renounced (it gates the LP unwind). Not owner().
   const owner = useQuery({
     queryKey: ["v4-protocol-admin"],
@@ -43,17 +50,22 @@ export function AdminPage() {
   const stats = useQuery({
     queryKey: ["v4-stats"],
     queryFn: async () => {
-      const [count, treasury] = await Promise.all([
-        v4Client.publicClient.readContract({ address: v4Client.v4.factory, abi: factoryAbi, functionName: "totalTokens" }),
-        v4Client.publicClient.readContract({ address: v4Client.v4.hook, abi: hookAbi, functionName: "protocolTreasury" }),
-      ]);
-      const treasuryWeth = (await v4Client.publicClient.readContract({
-        address: v4Client.v4.weth,
-        abi: erc20Abi,
-        functionName: "balanceOf",
-        args: [treasury as `0x${string}`],
-      })) as bigint;
-      return { totalTokens: Number(count), treasury: treasury as `0x${string}`, treasuryWeth };
+      const count = await v4Client.publicClient.readContract({ address: v4Client.v4.factory, abi: factoryAbi, functionName: "totalTokens" });
+      // Hood hooks expose the immutable `treasury`; older deployments used
+      // `protocolTreasury`. Try both, best-effort.
+      const treasury = (await v4Client.publicClient
+        .readContract({ address: v4Client.v4.hook, abi: hookAbi, functionName: "treasury" })
+        .catch(() =>
+          v4Client.publicClient
+            .readContract({ address: v4Client.v4.hook, abi: hookAbi, functionName: "protocolTreasury" })
+            .catch(() => "0x0000000000000000000000000000000000000000"),
+        )) as `0x${string}`;
+      const treasuryWeth = /^0x0+$/.test(treasury)
+        ? 0n
+        : ((await v4Client.publicClient
+            .readContract({ address: v4Client.v4.weth, abi: erc20Abi, functionName: "balanceOf", args: [treasury] })
+            .catch(() => 0n)) as bigint);
+      return { totalTokens: Number(count), treasury, treasuryWeth };
     },
     refetchInterval: 20_000,
     enabled: isAdmin,
@@ -61,7 +73,7 @@ export function AdminPage() {
 
   const { data: tokens, loading: tokensLoading } = useTokens(client, { sort: "volume", limit: 50 });
 
-  // Connected admin wallet's WETH — protocol fees are pushed here as WETH on
+  // Connected admin wallet's WETH; protocol fees are pushed here as WETH on
   // every harvest; unwrap converts them to native ETH in the same wallet.
   const myWeth = useQuery({
     queryKey: ["admin-weth", address?.toLowerCase()],
@@ -140,7 +152,7 @@ export function AdminPage() {
     }
     const target = unwind;
     setUnwind(null);
-    runTx("Unwind liquidity", () => writeFactory("unwindPosition", [target.address, Math.round(pct * 100), to]));
+    runTx("Recover liquidity", () => writeFactory("collect", [target.address, Math.round(pct * 100), to]));
   };
 
   // Per-token owner actions: distribute accrued fees, or unwind pooled liquidity.
@@ -153,6 +165,18 @@ export function AdminPage() {
       >
         Distribute
       </button>
+      {IS_RH ? (
+        <button
+          disabled={busyAction !== null}
+          onClick={() =>
+            runTx("Collect wall", () => writeFactory("collectWall", [t.address, address]))
+          }
+          className="rounded-md border border-edge bg-panel px-2.5 py-1 text-[11px] font-semibold text-ink-2 transition-colors hover:border-edge-2 hover:text-ink disabled:opacity-50"
+          title="Pull this coin's bid wall (position + pending WETH) to your wallet"
+        >
+          Collect wall
+        </button>
+      ) : null}
       <button
         disabled={busyAction !== null}
         onClick={() => {
@@ -221,8 +245,8 @@ export function AdminPage() {
 
       {/* Figures strip */}
       <div className="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-edge bg-edge">
-        <Figure label="Tokens launched" value={s ? compact(s.totalTokens) : "—"} />
-        <Figure label="Treasury balance" value={s ? `${fmtWei(s.treasuryWeth)} WETH` : "—"} accent />
+        <Figure label="Tokens launched" value={s ? compact(s.totalTokens) : "–"} />
+        <Figure label="Treasury balance" value={s ? `${fmtWei(s.treasuryWeth)} ${WRAPPED}` : "–"} accent />
       </div>
 
       {/* Protocol treasury */}
@@ -231,15 +255,18 @@ export function AdminPage() {
           <div className="min-w-0">
             <h2 className="text-[13px] font-semibold text-ink">Protocol treasury</h2>
             <p className="mt-0.5 text-[11px] text-ink-3">
-              The protocol's 25% share of every trade's tax is sent here as WETH on each distribution.
-              Unwrap converts it to native ETH in this wallet.
+              {IS_RH
+                ? `The platform's 15% share of every harvest is pushed here as ${WRAPPED}. Unwrap converts it to native ${NATIVE} in this wallet.`
+                : CREATOR_MODE
+                  ? `The protocol's 20% share of every harvest is pushed here as native ${NATIVE}. If a push ever falls back to wrapped ${NATIVE}, unwrap converts it in this wallet.`
+                  : `The protocol's 25% share of every trade's tax is sent here as ${WRAPPED} on each distribution. Unwrap converts it to native ${NATIVE} in this wallet.`}
             </p>
-            <p className="mt-1.5 font-mono text-[12px] text-ink-2">{s ? s.treasury : "—"}</p>
+            <p className="mt-1.5 font-mono text-[12px] text-ink-2">{s ? s.treasury : "–"}</p>
           </div>
           <div className="flex items-center gap-3">
             <div className="text-right">
               <p className="tnum text-[15px] font-semibold text-accent-ink">
-                {myWeth.data !== undefined ? `${fmtWei(myWeth.data)} WETH` : "—"}
+                {myWeth.data !== undefined ? `${fmtWei(myWeth.data)} ${WRAPPED}` : "–"}
               </p>
               <p className="text-[11px] text-ink-3">in your wallet</p>
             </div>
@@ -248,7 +275,7 @@ export function AdminPage() {
               disabled={busyAction !== null || !myWeth.data || myWeth.data === 0n}
               onClick={unwrapWeth}
             >
-              {busyAction === "Unwrap WETH" ? "Unwrapping" : "Unwrap to ETH"}
+              {busyAction === "Unwrap WETH" ? "Unwrapping" : `Unwrap to ${NATIVE}`}
             </Button>
           </div>
         </div>
@@ -343,7 +370,7 @@ export function AdminPage() {
           <div className="w-full max-w-sm rounded-2xl border border-edge bg-panel p-4" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-[14px] font-bold text-ink">Unwind {unwind.symbol} liquidity</h3>
             <p className="mt-1 text-[11.5px] leading-relaxed text-ink-3">
-              Pulls pooled liquidity (token + WETH) to a recipient. This is not reversible and lowers the pool's liquidity.
+              Pulls pooled liquidity (token + {WRAPPED}) to a recipient. This is not reversible and lowers the pool's liquidity.
             </p>
             <label className="mt-3 block text-[11px] font-medium text-ink-2">Percent to remove (1–100)</label>
             <input
