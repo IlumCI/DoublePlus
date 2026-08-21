@@ -27,6 +27,14 @@ const config: HardhatUserConfig = {
       ...(process.env.FORK === "1" && ROBINHOOD_RPC_URL
         ? {
             hardfork: process.env.FORK_HARDFORK ?? "cancun",
+            // A standalone `hardhat node` executes reads at the historical fork
+            // block, which needs a hardfork-activation history for the forked
+            // chain. Treat all of Base's history as cancun so those reads run.
+            chains: {
+              [ROBINHOOD_CHAIN_ID || 8453]: {
+                hardforkHistory: { [process.env.FORK_HARDFORK ?? "cancun"]: 0 },
+              },
+            },
             forking: {
               url: ROBINHOOD_RPC_URL,
               ...(process.env.BASE_FORK_BLOCK ? { blockNumber: Number(process.env.BASE_FORK_BLOCK) } : {}),
