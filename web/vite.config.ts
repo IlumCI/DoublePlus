@@ -8,7 +8,7 @@ import tailwindcss from "@tailwindcss/vite";
  * rewrites them in the emitted HTML so crawlers and the first paint carry the
  * right brand, not just the runtime override in main.tsx.
  */
-const FLAVOR_META: Record<string, { title: string; description: string; icon?: string }> = {
+const FLAVOR_META: Record<string, { title: string; description: string; icon?: string; ogImage?: string }> = {
   hammr: {
     title: "hammr | every coin goes under the hammer",
     description:
@@ -30,6 +30,7 @@ const FLAVOR_META: Record<string, { title: string; description: string; icon?: s
     title: "basedstonk | launch a coin, earn real stock",
     description:
       "basedstonk.fun. Launch a memecoin on Base paired with a tokenized stock. Every trade rewards holders in that stock: hold the coin, earn NVIDIA, Apple, Google and more.",
+    ogImage: "https://basedstonk.vercel.app/basedstonk-banner.png",
   },
 };
 
@@ -44,6 +45,19 @@ function brandHtml(): Plugin {
         .replace(/<title>[^<]*<\/title>/, `<title>${meta.title}</title>`)
         .replace(/(<meta name="theme-color" content=")[^"]*(")/, `$1#060a09$2`)
         .replace(/(<meta\s+name="description"\s+content=")[^"]*(")/, `$1${meta.description}$2`);
+      // Open Graph / Twitter card so shared links show the brand banner.
+      const og =
+        `  <meta property="og:title" content="${meta.title}" />\n` +
+        `  <meta property="og:description" content="${meta.description}" />\n` +
+        `  <meta property="og:type" content="website" />\n` +
+        (meta.ogImage
+          ? `  <meta property="og:image" content="${meta.ogImage}" />\n` +
+            `  <meta name="twitter:card" content="summary_large_image" />\n` +
+            `  <meta name="twitter:image" content="${meta.ogImage}" />\n`
+          : "") +
+        `  <meta name="twitter:title" content="${meta.title}" />\n` +
+        `  <meta name="twitter:description" content="${meta.description}" />\n`;
+      out = out.replace("</head>", `${og}  </head>`);
       // koi.fun loads its type stack from the HTML head; CSS @import of remote
       // fonts is unreliable once bundled, so inject real <link> tags instead.
       if (String(process.env.VITE_BRAND) === "base") {
