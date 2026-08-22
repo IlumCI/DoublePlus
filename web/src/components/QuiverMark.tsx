@@ -18,7 +18,7 @@ const SRC =
       : BRAND_FLAVOR === "copair"
         ? "/hoodheist-default.png"
         : BRAND_FLAVOR === "base"
-          ? "/stonked-default.svg"
+          ? "/stonk-logo.jpg"
           : "/quiver-default.png";
 
 export function QuiverMark({ className = "" }: { className?: string }) {
