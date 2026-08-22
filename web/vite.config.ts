@@ -27,9 +27,9 @@ const FLAVOR_META: Record<string, { title: string; description: string; icon?: s
     icon: "/steadypads-arc-mark.png",
   },
   base: {
-    title: "stonked | launch a coin, earn real stock",
+    title: "basedstonk | launch a coin, earn real stock",
     description:
-      "stonked.xyz. Launch a memecoin on Base paired with a tokenized stock. Every trade rewards holders in that stock: hold the coin, earn NVIDIA, Apple, Google and more.",
+      "basedstonk.fun. Launch a memecoin on Base paired with a tokenized stock. Every trade rewards holders in that stock: hold the coin, earn NVIDIA, Apple, Google and more.",
   },
 };
 
