@@ -31,7 +31,7 @@ const FLAVOR_META: Record<string, { title: string; description: string; icon?: s
     description:
       "basedstonk.fun. Launch a memecoin on Base paired with a tokenized stock. Every trade rewards holders in that stock: hold the coin, earn NVIDIA, Apple, Google and more.",
     icon: "/stonk-logo.jpg",
-    ogImage: "https://basedstonk.vercel.app/basedstonk-banner.png",
+    ogImage: "https://basedstonk.vercel.app/basedstonk-banner.jpg",
   },
 };
 
