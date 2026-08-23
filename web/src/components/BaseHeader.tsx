@@ -34,8 +34,10 @@ function WalletButton() {
 
 const NAV = [
   { to: "/", end: true, label: "Tokens" },
+  { to: "/feed", label: "Feed" },
   { to: "/party", label: "Pool party" },
   { to: "/leaderboard", label: "Leaderboard" },
+  { to: "/search", label: "Search" },
   { to: "/docs", label: "How it Works" },
 ];
 

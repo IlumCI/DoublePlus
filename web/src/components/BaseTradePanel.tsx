@@ -209,7 +209,11 @@ export function BaseTradePanel({ token, initialSide }: { token: TokenSummary; in
         <div className="tp-payrow">
           <span className="tp-rowlabel">Pay with</span>
           <span className="tp-paysel">
-            {side === "buy" ? <EthMark /> : <TokenLogo token={token} size={18} />}
+            {side === "sell"
+              ? <TokenLogo token={token} size={18} />
+              : pair && !isWeth(pair.address)
+                ? <StockDot sym={paySymbol} />
+                : <EthMark />}
             <span className="tp-paysym">{paySymbol}</span>
           </span>
         </div>
@@ -239,6 +243,16 @@ export function BaseTradePanel({ token, initialSide }: { token: TokenSummary; in
         )}
       </div>
     </div>
+  );
+}
+
+/** Small ticker chip for a stock pair token (no external logo dependency). */
+function StockDot({ sym }: { sym: string }) {
+  return (
+    <span className="grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full text-[8px] font-extrabold"
+      style={{ background: "var(--color-panel-2, #1a2233)", color: "var(--nb-blue, #4d7cff)" }}>
+      {sym.slice(0, 2)}
+    </span>
   );
 }
 

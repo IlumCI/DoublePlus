@@ -142,7 +142,7 @@ export function WalletSheet({ open, onClose }: { open: boolean; onClose: () => v
             <div className="kf-wallet-tokens">
               <div className="kf-wallet-th"><span>Your {`basedstonk`} tokens</span><span>{mine.length}</span></div>
               {mine.length === 0 ? (
-                <p className="hint">This wallet hasn't deployed or received fees from any basedstonk tokens yet.</p>
+                <p className="hint">This wallet hasn't launched any basedstonk tokens yet.</p>
               ) : (
                 mine.map((t) => (
                   <a key={t.address} className="kf-wallet-hrow" href={`/token/${t.address}`}>
