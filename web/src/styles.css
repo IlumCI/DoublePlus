@@ -2775,7 +2775,7 @@ button.bg-accent:disabled {
    tabs (pink active), clean #141416 fields and #18181b presets, and a
    rounded-full action button — green for Buy (dark text), red for Sell. */
 :root[data-brand="base"] .tp-seg { display: flex; gap: 4px; border: 0; background: transparent; border-bottom: 1px solid #27272a; }
-:root[data-brand="base"] .tp-seg button { height: 40px; flex: 1; font-family: var(--font-body); font-size: 14px; font-weight: 500; text-transform: none; letter-spacing: 0; color: #a1a1aa; background: transparent; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+:root[data-brand="base"] .tp-seg button { height: 46px; flex: 1; font-family: var(--font-body); font-size: 16px; font-weight: 500; text-transform: none; letter-spacing: 0; color: #a1a1aa; background: transparent; border: 0; border-radius: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; }
 :root[data-brand="base"] .tp-seg button:hover { background: transparent; color: #f7f7f7; }
 :root[data-brand="base"] .tp-seg button.on { color: var(--color-accent-ink); border-bottom-color: var(--color-accent); font-weight: 600; background: transparent; }
 :root[data-brand="base"] .tp-seg button.buy { border-right: 0; }
@@ -2786,7 +2786,7 @@ button.bg-accent:disabled {
 :root[data-brand="base"] .tp-preset:hover { transform: none; box-shadow: none; border-color: var(--color-accent); color: var(--color-accent-ink); }
 :root[data-brand="base"] .tp-preset:active { transform: scale(.96); box-shadow: none; }
 :root[data-brand="base"] .tp-rows { border-top: 1px solid #27272a; }
-:root[data-brand="base"] .tp-cta { height: 48px; border: 0; border-radius: 999px; font-family: var(--font-body); font-size: 16px; font-weight: 600; letter-spacing: 0; text-transform: none; box-shadow: 0 10px 24px rgba(0, 0, 0, .35); transition: transform .1s, box-shadow .15s, background .15s; }
+:root[data-brand="base"] .tp-cta { height: 54px; border: 0; border-radius: 14px; font-family: var(--font-body); font-size: 17px; font-weight: 600; letter-spacing: 0; text-transform: none; box-shadow: 0 10px 24px rgba(0, 0, 0, .35); transition: transform .1s, box-shadow .15s, background .15s; }
 :root[data-brand="base"] .tp-cta.buy { background: #4ade80; color: #09090b; }
 :root[data-brand="base"] .tp-cta.sell { background: #f87171; color: #f7f7f7; }
 :root[data-brand="base"] .tp-cta:not(:disabled):hover { transform: none; box-shadow: 0 12px 28px rgba(0, 0, 0, .4); }
@@ -2797,42 +2797,42 @@ button.bg-accent:disabled {
 
 /* ---- pools.fun-style Swap card ---- */
 :root[data-brand="base"] .tp-swaphead { display: flex; align-items: center; justify-content: space-between; padding: 2px 2px 14px; }
-:root[data-brand="base"] .tp-swaptitle { font-family: var(--font-head); font-weight: 700; font-size: 22px; color: #f7f7f7; letter-spacing: -.01em; }
+:root[data-brand="base"] .tp-swaptitle { font-family: var(--font-head); font-weight: 700; font-size: 26px; color: #f7f7f7; letter-spacing: -.01em; }
 :root[data-brand="base"] .tp-gear { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 10px; border: 1px solid #27272a; background: #141416; color: #a1a1aa; cursor: pointer; transition: color .12s, border-color .12s; }
 :root[data-brand="base"] .tp-gear:hover { color: #f7f7f7; border-color: #3f3f46; }
-:root[data-brand="base"] .tp-card { border: 1px solid #232327; background: #101012; border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+:root[data-brand="base"] .tp-card { border: 1px solid #232327; background: #101012; border-radius: 18px; padding: 18px 18px 20px; display: flex; flex-direction: column; gap: 18px; }
 
 :root[data-brand="base"] .tp-mode { display: inline-flex; align-self: flex-start; gap: 2px; padding: 3px; background: #18181b; border-radius: 10px; }
 :root[data-brand="base"] .tp-mode button { height: 30px; padding: 0 16px; border: 0; border-radius: 8px; font-family: var(--font-body); font-size: 13px; font-weight: 600; color: #8a8a92; background: transparent; cursor: pointer; }
 :root[data-brand="base"] .tp-mode button.on { background: #2b2b30; color: #f7f7f7; }
 :root[data-brand="base"] .tp-mode button.off:hover { color: #d4d4d8; }
 
-:root[data-brand="base"] .tp-stats { display: flex; flex-direction: column; gap: 8px; }
+:root[data-brand="base"] .tp-stats { display: flex; flex-direction: column; gap: 13px; }
 :root[data-brand="base"] .tp-statrow { display: flex; align-items: center; justify-content: space-between; }
-:root[data-brand="base"] .tp-statlabel { font-family: var(--font-body); font-size: 15px; color: #a1a1aa; }
-:root[data-brand="base"] .tp-statval { font-family: var(--font-body); font-size: 15px; font-weight: 600; color: #f7f7f7; font-variant-numeric: tabular-nums; }
+:root[data-brand="base"] .tp-statlabel { font-family: var(--font-body); font-size: 16px; color: #a1a1aa; }
+:root[data-brand="base"] .tp-statval { font-family: var(--font-body); font-size: 16px; font-weight: 600; color: #f7f7f7; font-variant-numeric: tabular-nums; }
 
-:root[data-brand="base"] .tp-amtrow { display: flex; align-items: center; gap: 14px; }
-:root[data-brand="base"] .tp-amtlabel { font-family: var(--font-body); font-size: 15px; color: #a1a1aa; flex: none; }
-:root[data-brand="base"] .tp-amtfield { flex: 1; display: flex; align-items: center; gap: 8px; height: 52px; padding: 0 14px; border: 1px solid #27272a; background: #141416; border-radius: 12px; }
+:root[data-brand="base"] .tp-amtrow { display: flex; align-items: center; gap: 14px; min-width: 0; }
+:root[data-brand="base"] .tp-amtlabel { font-family: var(--font-body); font-size: 16px; color: #a1a1aa; flex: none; }
+:root[data-brand="base"] .tp-amtfield { flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 8px; height: 60px; padding: 0 16px; border: 1px solid #27272a; background: #141416; border-radius: 14px; }
 :root[data-brand="base"] .tp-amtfield:focus-within { border-color: var(--color-accent); }
-:root[data-brand="base"] .tp-amtinput { flex: 1; min-width: 0; background: transparent; border: 0; outline: 0; font-family: var(--font-body); font-size: 20px; font-weight: 600; color: #f7f7f7; }
+:root[data-brand="base"] .tp-amtinput { flex: 1 1 0; min-width: 0; width: 0; background: transparent; border: 0; outline: 0; font-family: var(--font-body); font-size: 22px; font-weight: 600; color: #f7f7f7; }
 :root[data-brand="base"] .tp-amtinput::placeholder { color: #52525b; }
 :root[data-brand="base"] .tp-stepper { display: flex; flex-direction: column; gap: 1px; color: #a1a1aa; }
 :root[data-brand="base"] .tp-stepper button { display: grid; place-items: center; width: 20px; height: 15px; border: 0; background: transparent; color: inherit; cursor: pointer; border-radius: 4px; }
 :root[data-brand="base"] .tp-stepper button:hover { color: #f7f7f7; background: #232327; }
-:root[data-brand="base"] .tp-amtunit { font-family: var(--font-body); font-size: 15px; font-weight: 600; color: #a1a1aa; flex: none; }
+:root[data-brand="base"] .tp-amtunit { font-family: var(--font-body); font-size: 16px; font-weight: 600; color: #a1a1aa; flex: none; }
 :root[data-brand="base"] .tp-approx { margin-top: -6px; font-family: var(--font-body); font-size: 14px; color: #71717a; }
 
-:root[data-brand="base"] .tp-presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-:root[data-brand="base"] .tp-presets .tp-preset { height: 46px; border-radius: 12px; font-size: 15px; font-weight: 600; background: #18181b; border-color: #232327; }
+:root[data-brand="base"] .tp-presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+:root[data-brand="base"] .tp-presets .tp-preset { height: 56px; border-radius: 14px; font-size: 16px; font-weight: 600; background: #18181b; border-color: #232327; }
 
 :root[data-brand="base"] .tp-payrow, :root[data-brand="base"] .tp-recvrow { display: flex; align-items: center; justify-content: space-between; }
-:root[data-brand="base"] .tp-rowlabel { font-family: var(--font-body); font-size: 15px; color: #a1a1aa; }
+:root[data-brand="base"] .tp-rowlabel { font-family: var(--font-body); font-size: 16px; color: #a1a1aa; }
 :root[data-brand="base"] .tp-paysel { display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px; border: 1px solid #27272a; background: #141416; border-radius: 10px; cursor: default; }
-:root[data-brand="base"] .tp-paysym { font-family: var(--font-body); font-size: 15px; font-weight: 700; color: #f7f7f7; }
+:root[data-brand="base"] .tp-paysym { font-family: var(--font-body); font-size: 16px; font-weight: 700; color: #f7f7f7; }
 :root[data-brand="base"] .tp-paychev { color: #a1a1aa; }
-:root[data-brand="base"] .tp-recvval { font-family: var(--font-body); font-size: 15px; font-weight: 600; color: #f7f7f7; }
+:root[data-brand="base"] .tp-recvval { font-family: var(--font-body); font-size: 16px; font-weight: 600; color: #f7f7f7; }
 
 :root[data-brand="base"] .tp-slip { display: flex; align-items: center; justify-content: space-between; }
 :root[data-brand="base"] .tp-slipbtns { display: inline-flex; gap: 6px; }
