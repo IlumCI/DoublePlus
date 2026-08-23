@@ -1,0 +1,78 @@
+name: Deploy basedstonk
+
+# Builds the base flavor and deploys it to Vercel on every push to the default
+# branch — including the keeper's manifest commits, so fresh reward proofs go
+# live automatically and the claim UI works end to end.
+#
+# Required repo secret:
+#   VERCEL_TOKEN   a Vercel token with access to the kf-app project
+on:
+  push:
+    branches: [claude/relaxed-mayer-ln64im]
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-basedstonk
+  cancel-in-progress: true
+
+env:
+  # Vercel project identifiers (not secrets — they appear in every deploy URL).
+  VERCEL_ORG_ID: team_lk1ckVdpYplOMlYBlWsSZ5u2
+  VERCEL_PROJECT_ID: prj_7CbfQHZTn8yuiV8FTpOJR5O1kgVI
+  # Public base-flavor config (all on-chain addresses; no secrets).
+  VITE_BRAND: base
+  VITE_PROTOCOL: rh-v4
+  VITE_LAUNCH_MODE: base-stock
+  VITE_CHAIN_ID: "8453"
+  VITE_CHAIN_NAME: Base
+  VITE_RPC_URL: https://mainnet.base.org
+  VITE_EXPLORER_URL: https://basescan.org
+  VITE_NATIVE_SYMBOL: ETH
+  VITE_RH_FACTORY: "0x3F0C7039f0426E805873513296B24F7540dD7606"
+  VITE_RH_HOOK: "0x13742234d89BD803A56eB05BEaA4e73439486044"
+  VITE_RH_ROUTER: "0xd5411E734eB6bCb0247ED0f496d39c87Ef54535f"
+  VITE_RH_START_BLOCK: "50245253"
+  VITE_START_BLOCK: "50245253"
+  VITE_V4_POOL_MANAGER: "0x498581fF718922c3f8e6A244956aF099B2652b2b"
+  VITE_V4_WETH: "0x4200000000000000000000000000000000000006"
+  VITE_V4_STATE_VIEW: "0xA3c0c9b65baD0b08107Aa264b0f3dB444b867A71"
+  VITE_FACTORY_ADDRESS: "0x3F0C7039f0426E805873513296B24F7540dD7606"
+  VITE_TOKEN_DEPLOYER_ADDRESS: "0x3F0C7039f0426E805873513296B24F7540dD7606"
+  VITE_WETH_ADDRESS: "0x4200000000000000000000000000000000000006"
+  VITE_MULTICALL3: "0xcA11bde05977b3631167028862bE2a173976CA11"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install deps
+        run: npm install --no-audit --no-fund
+      - name: Build SDK
+        run: npm run build --workspace @launchpad/sdk
+      - name: Build web (base flavor)
+        working-directory: web
+        run: npx vite build --mode base
+      - name: Add SPA rewrite for Vercel
+        run: |
+          cat > web/dist/vercel.json <<'JSON'
+          { "$schema": "https://openapi.vercel.sh/vercel.json", "rewrites": [{ "source": "/((?!assets/|.*\\..*).*)", "destination": "/index.html" }] }
+          JSON
+      - name: Deploy to Vercel + alias
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then echo "VERCEL_TOKEN not set — skipping deploy"; exit 0; fi
+          npm i -g vercel@latest
+          OUT=$(vercel deploy web/dist --prod --yes --token="$VERCEL_TOKEN" --archive=tgz 2>&1) || { echo "$OUT"; exit 1; }
+          echo "$OUT"
+          URL=$(echo "$OUT" | grep -oE 'https://[a-z0-9-]+\.vercel\.app' | tail -1)
+          if [ -z "$URL" ]; then echo "could not parse deployment URL"; exit 1; fi
+          echo "deployed $URL"
+          for A in basedstonk stonked koifun stonkpad; do
+            vercel alias set "$URL" "$A.vercel.app" --token="$VERCEL_TOKEN" || echo "alias $A failed (non-fatal)"
+          done
