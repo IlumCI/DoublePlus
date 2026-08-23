@@ -8,6 +8,7 @@ import { BASE_USDC, BASE_WETH, baseStockUsd } from "../lib/base/routes";
 import { baseStockOf } from "../lib/base/stocks";
 import { ensureSdkWallet, errorText, useWallet } from "../lib/useWallet";
 import { useUi } from "../store";
+import { TokenLogo } from "./TokenLogo";
 
 type Side = "buy" | "sell";
 type Pair = { address: Address; symbol: string; decimals: number };
@@ -209,8 +210,8 @@ export function BaseTradePanel({ token, initialSide }: { token: TokenSummary; in
         <div className="tp-payrow">
           <span className="tp-rowlabel">Pay with</span>
           <span className="tp-paysel">
-            <EthMark />
-            <span className="tp-paysym">ETH</span>
+            {side === "buy" ? <EthMark /> : <TokenLogo token={token} size={18} />}
+            <span className="tp-paysym">{paySymbol}</span>
           </span>
         </div>
 
