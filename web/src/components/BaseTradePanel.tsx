@@ -26,10 +26,12 @@ function pairUsdOf(pair: Pair): number {
 }
 
 /**
- * Pair-denominated trade desk for the Base stock launchpad. A coin trades
- * against its own pair token — USDC or a tokenized stock — through the coin's
- * v4 pool (StockTradeRouter). You pay/receive the pair token, not ETH. The
- * client handles the one-time token approval on the first trade.
+ * Pair-denominated trade desk for the Base stock launchpad, laid out like the
+ * pools.fun Swap card: a Pro/Instant mode toggle, Buy/Sell tabs, a Balance /
+ * Value / PnL readout, an Amount field with a stepper and the pay-token unit,
+ * dollar quick-buys, a "Pay with" selector and a "You receive" estimate. The
+ * coin trades against its own pair token (ETH or a tokenized stock) through the
+ * v4 pool; the client handles the one-time approval on the first trade.
  */
 export function BaseTradePanel({ token, initialSide }: { token: TokenSummary; initialSide?: Side }) {
   const { address, isConnected, connectFirst } = useWallet();
@@ -38,6 +40,7 @@ export function BaseTradePanel({ token, initialSide }: { token: TokenSummary; in
   const [side, setSide] = useState<Side>(initialSide ?? "buy");
   const [amount, setAmount] = useState("");
   const [slip, setSlip] = useState(8);
+  const [showSettings, setShowSettings] = useState(false);
   const [busy, setBusy] = useState(false);
   const [pair, setPair] = useState<Pair | null>(null);
   const [pairBal, setPairBal] = useState<bigint | null>(null);
@@ -85,13 +88,32 @@ export function BaseTradePanel({ token, initialSide }: { token: TokenSummary; in
 
   const payBal = side === "buy" ? pairBal : coinBal;
   const payDecimals = side === "buy" ? (pair?.decimals ?? 18) : 18;
+  const payUsd = side === "buy" ? pUsd : priceUsd;
   const paySymbol = side === "buy" ? (pair ? disp(pair.address, pair.symbol) : "…") : token.symbol;
   const recvSymbol = side === "buy" ? token.symbol : (pair ? disp(pair.address, pair.symbol) : "…");
+
+  // Position readout for the Balance / Value / PnL block (this coin's holding).
+  const coinHeld = coinBal != null ? Number(formatUnits(coinBal, 18)) : null;
+  const coinValueUsd = coinHeld != null && priceUsd > 0 ? coinHeld * priceUsd : null;
 
   const setPct = (pct: number) => {
     if (payBal == null) return;
     const usable = pct === 100 ? (payBal * 99n) / 100n : (payBal * BigInt(pct)) / 100n;
     setAmount(formatUnits(usable, payDecimals));
+  };
+
+  // Dollar quick-buy: set the pay amount to the pay-token value of `usd`.
+  const setUsd = (usd: number) => {
+    if (payUsd <= 0) return;
+    const tokens = usd / payUsd;
+    setAmount(tokens < 1 ? tokens.toPrecision(4).replace(/\.?0+$/, "") : tokens.toFixed(4).replace(/\.?0+$/, ""));
+  };
+
+  // Stepper: nudge the amount up/down by a sensible step for the pay token.
+  const step = (dir: 1 | -1) => {
+    const s = side === "buy" ? 0.01 : Math.max(1, Math.round((amtNum || 1) * 0.1));
+    const next = Math.max(0, (amtNum || 0) + dir * s);
+    setAmount(next === 0 ? "" : String(Number(next.toFixed(side === "buy" ? 4 : 2))));
   };
 
   const parsed = useMemo(() => {
@@ -127,76 +149,100 @@ export function BaseTradePanel({ token, initialSide }: { token: TokenSummary; in
     }
   };
 
+  const dollarPresets = side === "buy" ? [10, 25, 50, 100] : null;
+
   return (
     <div className="tp">
-      <div className="term-head">
-        Trade desk
-        <span className="term-head-sub">pays {pair ? disp(pair.address, pair.symbol) : "the pair"} · {(feeRate * 100).toFixed(taxBps % 100 ? 1 : 0)}% fee</span>
+      <div className="tp-swaphead">
+        <span className="tp-swaptitle">Swap</span>
+        <button className="tp-gear" aria-label="Settings" onClick={() => setShowSettings((v) => !v)}>
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+        </button>
       </div>
-      <div className="tp-body">
+
+      <div className="tp-card">
+        <div className="tp-mode">
+          <button className="off" onClick={() => pushToast({ kind: "info", title: "Pro mode coming soon" })}>Pro</button>
+          <button className="on">Instant</button>
+        </div>
+
         <div className="tp-seg">
           <button onClick={() => { setSide("buy"); setAmount(""); }} className={`buy ${side === "buy" ? "on" : ""}`}>Buy</button>
           <button onClick={() => { setSide("sell"); setAmount(""); }} className={`sell ${side === "sell" ? "on" : ""}`}>Sell</button>
         </div>
 
-        {/* Pay */}
-        <div className="tp-field">
-          <div className="mb-1.5 flex items-baseline justify-between text-[10.5px]">
-            <span className="uppercase tracking-wide text-ink-3">You pay</span>
-            <button className="tnum text-ink-3 transition-colors hover:text-ink" onClick={() => setPct(100)}>
-              Balance {payBal != null ? compact(Number(formatUnits(payBal, payDecimals))) : "0"}
-            </button>
-          </div>
-          <div className="flex items-center gap-2">
-            <input value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="0.0" inputMode="decimal"
-              className="mono min-w-0 flex-1 bg-transparent text-[22px] font-semibold text-ink outline-none placeholder:text-ink-3/60" />
-            <span className="tp-chip">
-              {side === "buy" ? <StockDot sym={paySymbol} /> : <TokenLogo token={token} size={20} />}
-              <span className="text-[13px] font-bold text-ink">{paySymbol}</span>
+        <div className="tp-stats">
+          <StatRow label="Balance" value={coinHeld != null ? `${compact(coinHeld)} ${token.symbol}` : "—"} />
+          <StatRow label="Value" value={coinValueUsd != null ? fmtUsd(coinValueUsd) : "—"} />
+          <StatRow label="PnL" value="—" />
+        </div>
+
+        <div className="tp-amtrow">
+          <span className="tp-amtlabel">Amount</span>
+          <div className="tp-amtfield">
+            <input
+              value={amount}
+              onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))}
+              placeholder="0.0"
+              inputMode="decimal"
+              className="tp-amtinput"
+            />
+            <span className="tp-stepper">
+              <button aria-label="Increase" onClick={() => step(1)}>
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M6 15l6-6 6 6" /></svg>
+              </button>
+              <button aria-label="Decrease" onClick={() => step(-1)}>
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+              </button>
             </span>
-          </div>
-          <div className="mono mt-1 h-3.5 text-[11px] text-ink-3">{est && side === "buy" ? `≈ ${fmtUsd(est.usd)}` : est && side === "sell" ? `≈ ${fmtUsd(est.usd)}` : ""}</div>
-        </div>
-
-        {/* Presets */}
-        <div className="grid grid-cols-4 gap-1.5">
-          {(side === "sell" ? ["25%", "50%", "75%", "Max"] : ["25%", "50%", "75%", "Max"]).map((v, i) => (
-            <button key={v} onClick={() => setPct([25, 50, 75, 100][i])} className="tp-preset tnum">{v}</button>
-          ))}
-        </div>
-
-        {/* Receive */}
-        <div className="tp-field">
-          <div className="mb-1.5 text-[10.5px] uppercase tracking-wide text-ink-3">You receive (est.)</div>
-          <div className="flex items-center gap-2">
-            <span className="mono min-w-0 flex-1 truncate text-[22px] font-semibold text-ink">{est ? compact(est.out) : "0.0"}</span>
-            <span className="tp-chip">
-              {side === "buy" ? <TokenLogo token={token} size={20} /> : <StockDot sym={recvSymbol} />}
-              <span className="text-[13px] font-bold text-ink">{recvSymbol}</span>
-            </span>
+            <span className="tp-amtunit">{paySymbol}</span>
           </div>
         </div>
+        <div className="tp-approx">{est ? `≈ ${fmtUsd(est.usd)}` : "≈ $0"}</div>
 
-        <div className="tp-rows">
-          <Row label="Price" value={priceUsd > 0 ? `${fmtUsd(priceUsd)} / ${token.symbol}` : "–"} />
-          <Row label="Reward" value={pair ? `holders earn ${disp(pair.address, pair.symbol)}` : "–"} />
-          <Row label="Trade fee" value={`${(feeRate * 100).toFixed(taxBps % 100 ? 1 : 0)}%`} />
-          <div className="flex items-center justify-between pt-0.5">
-            <span className="text-ink-3">Slippage</span>
-            <div className="flex items-center gap-1">
+        <div className="tp-presets">
+          {dollarPresets
+            ? dollarPresets.map((d) => (
+                <button key={d} onClick={() => setUsd(d)} className="tp-preset">${d}</button>
+              ))
+            : [25, 50, 75, 100].map((p, i) => (
+                <button key={p} onClick={() => setPct(p)} className="tp-preset">{["25%", "50%", "75%", "Max"][i]}</button>
+              ))}
+        </div>
+
+        <div className="tp-payrow">
+          <span className="tp-rowlabel">Pay with</span>
+          <span className="tp-paysel">
+            {side === "buy" ? <StockDot sym={paySymbol} /> : <TokenLogo token={token} size={18} />}
+            <span className="tp-paysym">{paySymbol}</span>
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="tp-paychev"><path d="M8 9l4-4 4 4M8 15l4 4 4-4" /></svg>
+          </span>
+        </div>
+
+        <div className="tp-recvrow">
+          <span className="tp-rowlabel">You receive</span>
+          <span className="tp-recvval">{est ? `${compact(est.out)} ${recvSymbol}` : "—"}</span>
+        </div>
+
+        {showSettings ? (
+          <div className="tp-slip">
+            <span className="tp-rowlabel">Slippage</span>
+            <div className="tp-slipbtns">
               {[3, 8, 15].map((p) => (
-                <button key={p} onClick={() => setSlip(p)} className={`tnum rounded px-1.5 py-0.5 transition-colors ${slip === p ? "bg-accent/15 font-semibold text-accent-ink" : "text-ink-3 hover:text-ink"}`}>{p}%</button>
+                <button key={p} onClick={() => setSlip(p)} className={slip === p ? "on" : ""}>{p}%</button>
               ))}
             </div>
           </div>
-        </div>
+        ) : null}
 
         {isConnected ? (
           <button onClick={submit} disabled={busy || !parsed || parsed === 0n || Boolean(insufficient) || !pair} className={`tp-cta ${side}`}>
             {busy ? "Confirm in wallet" : insufficient ? "Insufficient balance" : side === "buy" ? `Buy ${token.symbol}` : `Sell ${token.symbol}`}
           </button>
         ) : (
-          <button onClick={connectFirst} className="tp-cta buy">Connect wallet</button>
+          <button onClick={connectFirst} className="tp-cta connect">Connect to trade</button>
         )}
       </div>
     </div>
@@ -206,18 +252,18 @@ export function BaseTradePanel({ token, initialSide }: { token: TokenSummary; in
 /** Small ticker chip for the pair stock (no external logo dependency). */
 function StockDot({ sym }: { sym: string }) {
   return (
-    <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-[8px] font-extrabold"
+    <span className="grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full text-[8px] font-extrabold"
       style={{ background: "var(--color-panel-2, #1a2233)", color: "var(--nb-blue, #4d7cff)" }}>
       {sym.slice(0, 2)}
     </span>
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function StatRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between py-0.5">
-      <span className="text-ink-3">{label}</span>
-      <span className="mono font-medium text-ink-2">{value}</span>
+    <div className="tp-statrow">
+      <span className="tp-statlabel">{label}</span>
+      <span className="tp-statval">{value}</span>
     </div>
   );
 }
