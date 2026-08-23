@@ -2777,7 +2777,8 @@ button.bg-accent:disabled {
 :root[data-brand="base"] .tp-seg { display: flex; gap: 4px; border: 0; background: transparent; border-bottom: 1px solid #27272a; }
 :root[data-brand="base"] .tp-seg button { height: 40px; flex: 1; font-family: var(--font-body); font-size: 14px; font-weight: 500; text-transform: none; letter-spacing: 0; color: #a1a1aa; background: transparent; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; }
 :root[data-brand="base"] .tp-seg button:hover { background: transparent; color: #f7f7f7; }
-:root[data-brand="base"] .tp-seg button.on { color: var(--color-accent-ink); border-bottom-color: var(--color-accent); font-weight: 600; background: transparent; }
+:root[data-brand="base"] .tp-seg button.buy.on { color: var(--color-up); border-bottom-color: var(--color-up); font-weight: 600; background: transparent; }
+:root[data-brand="base"] .tp-seg button.sell.on { color: var(--color-down); border-bottom-color: var(--color-down); font-weight: 600; background: transparent; }
 :root[data-brand="base"] .tp-field { border: 1px solid #27272a; background: #141416; border-radius: 10px; padding: 12px 14px; }
 :root[data-brand="base"] .tp-field:focus-within { outline: 0; border-color: #6d28d9; }
 :root[data-brand="base"] .tp-chip { border: 0; background: #27272a; border-radius: 999px; padding: 5px 12px 5px 6px; }
