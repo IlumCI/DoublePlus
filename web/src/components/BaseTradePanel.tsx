@@ -171,7 +171,6 @@ export function BaseTradePanel({ token, initialSide }: { token: TokenSummary; in
         <div className="tp-stats">
           <StatRow label="Balance" value={coinHeld != null ? `${compact(coinHeld)} ${token.symbol}` : "—"} />
           <StatRow label="Value" value={coinValueUsd != null ? fmtUsd(coinValueUsd) : "—"} />
-          <StatRow label="PnL" value="—" />
         </div>
 
         <div className="tp-amtrow">
