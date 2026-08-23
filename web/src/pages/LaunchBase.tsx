@@ -200,6 +200,11 @@ export function LaunchBase({ onCancel }: { onCancel?: () => void } = {}) {
         </div>
 
         <div className="kf-field">
+          <label>Description <i>(optional)</i></label>
+          <textarea value={form.description} onChange={set("description")} placeholder="What is this coin about?" maxLength={500} rows={3} />
+        </div>
+
+        <div className="kf-field">
           <label>Token Image <i>(optional)</i></label>
           <input ref={fileRef} type="file" accept="image/*" className="hidden"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) onLogoFile(f); }} />
@@ -232,6 +237,11 @@ export function LaunchBase({ onCancel }: { onCancel?: () => void } = {}) {
         <div className="kf-field">
           <label>X URL <i>(optional)</i></label>
           <input type="text" value={form.twitter} onChange={set("twitter")} placeholder="https://x.com/user/status/..." />
+        </div>
+
+        <div className="kf-field">
+          <label>Telegram <i>(optional)</i></label>
+          <input type="text" value={form.telegram} onChange={set("telegram")} placeholder="https://t.me/yourgroup or @handle" />
         </div>
 
         <div className="kf-field">

@@ -38,7 +38,7 @@ export function BaseParty() {
       <section className="kf-hero">
         <h1 className="kf-hero-title-xl">Rewards</h1>
         <p className="kf-hero-copy">
-          Every koi.fun trade streams the paired asset to holders in real time — no snapshots, no waiting. The more a coin trades, the more its holders earn.
+          Every basedstonk trade streams the paired asset to holders in real time — no snapshots, no waiting. The more a coin trades, the more its holders earn.
         </p>
       </section>
 

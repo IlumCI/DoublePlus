@@ -8,13 +8,16 @@ export function BaseStatusBar() {
   return (
     <div className="kf-statusbar">
       <span className="dot" />
-      <b>$KOI</b>
-      <span className="badge">Not live</span>
+      <b>{BRAND.name}<span className="kf-tld">{BRAND.tld}</span></b>
+      <span className="badge">live</span>
       <span className="sp" />
       <span className="up">● {env.chainName}</span>
       <Link to="/">≋ Pools</Link>
       <Link to="/launch">🚀 Launch</Link>
-      <a href={BRAND.twitter} target="_blank" rel="noreferrer">𝕏</a>
+      <Link to="/search">⌕ Search</Link>
+      {BRAND.twitterHandle ? (
+        <a href={BRAND.twitter} target="_blank" rel="noreferrer">𝕏</a>
+      ) : null}
       <Link to="/docs">Docs</Link>
     </div>
   );

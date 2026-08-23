@@ -150,6 +150,17 @@ export const baseFactoryV3ViewsAbi = [
   },
   { type: "function", name: "feeRecipientOf", stateMutability: "view", inputs: [{ type: "address" }], outputs: [{ type: "address" }] },
   { type: "function", name: "rewardVaultOf", stateMutability: "view", inputs: [{ type: "address" }], outputs: [{ type: "address" }] },
+  {
+    type: "function",
+    name: "positions",
+    stateMutability: "view",
+    inputs: [{ type: "address" }],
+    outputs: [
+      { name: "tickLower", type: "int24" },
+      { name: "tickUpper", type: "int24" },
+      { name: "liquidity", type: "uint128" },
+    ],
+  },
 ] as const;
 
 // StockRewardVault: per-coin holder-reward vault. Holders claim their share of

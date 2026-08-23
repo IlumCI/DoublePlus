@@ -34,8 +34,10 @@ function WalletButton() {
 
 const NAV = [
   { to: "/", end: true, label: "Tokens" },
+  { to: "/feed", label: "Feed" },
   { to: "/party", label: "Pool party" },
   { to: "/leaderboard", label: "Leaderboard" },
+  { to: "/search", label: "Search" },
   { to: "/docs", label: "How it Works" },
 ];
 
@@ -71,16 +73,13 @@ export function BaseHeader() {
       <header className="kf-hdr sticky top-0 z-40">
         <div className="kf-hdr-inner">
           <Link to="/" aria-label={BRAND.name} className="kf-brand">
-            <svg className="kf-brand-mark" viewBox="0 0 40 40" fill="none" aria-hidden>
-              <defs>
-                <linearGradient id="koiMark" x1="6" y1="4" x2="34" y2="36" gradientUnits="userSpaceOnUse">
-                  <stop stopColor="#ff5fb6" /><stop offset="1" stopColor="#ff2f9c" />
-                </linearGradient>
-              </defs>
-              <path d="M20 3c-6.5 4-9 8.7-9 14.5 0 3.4 1.6 6.2 4.2 7.9-2.9.5-5.2 2.3-6.7 5.1 3.6 4.2 8 6.5 12.8 6.5 3.4 0 6-1.9 6-5 0-2.2-1.3-3.9-3.4-4.7 4.7-1.9 7.6-6 7.6-11.3C31.5 12.8 27.4 6.7 20 3Z" fill="url(#koiMark)" />
-              <circle cx="17.4" cy="15.6" r="2.5" fill="#fff" />
-              <circle cx="18.1" cy="15.9" r="1.1" fill="#3a0022" />
-            </svg>
+            <img
+              className="kf-brand-mark"
+              src="/stonk-logo.jpg"
+              alt=""
+              aria-hidden
+              style={{ borderRadius: 11, objectFit: "cover" }}
+            />
             <span className="kf-brand-name">{BRAND.name}<span className="kf-tld">{BRAND.tld}</span></span>
           </Link>
 

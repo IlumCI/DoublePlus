@@ -17,7 +17,9 @@ const SRC =
       ? "/steadypads-arc-default.png"
       : BRAND_FLAVOR === "copair"
         ? "/hoodheist-default.png"
-        : "/quiver-default.png";
+        : BRAND_FLAVOR === "base"
+          ? "/stonk-logo.jpg"
+          : "/quiver-default.png";
 
 export function QuiverMark({ className = "" }: { className?: string }) {
   return (

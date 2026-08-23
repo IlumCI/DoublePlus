@@ -36,7 +36,10 @@ jobs:
         working-directory: keeper
         env:
           KEEPER_PRIVATE_KEY: ${{ secrets.KEEPER_PRIVATE_KEY }}
-          BASE_RPC_URL: https://mainnet.base.org
+          # A keyed RPC (BASE_RPC_URL secret) is used when set; otherwise dRPC's
+          # free tier, which serves eth_getLogs for ranges up to 10k blocks.
+          BASE_RPC_URL: ${{ secrets.BASE_RPC_URL || 'https://base.drpc.org' }}
+          LOG_CHUNK: "9000"
         run: node base-keeper.mjs
       - name: Commit refreshed proof manifests
         run: |
@@ -50,8 +53,11 @@ jobs:
             echo "no manifest changes"
           fi
       - name: Publish proofs to the decoupled host (optional)
-        if: ${{ secrets.REWARDS_VERCEL_TOKEN != '' }}
+        env:
+          REWARDS_VERCEL_TOKEN: ${{ secrets.REWARDS_VERCEL_TOKEN }}
+          REWARDS_VERCEL_PROJECT: ${{ secrets.REWARDS_VERCEL_PROJECT }}
         run: |
+          if [ -z "$REWARDS_VERCEL_TOKEN" ]; then echo "no decoupled host configured; proofs ship with the site"; exit 0; fi
           npx --yes vercel@latest deploy web/public/rewards --prod --yes \
-            --token="${{ secrets.REWARDS_VERCEL_TOKEN }}" \
-            --scope="${{ secrets.REWARDS_VERCEL_PROJECT }}" || echo "rewards publish skipped/failed (non-fatal)"
+            --token="$REWARDS_VERCEL_TOKEN" \
+            --scope="$REWARDS_VERCEL_PROJECT" || echo "rewards publish skipped/failed (non-fatal)"

@@ -3,6 +3,7 @@ import { useTokens } from "@launchpad/sdk/react";
 import type { TokenSummary } from "@launchpad/sdk";
 
 import { client } from "../lib/client";
+import { BRAND } from "../lib/brand";
 import { env } from "../lib/env";
 import { fmtUsd, shortAddr } from "../lib/format";
 import { isHidden, isImpersonator } from "../lib/hiddenTokens";
@@ -12,7 +13,7 @@ import { PREVIEW, PREVIEW_ON } from "../lib/base/preview";
 const ord = (n: number) => ["th", "st", "nd", "rd"][n % 10 > 3 || (n % 100 >= 11 && n % 100 <= 13) ? 0 : n % 10];
 
 type Mode = "volume" | "launched";
-type Period = "24h" | "7d" | "30d" | "1y";
+type Period = "24h" | "all";
 
 interface CreatorRow {
   address: string;
@@ -23,7 +24,7 @@ interface CreatorRow {
 }
 
 /**
- * Leaderboard — every creator on koi.fun, ranked by the volume on the coins
+ * Leaderboard — every creator on basedstonk, ranked by the volume on the coins
  * they launch. The period pills switch between 24h and lifetime volume.
  */
 export function BaseLeaderboard() {
@@ -61,7 +62,7 @@ export function BaseLeaderboard() {
     <div className="kf kf-page">
       <section className="kf-hero">
         <h1 className="kf-hero-title-xl">Leaderboard</h1>
-        <p className="kf-hero-copy">Every creator on koi.fun, ranked by the trading volume of the coins they launch.</p>
+        <p className="kf-hero-copy">Every creator on {BRAND.name}, ranked by the trading volume of the coins they launch.</p>
         <p className="kf-hero-note">More volume means more rewards streamed to holders — this is who's driving it.</p>
         <div className="kf-pod-scroll">
           {podium.length === 0
@@ -73,7 +74,7 @@ export function BaseLeaderboard() {
                     <span className="kf-pod-name">{shortAddr(r.address)}</span>
                   </div>
                   <div className="kf-pod-stats">
-                    <div><div className="k">Volume ({period})</div><div className="v">{fmtUsd(vol(r))}</div></div>
+                    <div><div className="k">Volume ({period === "all" ? "all" : period})</div><div className="v">{fmtUsd(vol(r))}</div></div>
                     <div style={{ textAlign: "right" }}><div className="k">Launched</div><div className="v">{r.launched}</div></div>
                   </div>
                 </div>
@@ -90,8 +91,8 @@ export function BaseLeaderboard() {
           <button className={`kf-pill ${mode === "volume" ? "on" : ""}`} onClick={() => setMode("volume")}>Volume</button>
           <button className={`kf-pill ${mode === "launched" ? "on" : ""}`} onClick={() => setMode("launched")}>Launched</button>
           <span className="sp" />
-          {(["24h", "7d", "30d", "1y"] as Period[]).map((p) => (
-            <button key={p} className={`kf-pill ${period === p ? "on" : ""}`} onClick={() => setPeriod(p)}>{p}</button>
+          {(["24h", "all"] as Period[]).map((p) => (
+            <button key={p} className={`kf-pill ${period === p ? "on" : ""}`} onClick={() => setPeriod(p)}>{p === "all" ? "All" : p}</button>
           ))}
         </div>
       </div>
