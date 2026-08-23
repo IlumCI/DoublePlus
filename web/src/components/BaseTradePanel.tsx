@@ -8,7 +8,6 @@ import { BASE_USDC, BASE_WETH, baseStockUsd } from "../lib/base/routes";
 import { baseStockOf } from "../lib/base/stocks";
 import { ensureSdkWallet, errorText, useWallet } from "../lib/useWallet";
 import { useUi } from "../store";
-import { TokenLogo } from "./TokenLogo";
 
 type Side = "buy" | "sell";
 type Pair = { address: Address; symbol: string; decimals: number };
@@ -163,11 +162,6 @@ export function BaseTradePanel({ token, initialSide }: { token: TokenSummary; in
       </div>
 
       <div className="tp-card">
-        <div className="tp-mode">
-          <button className="off" onClick={() => pushToast({ kind: "info", title: "Pro mode coming soon" })}>Pro</button>
-          <button className="on">Instant</button>
-        </div>
-
         <div className="tp-seg">
           <button onClick={() => { setSide("buy"); setAmount(""); }} className={`buy ${side === "buy" ? "on" : ""}`}>Buy</button>
           <button onClick={() => { setSide("sell"); setAmount(""); }} className={`sell ${side === "sell" ? "on" : ""}`}>Sell</button>
@@ -215,9 +209,8 @@ export function BaseTradePanel({ token, initialSide }: { token: TokenSummary; in
         <div className="tp-payrow">
           <span className="tp-rowlabel">Pay with</span>
           <span className="tp-paysel">
-            {side === "buy" ? <StockDot sym={paySymbol} /> : <TokenLogo token={token} size={18} />}
-            <span className="tp-paysym">{paySymbol}</span>
-            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="tp-paychev"><path d="M8 9l4-4 4 4M8 15l4 4 4-4" /></svg>
+            <EthMark />
+            <span className="tp-paysym">ETH</span>
           </span>
         </div>
 
@@ -249,13 +242,14 @@ export function BaseTradePanel({ token, initialSide }: { token: TokenSummary; in
   );
 }
 
-/** Small ticker chip for the pair stock (no external logo dependency). */
-function StockDot({ sym }: { sym: string }) {
+/** ETH diamond mark for the fixed "Pay with" chip. */
+function EthMark() {
   return (
-    <span className="grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full text-[8px] font-extrabold"
-      style={{ background: "var(--color-panel-2, #1a2233)", color: "var(--nb-blue, #4d7cff)" }}>
-      {sym.slice(0, 2)}
-    </span>
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden>
+      <path d="M12 2 5.5 12.2 12 16l6.5-3.8Z" fill="#8aa0ff" />
+      <path d="M12 2 5.5 12.2 12 9.1Z" fill="#c7d3ff" />
+      <path d="M12 17.2 5.5 13.4 12 22l6.5-8.6Z" fill="#8aa0ff" />
+    </svg>
   );
 }
 
