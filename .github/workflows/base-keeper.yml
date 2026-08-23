@@ -36,7 +36,10 @@ jobs:
         working-directory: keeper
         env:
           KEEPER_PRIVATE_KEY: ${{ secrets.KEEPER_PRIVATE_KEY }}
-          BASE_RPC_URL: https://mainnet.base.org
+          # A keyed RPC (BASE_RPC_URL secret) is used when set; otherwise dRPC's
+          # free tier, which serves eth_getLogs for ranges up to 10k blocks.
+          BASE_RPC_URL: ${{ secrets.BASE_RPC_URL || 'https://base.drpc.org' }}
+          LOG_CHUNK: "9000"
         run: node base-keeper.mjs
       - name: Commit refreshed proof manifests
         run: |

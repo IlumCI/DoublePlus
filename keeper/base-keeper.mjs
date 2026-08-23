@@ -70,6 +70,25 @@ const VAULT_ABI = [
 const ERC20_ABI = ["function balanceOf(address) view returns (uint256)"];
 
 const provider = new ethers.JsonRpcProvider(RPC);
+// Public RPCs rate-limit the keeper's log scan hard. Retry every JSON-RPC call
+// with exponential backoff on rate-limit / transient errors so a busy endpoint
+// doesn't abort the whole run.
+{
+  const origSend = provider.send.bind(provider);
+  provider.send = async (method, params) => {
+    for (let i = 0; ; i++) {
+      try {
+        return await origSend(method, params);
+      } catch (e) {
+        const m = String(e?.error?.message ?? e?.info?.error?.message ?? e?.shortMessage ?? e?.message ?? "").toLowerCase();
+        const code = e?.error?.code ?? e?.info?.error?.code;
+        const rate = code === -32016 || code === 429 || m.includes("rate limit") || m.includes("429") || m.includes("too many") || m.includes("timeout");
+        if (!rate || i >= 7) throw e;
+        await new Promise((r) => setTimeout(r, Math.min(15000, 600 * 2 ** i)));
+      }
+    }
+  };
+}
 const keeper = new ethers.Wallet(KEY, provider);
 const factory = new ethers.Contract(dep.contracts.factory, FACTORY_ABI, keeper);
 
