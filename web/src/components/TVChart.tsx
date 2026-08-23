@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Address } from "@launchpad/sdk";
 
 import { makeDatafeed } from "../lib/tvDatafeed";
@@ -27,10 +27,13 @@ function loadTradingView(): Promise<void> {
 export function TVChart({ token, symbol }: { token: Address; symbol: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const idRef = useRef(`tv_${Math.random().toString(36).slice(2)}`);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let widget: any;
     let dead = false;
+    setFailed(false);
     loadTradingView()
       .then(() => {
         if (dead || !ref.current) return;
@@ -55,7 +58,7 @@ export function TVChart({ token, symbol }: { token: Address; symbol: string }) {
             "popup_hints",
           ],
           enabled_features: ["hide_left_toolbar_by_default", "iframe_loading_compatibility_mode"],
-          loading_screen: { backgroundColor: "#14161a", foregroundColor: "#a3e635" },
+          loading_screen: { backgroundColor: "#14161a", foregroundColor: "#2f6bff" },
           overrides: {
             "paneProperties.background": "#14161a",
             "paneProperties.backgroundType": "solid",
@@ -77,7 +80,7 @@ export function TVChart({ token, symbol }: { token: Address; symbol: string }) {
           },
         });
       })
-      .catch(() => undefined);
+      .catch(() => { if (!dead) setFailed(true); });
     return () => {
       dead = true;
       try {
@@ -86,7 +89,20 @@ export function TVChart({ token, symbol }: { token: Address; symbol: string }) {
         /* ignore */
       }
     };
-  }, [token, symbol]);
+  }, [token, symbol, attempt]);
+
+  const retry = () => { tvScript = null; setAttempt((a) => a + 1); };
+
+  if (failed) {
+    return (
+      <div className="flex h-full w-full flex-col items-center justify-center gap-3 text-center text-ink-3">
+        <p className="text-sm">Chart failed to load.</p>
+        <button onClick={retry} className="rounded-lg border border-edge bg-panel px-4 py-2 text-sm text-ink transition-colors hover:border-edge-2">
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   return <div id={idRef.current} ref={ref} className="h-full w-full" />;
 }

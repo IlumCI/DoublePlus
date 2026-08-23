@@ -11,7 +11,20 @@ import { INTERVAL_SECONDS } from "@launchpad/sdk";
 
 import { baseFactoryV3LaunchAbi, baseFactoryV3ViewsAbi, erc20Abi, factoryAbi, hookAbi, poolInitEvent, poolSwapEvent, routerAbi, stateViewAbi, stockRewardVaultAbi, stockTradeRouterAbi, tokenAbi } from "./abis";
 import { pairUsd, resolvePairRoute } from "./routes";
-import { baseStockUsd, resolveBaseRoute } from "../base/routes";
+import { BASE_USDC, baseStockUsd, resolveBaseRoute } from "../base/routes";
+import { baseStockOf } from "../base/stocks";
+
+// Uniswap V3 on Base — the venue holding the tokenized stocks' USDC liquidity,
+// used to read a live stock price off slot0 (see stockUsdLive).
+const UNIV3_FACTORY_BASE = "0x33128a8fC17869897dcE68Ed026d694621f6FDfD" as Address;
+const STOCK_USDC_FEE_TIERS = [3000, 10000, 500, 100] as const;
+const univ3FactoryAbi = [
+  { type: "function", name: "getPool", stateMutability: "view", inputs: [{ type: "address" }, { type: "address" }, { type: "uint24" }], outputs: [{ type: "address" }] },
+] as const;
+const univ3PoolAbi = [
+  { type: "function", name: "slot0", stateMutability: "view", inputs: [], outputs: [{ type: "uint160" }, { type: "int24" }, { type: "uint16" }, { type: "uint16" }, { type: "uint16" }, { type: "uint8" }, { type: "bool" }] },
+  { type: "function", name: "token0", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
+] as const;
 
 const Q96 = 2n ** 96n;
 const TOTAL_SUPPLY = 1_000_000_000n * 10n ** 18n;
@@ -567,6 +580,55 @@ export class RhClient {
     return this.wethUsdCache.v > 0 ? this.wethUsdCache.v : baseStockUsd(this.v4.weth);
   }
 
+  private stockUsdCache = new Map<string, { v: number; at: number }>();
+
+  /** Live USD price of a Base tokenized stock, read from its Uniswap V3 USDC
+   *  pool's slot0. Cached ~60s. Returns null (caller falls back to the curated
+   *  snapshot) when the stock has no USDC pool or the read looks implausible,
+   *  so a bad read can never publish a garbage price. */
+  private async stockUsdLive(stock: Address): Promise<number | null> {
+    const key = stock.toLowerCase();
+    const now = Date.now();
+    const hit = this.stockUsdCache.get(key);
+    if (hit && now - hit.at < 60_000) return hit.v > 0 ? hit.v : null;
+    try {
+      const pools = (await this.publicClient.multicall({
+        allowFailure: true,
+        contracts: STOCK_USDC_FEE_TIERS.map((fee) => ({
+          address: UNIV3_FACTORY_BASE, abi: univ3FactoryAbi, functionName: "getPool", args: [stock, BASE_USDC, fee],
+        })),
+      })) as { status: string; result?: Address }[];
+      const pool = pools
+        .map((p) => (p.status === "success" ? p.result : undefined))
+        .find((a) => a && a.toLowerCase() !== "0x0000000000000000000000000000000000000000") as Address | undefined;
+      if (!pool) { this.stockUsdCache.set(key, { v: 0, at: now }); return null; }
+      const [slot0, token0, decRaw] = (await this.publicClient.multicall({
+        allowFailure: false,
+        contracts: [
+          { address: pool, abi: univ3PoolAbi, functionName: "slot0" },
+          { address: pool, abi: univ3PoolAbi, functionName: "token0" },
+          { address: stock, abi: erc20Abi, functionName: "decimals" },
+        ],
+      })) as [readonly [bigint, number, number, number, number, number, boolean], Address, number];
+      const sqrt = Number(slot0[0]) / 2 ** 96;
+      const priceRaw = sqrt * sqrt; // token1 smallest units per token0 smallest unit
+      const ds = Number(decRaw), du = 6; // USDC has 6 decimals
+      const usdcIsToken0 = token0.toLowerCase() === BASE_USDC.toLowerCase();
+      // token0=USDC -> usd = 10^(ds-du)/priceRaw ; token0=stock -> usd = priceRaw*10^(ds-du)
+      const usd = usdcIsToken0 ? Math.pow(10, ds - du) / priceRaw : priceRaw * Math.pow(10, ds - du);
+      // Sanity: finite, positive, and within 20x of the curated snapshot (guards
+      // against a wrong pool / decimal / ordering slipping a garbage price in).
+      const snap = baseStockOf(stock)?.usd ?? 0;
+      const sane = isFinite(usd) && usd > 0 && (snap <= 0 || (usd > snap / 20 && usd < snap * 20));
+      if (!sane) { this.stockUsdCache.set(key, { v: 0, at: now }); return null; }
+      this.stockUsdCache.set(key, { v: usd, at: now });
+      return usd;
+    } catch {
+      this.stockUsdCache.set(key, { v: 0, at: now });
+      return null;
+    }
+  }
+
   private async pairUsdOf(pair: Address): Promise<number> {
     const key = pair.toLowerCase();
     // Base stocks price off the curated snapshot (also what sizes the launch);
@@ -578,7 +640,11 @@ export class RhClient {
         this.pairUsdCache.set(key, w);
         return w;
       }
-      const u = baseStockUsd(pair);
+      // Stocks (and USDC): USDC is a dollar; a stock reads its live Uniswap V3
+      // USDC-pool price, falling back to the curated snapshot on any failure.
+      if (key === BASE_USDC.toLowerCase()) { this.pairUsdCache.set(key, 1); return 1; }
+      const live = await this.stockUsdLive(pair);
+      const u = live ?? baseStockUsd(pair);
       this.pairUsdCache.set(key, u);
       return u;
     }
