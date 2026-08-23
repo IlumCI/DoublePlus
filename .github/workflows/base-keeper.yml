@@ -50,8 +50,11 @@ jobs:
             echo "no manifest changes"
           fi
       - name: Publish proofs to the decoupled host (optional)
-        if: ${{ secrets.REWARDS_VERCEL_TOKEN != '' }}
+        env:
+          REWARDS_VERCEL_TOKEN: ${{ secrets.REWARDS_VERCEL_TOKEN }}
+          REWARDS_VERCEL_PROJECT: ${{ secrets.REWARDS_VERCEL_PROJECT }}
         run: |
+          if [ -z "$REWARDS_VERCEL_TOKEN" ]; then echo "no decoupled host configured; proofs ship with the site"; exit 0; fi
           npx --yes vercel@latest deploy web/public/rewards --prod --yes \
-            --token="${{ secrets.REWARDS_VERCEL_TOKEN }}" \
-            --scope="${{ secrets.REWARDS_VERCEL_PROJECT }}" || echo "rewards publish skipped/failed (non-fatal)"
+            --token="$REWARDS_VERCEL_TOKEN" \
+            --scope="$REWARDS_VERCEL_PROJECT" || echo "rewards publish skipped/failed (non-fatal)"
