@@ -45,6 +45,10 @@ const HIDDEN_TOKENS: ReadonlySet<string> = new Set([
   // Arc mainnet (5042): nothing hidden. The old TEST/CHECK entries lived on
   // retired factories the current site does not read, and CHECKV3 stays
   // visible until the official launch settles.
+  // Base (8453), StockFlyFactoryV3: keeper/lifecycle validation launches. New
+  // launches by anyone are NOT listed here, so they appear on Explore normally.
+  "8453:0xb20000000000000000000002da484bdfa643272a", // KOIT (test launch)
+  "8453:0xb20000000000000000000041e15f9275f02f383c", // KOIT (test launch)
 ]);
 
 export function isHidden(address: string): boolean {
