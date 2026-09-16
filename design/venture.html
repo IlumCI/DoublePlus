@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>doubleplus.fund — The Filing</title>
-<meta name="description" content="A single venture's dossier: term sheet, curve, telescreen, stamps.">
+<title>doubleplus.fund — Token</title>
+<meta name="description" content="Token page: terms, chart, trade, founder updates.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23fce8ca'/%3E%3Ctext x='4' y='24' font-family='monospace' font-size='20' fill='%234f2b60'%3E%2B%2B%3C/text%3E%3C/svg%3E">
 <link rel="stylesheet" href="dp.css">
 </head>
@@ -13,12 +13,10 @@
 
   <div class="dossier-head">
     <div>
-      <p class="form-no">DOSSIER <span id="d-no">№ ————</span> · OPENED <span id="d-opened">—</span> · THIS PAGE IS GENERATED FROM THE LEDGER, NOT WRITTEN BY HAND</p>
+      <p class="form-no">LAUNCH <span id="d-no">#————</span> · CREATED <span id="d-opened">—</span> · GENERATED FROM THE CHAIN</p>
       <h1 class="page-title" id="d-name">—</h1>
-      <p class="type" style="margin:4px 0 8px; color:var(--ink); max-width:60ch" id="d-pitch">—</p>
+      <p style="margin:6px 0 8px; color:var(--ink); max-width:60ch" id="d-pitch">—</p>
       <p class="holo">token <span id="d-addr">0x—</span> · symbol $<span id="d-sym">—</span> · founder <span id="d-founder-addr">0x51c0…4663</span></p>
-      <p class="legend" id="d-legend" hidden>Subject to completion. The securities-shaped objects herein may not be sold
-        nor may offers to buy be accepted prior to graduation. A red herring, as the old exchanges called it, in actual red.</p>
     </div>
     <div class="stamps" id="d-stamps"></div>
   </div>
@@ -27,26 +25,23 @@
     <!-- LEFT: paper -->
     <div>
       <div class="form-sheet term-sheet">
-        <p class="sec">Exhibit A — Term sheet <span class="agate">sworn at launch, immutable thereafter</span></p>
+        <p class="sec">Terms <span class="agate">set at launch, immutable after</span></p>
         <dl id="d-terms"></dl>
-        <p class="agate" style="margin:12px 0 0">Fee policy runs on-chain forever<button class="fn" popovertarget="fn-policy">2</button>.
-        The protocol adds 1.00% per trade on top; a fifth of it goes to whoever referred the trader<button class="fn" popovertarget="fn-ref">3</button>.</p>
+        <p class="agate" style="margin:12px 0 0">The fee policy runs on-chain<button class="fn" popovertarget="fn-policy">?</button>.
+        The protocol adds 1.00% per trade; 20% of that goes to the trader's referrer<button class="fn" popovertarget="fn-ref">?</button>.</p>
       </div>
 
       <div class="form-sheet" id="d-action-raise" hidden>
-        <p class="sec">Form DP-2 — Subscription <span class="agate">curve pricing; splitting orders gains nothing</span></p>
-        <div class="field"><label for="amt">Amount of ETH tendered</label>
+        <p class="sec">Buy on the curve <span class="agate">price rises with each buy; splitting orders changes nothing</span></p>
+        <div class="field"><label for="amt">ETH amount</label>
           <input type="number" id="amt" value="0.25" step="0.01" min="0">
-          <span class="hint">estimated allotment <b class="mono" id="d-est">—</b> tokens · per-wallet cap applies</span>
+          <span class="hint">you receive about <b class="mono" id="d-est">—</b> tokens · per-wallet cap applies</span>
         </div>
-        <div style="display:flex; gap:14px; align-items:center; flex-wrap:wrap">
-          <button class="action buy">Tender ETH — Copy A</button>
-          <span class="copy-a-note">The buy side is printed in scannable red, like the taxman's copy. The machine reads it; you keep the black copies.</span>
-        </div>
+        <button class="action buy">Buy</button>
       </div>
 
       <div class="form-sheet" id="d-action-trade" hidden>
-        <p class="sec">Form DP-3 — Dealing ticket <span class="agate">routed via VentureRouter, referrer attached</span></p>
+        <p class="sec">Trade</p>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px">
           <div class="field"><label>Buy with ETH</label><input type="number" value="0.1" step="0.01"><button class="action buy" style="margin-top:8px">Buy $<span class="d-sym2">—</span></button></div>
           <div class="field"><label>Sell tokens</label><input type="number" value="1000" step="1"><button class="action ghost" style="margin-top:8px">Sell</button></div>
@@ -54,15 +49,15 @@
       </div>
 
       <div class="form-sheet" id="d-action-refund" hidden>
-        <p class="sec">Form DP-4 — Requisition of refund <span class="agate">the round failed; the machine owes you</span></p>
-        <p class="type" style="margin:0 0 12px">Return your tokens; reclaim your full spend. No haircut, no deadline, no queue. The founder's allocation has already been burned.</p>
-        <button class="action">Reclaim every wei</button>
+        <p class="sec">Refund <span class="agate">this raise failed</span></p>
+        <p style="margin:0 0 12px">Return your tokens and get your full ETH back. No deduction, no deadline.
+        The founder allocation has already been burned.</p>
+        <button class="action">Claim refund</button>
       </div>
 
       <div class="chit" style="margin-top:26px">
-        <div class="scissors"></div>
-        <b>REFERRAL CHIT — CLIP AND CIRCULATE.</b> Whoever binds your link pays you one fifth of the protocol
-        fee on every trade they ever make, settled inline, forever:<br>
+        <b>REFERRAL LINK.</b> Anyone who trades through your link pays you 20% of the protocol fee on every
+        trade they make, paid out in the same transaction:<br>
         <span class="mono" id="d-reflink">https://doubleplus.fund/venture/…?ref=0x1B97…Acce</span>
       </div>
     </div>
@@ -70,37 +65,36 @@
     <!-- RIGHT: telescreen -->
     <div>
       <div class="telescreen">
-        <span class="label">TELESCREEN № 46630-B</span>
+        <span class="label">LIVE MARKET</span>
         <h3 id="d-chart-title">$— / WETH</h3>
         <div id="d-chart"></div>
         <div class="readout" id="d-readout"></div>
       </div>
 
       <div class="telescreen" style="margin-top:18px">
-        <span class="label">THE TAPE</span>
-        <h3>Dealings blotter</h3>
+        <h3>Recent trades</h3>
         <div class="blotter"><table id="d-blotter"></table></div>
       </div>
 
       <div class="form-sheet" style="margin-top:18px">
-        <p class="sec">Exhibit C — Founder communiqués <span class="agate">typed on-chain; the Ministry cannot edit them</span></p>
+        <p class="sec">Founder updates <span class="agate">posted on-chain, uneditable</span></p>
         <div class="typescript" id="d-updates"></div>
       </div>
     </div>
   </div>
 
-  <div id="fn-policy" popover class="note">Buy and sell taxes split across four engines in the proportions sworn in the
-    term sheet: the dev wallet, ETH dividends pushed to every holder, auto-liquidity locked beside the price, and a
-    market-making engine quoting BOTH sides — a bid wall under the price and an ask band above, re-centered by keeper
-    when the market drifts. Snipers in the first seconds pay a decaying premium that lands in the walls.</div>
-  <div id="fn-ref" popover class="note">Referrals bind once, on the first routed trade carrying your chit, and cannot be
-    rebound. The fifth is settled inline in the same transaction as the trade — no claims, no dashboard, no promises.</div>
+  <div id="fn-policy" popover class="note">Buy and sell taxes split across four destinations in the proportions set at
+    launch: dev wallet, ETH dividends to holders, locked auto-liquidity, and a market-making engine that quotes a bid
+    wall under the price and an ask band above it, re-centered automatically when price moves. Trades in the first
+    seconds after graduation pay a decaying premium that also funds the walls.</div>
+  <div id="fn-ref" popover class="note">A referral binds once, on the first trade routed with your link, and cannot be
+    changed. Your share is paid in the same transaction as each trade — nothing to claim.</div>
 
 </main>
 
 <script src="dp.js"></script>
 <script>
-DP.page({ current: "", form: "DP-2/3/4" });
+DP.page({ current: "" });
 
 (function () {
   var no = new URLSearchParams(location.search).get("f") || "0007";
@@ -108,10 +102,10 @@ DP.page({ current: "", form: "DP-2/3/4" });
   for (i = 0; i < DP.VENTURES.length; i++) if (DP.VENTURES[i].no === no) v = DP.VENTURES[i];
   if (!v) v = DP.VENTURES[5];
   var phase = DP.phaseOf(v);
-  document.title = "doubleplus.fund — " + v.name + " (№ " + v.no + ")";
+  document.title = "doubleplus.fund — " + v.name + " (#" + v.no + ")";
 
   function put(id, s) { document.getElementById(id).innerHTML = s; }
-  put("d-no", "№ " + v.no);
+  put("d-no", "#" + v.no);
   put("d-opened", "AUG 2026");
   put("d-name", DP.esc(v.name));
   put("d-pitch", DP.esc(v.pitch));
@@ -121,26 +115,25 @@ DP.page({ current: "", form: "DP-2/3/4" });
   var s2 = document.querySelectorAll(".d-sym2"); for (i = 0; i < s2.length; i++) s2[i].textContent = v.sym;
   put("d-reflink", "https://doubleplus.fund/venture/" + v.addr.slice(0, 10) + "…?ref=0x1B97…Acce");
 
-  /* stamps accrete with the lifecycle */
-  var stamps = ['<span class="stamp blue">DOCKETED<small>FILE ' + v.no + " OPENED</small></span>"];
-  if (phase === "funded" || phase === "graduated") stamps.push('<span class="stamp big">DOUBLEPLUSGOOD<small>TARGET ATTAINED IN FULL</small></span>');
-  if (phase === "graduated") stamps.push('<span class="stamp">IN CIRCULATION<small>LIQUIDITY PERPETUAL · WALLS QUOTED</small></span>');
-  if (phase === "raising") stamps.push('<span class="stamp copy-a">PROVISIONAL<small>SUBJECT TO COMPLETION</small></span>');
-  if (phase === "failed") stamps.push('<span class="stamp red big">MEMORY-HOLED<small>REFUNDS OWED IN FULL</small></span>');
+  /* status stamps */
+  var stamps = [];
+  if (phase === "raising") stamps.push('<span class="stamp blue big">LIVE<small>RAISE OPEN · ' + v.deadline + " LEFT</small></span>");
+  if (phase === "funded" || phase === "graduated") stamps.push('<span class="stamp big">FUNDED<small>TARGET REACHED</small></span>');
+  if (phase === "graduated") stamps.push('<span class="stamp">TRADING<small>POOL LIVE · WALLS QUOTED</small></span>');
+  if (phase === "failed") stamps.push('<span class="stamp red big">FAILED<small>REFUNDS OPEN</small></span>');
   put("d-stamps", stamps.join(""));
-  if (phase === "raising") document.getElementById("d-legend").hidden = false;
 
-  /* term sheet */
+  /* terms */
   var terms = [
     ["Funding target", v.target.toFixed(2) + " ETH"],
-    ["Raised on curve", v.raised.toFixed(2) + " ETH (" + DP.pct(v) + "%)"],
+    ["Raised", v.raised.toFixed(2) + " ETH (" + DP.pct(v) + "%)"],
     ["Founder cut of raise", v.founder + "% — paid only on graduation"],
     ["Founder supply", "10% — vests linearly over 180 days"],
     ["Buy tax / sell tax", v.buy.toFixed(1) + "% / " + v.sell.toFixed(1) + "%"],
-    ["Tax allocation", "dev 25 · dividends 35 · liquidity 20 · market-making 20"],
+    ["Tax split", "dev 25 · dividends 35 · liquidity 20 · market-making 20"],
     ["Protocol fee", "1.00% per trade, 20% of it to referrers"],
     ["Deadline", v.phase === "raising" ? v.deadline + " remaining" : "closed"],
-    ["Holders of record", String(v.holders)]
+    ["Holders", String(v.holders)]
   ];
   var dl = "";
   for (i = 0; i < terms.length; i++) dl += "<dt>" + terms[i][0] + "</dt><dd>" + terms[i][1] + "</dd>";
@@ -154,7 +147,7 @@ DP.page({ current: "", form: "DP-2/3/4" });
   function est() { var e = document.getElementById("d-est"); if (e && amt) e.textContent = (parseFloat(amt.value || 0) * 20481022).toLocaleString("en-US", { maximumFractionDigits: 0 }); }
   if (amt) { amt.addEventListener("input", est); est(); }
 
-  /* telescreen chart */
+  /* chart */
   if (phase === "graduated") {
     put("d-chart", DP.candles(v.seed, 420, 190));
     put("d-readout",
@@ -169,13 +162,13 @@ DP.page({ current: "", form: "DP-2/3/4" });
       bars += '<rect x="' + (j * 14) + '" y="' + (170 - h) + '" width="10" height="' + h + '" fill="var(--phosphor)" opacity="' + (0.35 + (j / pts.length) * 0.65).toFixed(2) + '"/>';
     }
     put("d-chart", '<svg class="px" width="100%" viewBox="0 0 420 178" preserveAspectRatio="none" style="height:178px">' + bars + "</svg>");
-    put("d-readout", "<span>CURVE PRICE RISES WITH EVERY GRAMME TENDERED — EARLIER IS CHEAPER, MATHEMATICALLY, NOT RHETORICALLY</span>");
+    put("d-readout", "<span>CURVE PRICE — RISES WITH EVERY BUY; EARLY BUYERS PAY LESS</span>");
   }
 
-  /* blotter */
+  /* recent trades */
   var rows = "", k, px = phase === "graduated" ? v.price : 0.00000031;
   for (k = 0; k < 14; k++) {
-    var buy = (v.seed * (k + 3)) % 3 !== 0;
+    var buy = phase === "graduated" ? (v.seed * (k + 3)) % 3 !== 0 : true; /* the curve only has buys */
     var qty = ((v.seed * 7919 * (k + 1)) % 90000 + 4000);
     rows += "<tr><td>" + String(14 - k).padStart(2, "0") + ":0" + (k % 6) + "</td>" +
       '<td class="' + (buy ? "b" : "s") + '">' + (buy ? "BUY " : "SELL") + "</td>" +
@@ -185,11 +178,11 @@ DP.page({ current: "", form: "DP-2/3/4" });
   }
   put("d-blotter", rows);
 
-  /* founder communiqués */
+  /* founder updates */
   var ups = {
-    graduated: [["12 SEP 2026", "Walls re-centered twice this week without our asking. The machine minds the shop; we mind the product."], ["04 SEP 2026", "Dividend push #61 delivered to every holder of record. Twenty grammes, as promised."], ["28 AUG 2026", "Graduated. The founder cut is drawn, the rest is locked beside the price. Now we build."]],
-    raising: [["14 SEP 2026", "Term sheet is sworn and cannot be amended, least of all by us. Read Exhibit A before tendering."], ["11 SEP 2026", "Docketed. The curve is open. Early grammes buy more; that is the entire trick, disclosed."]],
-    failed: [["02 SEP 2026", "The round closed short. Our allocation is burned; your refunds are open in perpetuity. We regret only the outcome, not the terms."]]
+    graduated: [["12 SEP 2026", "The MM walls re-centered twice this week on their own. Working on the next product release."], ["04 SEP 2026", "Dividend push #61 went out to every holder automatically."], ["28 AUG 2026", "Graduated. Founder cut drawn, remaining raise locked as liquidity. Building."]],
+    raising: [["14 SEP 2026", "Terms are locked and can't be changed — read them before buying."], ["11 SEP 2026", "Launch is live. The curve is open."]],
+    failed: [["02 SEP 2026", "The raise closed below target. Our allocation is burned; refunds are open with no deadline."]]
   };
   var list = ups[phase === "funded" ? "raising" : phase] || ups.raising, u = "";
   for (i = 0; i < list.length; i++) u += '<div class="entry"><time>' + list[i][0] + "</time>" + DP.esc(list[i][1]) + "</div>";

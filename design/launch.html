@@ -3,74 +3,69 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>doubleplus.fund — Form DP-1</title>
-<meta name="description" content="Application for the docketing of a new venture. One transaction; sworn terms.">
+<title>doubleplus.fund — Launch a token</title>
+<meta name="description" content="Deploy a token, set the terms, open the raise. One transaction.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23fce8ca'/%3E%3Ctext x='4' y='24' font-family='monospace' font-size='20' fill='%234f2b60'%3E%2B%2B%3C/text%3E%3C/svg%3E">
 <link rel="stylesheet" href="dp.css">
 </head>
 <body>
 <main class="shell">
   <div class="page-head">
-    <p class="form-no">FORM DP-1 · APPLICATION FOR THE DOCKETING OF A NEW VENTURE · FILE IN TRIPLICATE (THE MACHINE KEEPS ALL THREE)</p>
-    <h1 class="page-title">FOUND A STARTUP.</h1>
-    <p style="max-width:60ch">One transaction deploys the coin, swears the term sheet, and opens the curve.
-      Everything you declare below is immutable the moment the stamp lands<button class="fn" popovertarget="fn-immutable">1</button>.
-      Fill in ink.</p>
-    <p class="legend">Applications are neither reviewed nor reviewable. The machine does not read your pitch; your backers do.</p>
+    <h1 class="page-title">Launch a token</h1>
+    <p style="max-width:60ch">One transaction deploys the token, locks the terms, and opens the raise.
+      Everything below is immutable after deployment<button class="fn" popovertarget="fn-immutable">?</button>.</p>
   </div>
 
-  <div id="fn-immutable" popover class="note">The factory writes your fee policy into the hook at graduation and throws
-    away the pen. Not the Ministry, not the archivist, not you can amend a sworn term sheet. Choose slowly.</div>
-  <div id="fn-mm" popover class="note">The market-making ration is converted into tight bid AND ask walls beside the
-    price — a fee-funded spread-tightener that follows the market. A keeper re-centers the walls when price drifts;
-    sniper premiums in the first seconds land here too. The walls belong to the pool's hook, publicly, under one label.</div>
+  <div id="fn-immutable" popover class="note">The factory writes your fee policy into the pool hook at graduation.
+    Nobody — including you — can change locked terms afterward. Set them carefully.</div>
+  <div id="fn-mm" popover class="note">The market-making share is converted into tight bid AND ask walls beside the
+    price — a fee-funded spread-tightener that follows the market. A keeper re-centers the walls when price drifts.
+    All of it sits in the pool's own hook, publicly, under one address.</div>
 
   <div class="two-col" style="align-items:start">
     <!-- THE FORM -->
     <div>
       <div class="form-sheet">
-        <p class="sec">Part I — Identity of the instrument</p>
+        <p class="sec">1 · Token</p>
         <div style="display:grid; grid-template-columns:2fr 1fr; gap:0 22px">
-          <div class="field"><label for="f-name">Name of venture</label><input type="text" id="f-name" value="SPEAKWRITE" maxlength="32"></div>
-          <div class="field"><label for="f-sym">Ticker</label><input type="text" id="f-sym" value="SPKW" maxlength="8" style="text-transform:uppercase"></div>
+          <div class="field"><label for="f-name">Name</label><input type="text" id="f-name" value="SCRIBE" maxlength="32"></div>
+          <div class="field"><label for="f-sym">Ticker</label><input type="text" id="f-sym" value="SCRB" maxlength="8" style="text-transform:uppercase"></div>
         </div>
-        <div class="field"><label for="f-pitch">Declared purpose (the pitch)</label>
-          <textarea id="f-pitch">Voice-to-affidavit stenography AI. Dictate anywhere; notarize on-chain.</textarea>
-          <span class="hint">field-sizing: the box grows as you confess more.</span>
+        <div class="field"><label for="f-pitch">Pitch</label>
+          <textarea id="f-pitch">Voice-to-contract transcription AI, notarized on-chain.</textarea>
         </div>
       </div>
 
       <div class="form-sheet">
-        <p class="sec">Part II — The taxes <span class="agate">0–4% each, sworn forever</span></p>
+        <p class="sec">2 · Trading fees <span class="agate">0–4% each, locked forever</span></p>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:0 26px">
-          <div class="field copy-a-col" style="padding:10px 12px">
-            <label for="f-buy" style="color:var(--copy-a)">Buy tax — Copy A (red ink)</label>
+          <div class="field" style="padding:10px 12px">
+            <label for="f-buy">Buy tax</label>
             <input type="range" id="f-buy" min="0" max="4" step="0.25" value="2">
-            <span class="mono" style="font-size:18px; color:var(--copy-a)"><span id="o-buy">2.00</span>%</span>
+            <span class="mono" style="font-size:18px"><span id="o-buy">2.00</span>%</span>
           </div>
           <div class="field" style="padding:10px 12px">
-            <label for="f-sell">Sell tax — filer's copy (black)</label>
+            <label for="f-sell">Sell tax</label>
             <input type="range" id="f-sell" min="0" max="4" step="0.25" value="3">
             <span class="mono" style="font-size:18px"><span id="o-sell">3.00</span>%</span>
           </div>
         </div>
-        <p class="agate">The protocol adds 1.00% per trade on top, of which one fifth is paid to referrers. This line
-        is not adjustable and the clerk enjoys that.</p>
+        <p class="agate">The protocol adds 1.00% per trade on top; 20% of that goes to referrers. Not adjustable.</p>
       </div>
 
       <div class="form-sheet">
-        <p class="sec">Part III — Allocation of the tax ration <span class="agate">must total exactly 100%</span></p>
+        <p class="sec">3 · Fee split <span class="agate">must total exactly 100%</span></p>
         <div class="ration" id="ration">
           <div><span class="who">Dev wallet</span><input type="range" id="r-dev" min="0" max="100" step="5" value="25"><span class="amt" id="o-dev">25%</span></div>
           <div><span class="who">Holder dividends</span><input type="range" id="r-div" min="0" max="100" step="5" value="35"><span class="amt" id="o-div">35%</span></div>
           <div><span class="who">Auto-liquidity</span><input type="range" id="r-liq" min="0" max="100" step="5" value="20"><span class="amt" id="o-liq">20%</span></div>
-          <div><span class="who">Market-making<button class="fn" popovertarget="fn-mm">2</button></span><input type="range" id="r-mm" min="0" max="100" step="5" value="20"><span class="amt" id="o-mm">20%</span></div>
+          <div><span class="who">Market-making<button class="fn" popovertarget="fn-mm">?</button></span><input type="range" id="r-mm" min="0" max="100" step="5" value="20"><span class="amt" id="o-mm">20%</span></div>
         </div>
-        <p id="ration-verdict" class="type" style="margin:10px 0 0; font-weight:700"></p>
+        <p id="ration-verdict" class="mono" style="margin:10px 0 0; font-size:12.5px"></p>
       </div>
 
       <div class="form-sheet">
-        <p class="sec">Part IV — Mechanics of the raise</p>
+        <p class="sec">4 · Raise settings</p>
         <div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:0 26px">
           <div class="field"><label for="f-target">Funding target (ETH)</label><input type="number" id="f-target" value="9.0" step="0.5" min="0.001"></div>
           <div class="field"><label for="f-days">Deadline (days)</label><input type="number" id="f-days" value="14" min="1" max="60"></div>
@@ -82,29 +77,29 @@
       </div>
 
       <div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap; margin-top:22px">
-        <button class="action" id="f-submit">Swear and docket — one transaction</button>
-        <span class="agate" style="max-width:30ch">Vanity address mined in-browser: your token will end in <span class="mono">0x…4663</span>. The chain's number, worn like a lapel pin.</span>
+        <button class="action" id="f-submit">Deploy — one transaction</button>
+        <span class="agate" style="max-width:30ch">Your token address will end in <span class="mono">0x…4663</span>, mined in your browser before you sign.</span>
       </div>
     </div>
 
-    <!-- THE CARBON COPY -->
+    <!-- LIVE PREVIEW -->
     <div style="position:sticky; top:14px">
-      <div class="form-sheet" style="background:color-mix(in srgb, var(--paper-3) 72%, white); rotate:0.8deg">
-        <p class="sec">Carbon copy — term sheet as it will be sworn <span class="agate">updates as you write</span></p>
+      <div class="form-sheet" style="background:color-mix(in srgb, var(--paper-3) 72%, white)">
+        <p class="sec">Preview — terms as they deploy <span class="agate">updates as you type</span></p>
         <div class="term-sheet"><dl id="carbon"></dl></div>
         <div class="stamp-row" style="margin-top:18px; justify-content:flex-end">
-          <span class="stamp" id="carbon-stamp">AWAITING OATH<small>NOT YET DOCKETED</small></span>
+          <span class="stamp" id="carbon-stamp">NOT READY<small>—</small></span>
         </div>
       </div>
-      <p class="agate" style="margin-top:12px">This copy is typed through the first: whatever you press above prints
-        below, slightly askew, as carbons do. The chain will keep the original.</p>
+      <p class="agate" style="margin-top:12px">This is exactly what backers will see on your token page. The chain
+        keeps it verbatim.</p>
     </div>
   </div>
 </main>
 
 <script src="dp.js"></script>
 <script>
-DP.page({ current: "launch.html", form: "DP-1" });
+DP.page({ current: "launch.html" });
 
 (function () {
   var $ = function (id) { return document.getElementById(id); };
@@ -118,16 +113,16 @@ DP.page({ current: "launch.html", form: "DP-1" });
     $("o-liq").textContent = liq + "%"; $("o-mm").textContent = mm + "%";
     var sum = dev + div + liq + mm, ok = sum === 100;
     var verdict = $("ration-verdict");
-    verdict.textContent = ok ? "RATION BALANCES: 100%. THE CLERK IS SATISFIED." : "RATION TOTALS " + sum + "%. THE CLERK REFUSES TO STAMP " + (sum > 100 ? "AN OVERDRAWN" : "AN UNDERDRAWN") + " CARD.";
+    verdict.textContent = ok ? "Split totals 100% — OK." : "Split totals " + sum + "% — adjust to exactly 100% to continue.";
     verdict.style.color = ok ? "var(--engrave)" : "var(--copy-a)";
     $("o-cut").textContent = $("f-cut").value + "%";
     $("o-supply").textContent = $("f-supply").value + "%";
 
     var rows = [
-      ["Instrument", DP.esc($("f-name").value || "—") + " ($" + DP.esc(($("f-sym").value || "—").toUpperCase()) + ")"],
-      ["Declared purpose", DP.esc($("f-pitch").value || "—")],
+      ["Token", DP.esc($("f-name").value || "—") + " ($" + DP.esc(($("f-sym").value || "—").toUpperCase()) + ")"],
+      ["Pitch", DP.esc($("f-pitch").value || "—")],
       ["Buy tax / sell tax", (+$("f-buy").value).toFixed(2) + "% / " + (+$("f-sell").value).toFixed(2) + "%"],
-      ["Tax allocation", "dev " + dev + " · dividends " + div + " · liquidity " + liq + " · market-making " + mm],
+      ["Fee split", "dev " + dev + " · dividends " + div + " · liquidity " + liq + " · market-making " + mm],
       ["Funding target", (+$("f-target").value || 0).toFixed(2) + " ETH in " + $("f-days").value + " days"],
       ["Founder cut of raise", $("f-cut").value + "%, paid only on graduation"],
       ["Founder supply", $("f-supply").value + "%, vesting " + $("f-vest").value + " days, burns on failure"],
@@ -139,8 +134,8 @@ DP.page({ current: "launch.html", form: "DP-1" });
     $("carbon").innerHTML = dl;
 
     var st = $("carbon-stamp");
-    if (ok) { st.className = "stamp"; st.innerHTML = "READY TO SWEAR<small>RATION BALANCED · TERMS LEGIBLE</small>"; }
-    else { st.className = "stamp red"; st.innerHTML = "AWAITING OATH<small>BALANCE THE RATION FIRST</small>"; }
+    if (ok) { st.className = "stamp"; st.innerHTML = "READY<small>SPLIT BALANCED</small>"; }
+    else { st.className = "stamp red"; st.innerHTML = "NOT READY<small>SPLIT MUST TOTAL 100%</small>"; }
     $("f-submit").disabled = !ok;
     $("f-submit").style.opacity = ok ? 1 : 0.45;
   }
@@ -153,7 +148,7 @@ DP.page({ current: "launch.html", form: "DP-1" });
     setTimeout(function () {
       document.body.classList.remove("busy");
       st.className = "stamp big"; st.style.setProperty("--stamp-angle", "-8deg");
-      st.innerHTML = "DOCKETED<small>FILE № 0024 OPENED · CURVE LIVE</small>";
+      st.innerHTML = "DEPLOYED<small>LAUNCH #0024 IS LIVE</small>";
     }, 1100);
   });
 })();

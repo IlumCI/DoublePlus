@@ -3,46 +3,41 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>doubleplus.fund — The Docket</title>
-<meta name="description" content="Launch and fund a startup as a decentralized stock. Ministry of Plenty, Directorate of New Ventures.">
+<title>doubleplus.fund — Launches</title>
+<meta name="description" content="Launch and fund startups as decentralized stocks. All terms on-chain; failed raises refund in full.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23fce8ca'/%3E%3Ctext x='4' y='24' font-family='monospace' font-size='20' fill='%234f2b60'%3E%2B%2B%3C/text%3E%3C/svg%3E">
 <link rel="stylesheet" href="dp.css">
 </head>
 <body>
 <main class="shell">
   <div class="page-head">
-    <p class="form-no">SCHEDULE DP-IDX · DAILY DOCKET OF OPEN AND CLOSED RAISES</p>
-    <h1 class="page-title">THE DAY'S PLENTY.</h1>
+    <h1 class="page-title">Launches</h1>
     <div style="display:flex; flex-wrap:wrap; gap:12px 30px; align-items:end; justify-content:space-between; margin-top:8px">
       <p style="max-width:56ch; margin:0">
-        Every venture below has published its full term sheet to the public ledger before taking a single
-        gramme of ETH: target, founder cut, vested stake, taxes, deadline. Fund it on the curve. If the round
-        fails, the machine owes you every wei back<button class="fn" popovertarget="fn-allornothing">1</button>.
+        Every launch publishes its full terms on-chain before taking any ETH: target, founder cut, vesting,
+        taxes, deadline. Buy on the curve — earlier is cheaper. If a raise misses its deadline, everyone is
+        refunded in full<button class="fn" popovertarget="fn-allornothing">?</button>.
       </p>
-      <a class="action" href="launch.html">File Form DP-1 — found a startup</a>
+      <a class="action" href="launch.html">Launch a token</a>
     </div>
-    <p class="legend">The instruments in this docket are subject to completion or memory-holing. Information herein may be
-      amended by any passing clerk. This legend is printed in ration red as required by absolutely no one.</p>
   </div>
 
-  <div id="fn-allornothing" popover class="note">All-or-nothing raise, enforced by contract, not policy: miss the
-    deadline and the founder allocation burns while backers reclaim their full spend by returning tokens.
-    The Ministry keeps nothing from a failed round except the gas.</div>
+  <div id="fn-allornothing" popover class="note">All-or-nothing, enforced by the contract: if the deadline passes below
+    target, the founder allocation is burned and every backer reclaims their full spend by returning their tokens.</div>
 
-  <!-- flywheel teaser -->
   <div class="chit" style="margin:18px 0 6px; display:flex; flex-wrap:wrap; gap:8px 26px; align-items:baseline">
-    <b>THE WEEKLY FLYWHEEL — EPOCH 3 SETTLED:</b>
-    <span class="mono">41.208 ETH routed · 0.412 ETH pot · top-3 bought back &amp; burned · 5 traders rebated · 2 outside makers paid</span>
-    <a href="flywheel.html">read the Gazette →</a>
+    <b>WEEKLY REWARDS — EPOCH 3 SETTLED:</b>
+    <span class="mono">41.208 ETH volume · 0.412 ETH distributed · 3 buybacks · 5 trader rebates · 2 LP rewards</span>
+    <a href="flywheel.html">see all epochs →</a>
   </div>
 
   <section>
     <table class="docket" id="tbl-raising">
-      <caption>Section I — Raising now (curve open)</caption>
+      <caption>Raising now</caption>
       <thead><tr>
-        <th>File</th><th>Instrument</th><th>Declared purpose</th>
-        <th class="num">Raised / target</th><th style="width:14%">Subscription</th>
-        <th class="num">Founder cut</th><th class="num">Tax B/S</th><th>Time left</th><th>State</th>
+        <th>#</th><th>Token</th><th>Pitch</th>
+        <th class="num">Raised / target</th><th style="width:14%">Progress</th>
+        <th class="num">Founder cut</th><th class="num">Tax B/S</th><th>Time left</th><th>Status</th>
       </tr></thead>
       <tbody></tbody>
     </table>
@@ -50,11 +45,11 @@
 
   <section style="margin-top:36px">
     <table class="docket" id="tbl-grad">
-      <caption>Section II — In circulation (graduated to the telescreen)</caption>
+      <caption>Trading</caption>
       <thead><tr>
-        <th>File</th><th>Instrument</th><th>Declared purpose</th>
+        <th>#</th><th>Token</th><th>Pitch</th>
         <th class="num">Price ETH</th><th class="num">24h</th><th class="num">Vol 24h</th>
-        <th>Tape</th><th class="num">Holders</th><th>State</th>
+        <th>Chart</th><th class="num">Holders</th><th>Status</th>
       </tr></thead>
       <tbody></tbody>
     </table>
@@ -62,29 +57,27 @@
 
   <section style="margin-top:36px">
     <table class="docket" id="tbl-dead">
-      <caption>Section III — Memory-holed (refund window open in perpetuity)</caption>
+      <caption>Failed — refunds open</caption>
       <thead><tr>
-        <th>File</th><th>Instrument</th><th>Declared purpose</th>
-        <th class="num">Raised of target</th><th style="width:14%">Final subscription</th><th>State</th>
+        <th>#</th><th>Token</th><th>Pitch</th>
+        <th class="num">Raised of target</th><th style="width:14%">Final progress</th><th>Status</th>
       </tr></thead>
       <tbody></tbody>
     </table>
   </section>
 
   <p class="agate" style="margin-top:26px; max-width:70ch">
-    Docket rules: files sort by number, newest first. Shaded rows carry no meaning; the shading clerk was
-    never told which rows matter and shades by habit. Prices are quoted in ETH per token against canonical
-    WETH liquidity. The tape sparklines are drawn by the telescreen and the telescreen has never once
-    apologized for them.
+    Prices are quoted in ETH per token against WETH liquidity. Data refreshes from the chain; nothing here is
+    editorial.
   </p>
 </main>
 
 <script src="dp.js"></script>
 <script>
-DP.page({ current: "index.html", form: "DP-IDX" });
+DP.page({ current: "index.html" });
 
 (function () {
-  var raising = [], grad = [], dead = [], i, v, st;
+  var raising = [], grad = [], dead = [], i, v;
   function stamp(v) {
     var s = DP.STAMPS[DP.phaseOf(v)];
     return '<span class="stamp ' + s.cls + '" style="font-size:9.5px; padding:3px 7px">' + s.top + "</span>";
@@ -100,7 +93,7 @@ DP.page({ current: "index.html", form: "DP-IDX" });
       var done = DP.pct(v) >= 100;
       raising.push("<tr>" + file + "<td>" + nameCell(v) + "</td>" + pitch +
         '<td class="num">' + v.raised.toFixed(2) + " / " + v.target.toFixed(1) + "</td>" +
-        '<td><div class="meter' + (done ? " done" : "") + '" style="--pct:' + DP.pct(v) + '%"><i></i></div><span class="agate">' + DP.pct(v) + "% subscribed</span></td>" +
+        '<td><div class="meter' + (done ? " done" : "") + '" style="--pct:' + DP.pct(v) + '%"><i></i></div><span class="agate">' + DP.pct(v) + "% funded</span></td>" +
         '<td class="num">' + v.founder + "%</td>" +
         '<td class="num">' + v.buy.toFixed(1) + "/" + v.sell.toFixed(1) + "%</td>" +
         "<td class=\"mono\" style=\"font-size:11px\">" + v.deadline + "</td><td>" + stamp(v) + "</td></tr>");

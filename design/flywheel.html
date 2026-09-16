@@ -3,37 +3,34 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>doubleplus.fund — The Gazette</title>
-<meta name="description" content="Weekly flywheel archive: burns, rebates, maker rewards, with manifests.">
+<title>doubleplus.fund — Rewards</title>
+<meta name="description" content="Weekly rewards: buybacks, trader rebates, LP rewards. Every epoch has a verifiable manifest.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23fce8ca'/%3E%3Ctext x='4' y='24' font-family='monospace' font-size='20' fill='%234f2b60'%3E%2B%2B%3C/text%3E%3C/svg%3E">
 <link rel="stylesheet" href="dp.css">
 </head>
 <body>
 <main class="shell">
-  <div class="page-head" style="padding-bottom:0">
-    <p class="form-no" style="text-align:center">PUBLISHED EVERY MONDAY AT 12:00 UTC BY THE DIRECTORATE'S FLYWHEEL · MANIFESTS ATTACHED · TRANSPARENT TO A FAULT</p>
-    <h1 class="gazette-head">THE WEEKLY PLENTY GAZETTE</h1>
-    <p class="gazette-motto">Volume is rationed back to the volunteers</p>
-    <p style="max-width:64ch; margin:18px auto 0; text-align:center">Each week the flywheel takes a tenth of protocol
-      revenue and returns it three ways: <b>40%</b> buys back and burns the three busiest ventures, <b>30%</b> rebates
-      the most active traders, <b>30%</b> pays outside citizens who made markets in venture pools<button class="fn" popovertarget="fn-makers">1</button>.
-      Every epoch ships a manifest with the transactions to check. Trust is for other newspapers.</p>
+  <div class="page-head">
+    <h1 class="page-title">Weekly rewards</h1>
+    <p style="max-width:64ch; margin-top:8px">Every Monday at 12:00 UTC, 10% of the week's protocol revenue is
+      distributed three ways: <b>40%</b> buys back and burns the three highest-volume tokens, <b>30%</b> rebates the
+      most active traders, <b>30%</b> pays outside liquidity providers<button class="fn" popovertarget="fn-makers">?</button>.
+      Each epoch publishes a manifest listing every transaction, so you can verify every line.</p>
   </div>
 
-  <div id="fn-makers" popover class="note">Maker attribution v1: positive-liquidity ModifyLiquidity events on venture
-    pools, attributed to the transaction sender, protocol infrastructure excluded. The method is named in each
-    manifest; when no outside makers appear in an epoch, their ration rolls into the burn pot.</div>
+  <div id="fn-makers" popover class="note">LP attribution v1: positive-liquidity events on token pools, attributed to
+    the transaction sender, protocol addresses excluded. The method is stated in each manifest. If an epoch has no
+    outside LPs, their share is added to the buyback pot.</div>
 
   <div id="epochs"></div>
 
-  <p class="agate" style="margin-top:26px; text-align:center">Epochs are numbered without gaps because the flywheel,
-    unlike the founders, has never withdrawn an application. The jackpot is treasury policy v1 — transparent in the
-    manifests, not yet contract-enforced, and the Gazette prints that sentence every single week without shame.</p>
+  <p class="agate" style="margin-top:26px">The reward split is treasury policy v1 — fully transparent in the
+    manifests, not yet enforced by contract.</p>
 </main>
 
 <script src="dp.js"></script>
 <script>
-DP.page({ current: "flywheel.html", form: "GZT-W" });
+DP.page({ current: "flywheel.html" });
 
 (function () {
   var out = "", i, e;
@@ -46,13 +43,13 @@ DP.page({ current: "flywheel.html", form: "GZT-W" });
     e = DP.EPOCHS[i];
     out += '<article class="epoch">' +
       "<header><h3>EPOCH " + e.n + "</h3><span class=\"mono\" style=\"font-size:11px\">" + e.week + "</span>" +
-      '<span class="mono" style="font-size:11px">routed <b>' + e.vol + ' ETH</b> · pot <b>' + e.pot + " ETH</b></span>" +
+      '<span class="mono" style="font-size:11px">volume <b>' + e.vol + ' ETH</b> · distributed <b>' + e.pot + " ETH</b></span>" +
       '<span style="flex:1"></span><a class="mono" style="font-size:11px" href="#" onclick="return false">manifest.json ↗</a>' +
       (i === 0 ? '<span class="stamp" style="font-size:9.5px; padding:3px 7px">SETTLED</span>' : "") +
       "</header><div class=\"cols\">" +
-      "<div><h4>Bought back &amp; burned — 40%</h4>" + ul(e.burns) + "</div>" +
+      "<div><h4>Buybacks &amp; burns — 40%</h4>" + ul(e.burns) + "</div>" +
       "<div><h4>Trader rebates — 30%</h4>" + (e.rebates.length ? ul(e.rebates, " ETH") : '<p class="agate">none this week</p>') + "</div>" +
-      "<div><h4>Outside makers — 30%</h4>" + (e.makers.length ? ul(e.makers, " ETH") : '<p class="agate">no outside makers appeared; ration rolled into the burn pot, as the manifest confesses.</p>') + "</div>" +
+      "<div><h4>LP rewards — 30%</h4>" + (e.makers.length ? ul(e.makers, " ETH") : '<p class="agate">no outside LPs this epoch — share added to the buyback pot (stated in the manifest).</p>') + "</div>" +
       "</div></article>";
   }
   document.getElementById("epochs").innerHTML = out;
