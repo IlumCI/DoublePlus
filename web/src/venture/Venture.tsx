@@ -200,8 +200,8 @@ function TermSheet({ v }: { v: VentureT }) {
         <div className="tr"><span>Per-wallet cap</span><span className="vn-num">{fmtEth(v.maxBuyWei, 4)} ETH</span></div>
         <div className="tr"><span>Trade taxes after graduation</span><span className="vn-num">{(v.policy.buyTaxBps / 100).toFixed(2)}% buy / {(v.policy.sellTaxBps / 100).toFixed(2)}% sell</span></div>
         <div className="tr"><span>Protocol fee</span><span>{(VENTURE.platformFeeBps / 100).toFixed(2)}% per trade, on top</span></div>
-        <div className="tr"><span>Tax allocation</span><span>{v.policy.devBps / 100}% dev · {v.policy.dividendBps / 100}% dividends · {v.policy.liquidityBps / 100}% liquidity · {v.policy.mmBps / 100}% MM wall</span></div>
-        <div className="tr"><span>Anti-snipe</span><span>15% premium first 5s, 5% to 15s → the bid wall</span></div>
+        <div className="tr"><span>Tax allocation</span><span>{v.policy.devBps / 100}% dev · {v.policy.dividendBps / 100}% dividends · {v.policy.liquidityBps / 100}% liquidity · {v.policy.mmBps / 100}% MM walls (two-sided, auto re-centered)</span></div>
+        <div className="tr"><span>Anti-snipe</span><span>15% premium first 5s, 5% to 15s → the quote walls</span></div>
       </div>
     </>
   );

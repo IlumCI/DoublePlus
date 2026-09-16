@@ -115,15 +115,18 @@ function How() {
           <b style={{ color: "var(--v-ink)" }}>4 · Earn.</b> The founder writes the fee policy at launch and it runs
           on-chain forever: separate buy and sell taxes (0–4% each), split across four engines in any proportion —
           the dev wallet, ETH dividends to every holder, auto-liquidity locked beside the price, and a market-making
-          bid wall of standing buy support under the price. Trades in the first seconds after graduation pay a
-          decaying sniper premium that lands in the bid wall: snipers fund the floor. A protocol fee of up to 1% per
+          engine that quotes BOTH sides — a tight bid wall under the price and an ask band above it, re-centered
+          automatically when the price moves, so the spread stays tight and the depth follows the market. Trades in
+          the first seconds after graduation pay a decaying sniper premium that lands in the walls: snipers fund the
+          book. A protocol fee of up to 1% per
           trade keeps the lights on.
         </p>
         <p>
           <b style={{ color: "var(--v-ink)" }}>5 · Compound.</b> Share any page with your <i>?ref=</i> link: whoever
           binds it pays you a fifth of the protocol fee on every trade they ever make. Every week the flywheel takes a
-          slice of protocol revenue, buys back and burns the top-3 ventures by volume, and rebates the most active
-          traders — each epoch is published as a manifest with the transactions to check. Dividends are pushed to
+          slice of protocol revenue, buys back and burns the top-3 ventures by volume, rebates the most active
+          traders, and pays outside liquidity providers who deepened venture pools that week — real strangers paid to
+          make markets. Each epoch is published as a manifest with the transactions to check. Dividends are pushed to
           wallets automatically every 15 minutes, raises graduate themselves the moment they hit target, and refunds
           open themselves the moment a deadline passes. (The weekly jackpot is treasury policy v1 — transparent in the
           manifests, not yet contract-enforced.)

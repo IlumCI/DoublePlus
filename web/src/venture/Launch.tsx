@@ -320,7 +320,7 @@ export function LaunchVenture() {
                 ["dev", "Dev wallet", "paid straight to your team wallet, in the trade currency"],
                 ["dividends", "Holder dividends", "paid to every holder pro-rata in ETH — your stock pays a yield"],
                 ["liquidity", "Auto-liquidity", "re-added beside the price, permanently locked — deepens your book"],
-                ["mm", "Market-making wall", "converted to ETH and posted as standing buy support under the price"],
+                ["mm", "Market-making walls", "posted as tight bid AND ask walls beside the price, auto re-centered — a fee-funded spread-tightener"],
               ] as const
             ).map(([k, label, hint]) => (
               <div key={k}>

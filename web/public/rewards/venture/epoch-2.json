@@ -1,0 +1,28 @@
+{
+  "epoch": 2,
+  "fromBlock": 120463181,
+  "toBlock": 120471870,
+  "totalVolumeEth": "0.000926516806504824",
+  "budgetEth": "0.000002316292016262",
+  "ventures": [
+    {
+      "coin": "0x1780d6D479513c044633168ac14b554e0Cee4663",
+      "volumeEth": "0.000926516806504824",
+      "spendEth": "0.000000810702205692",
+      "burnedTokens": "1694059193700419148498643",
+      "burnTx": "0x08c4d3b3314fccda4ef70bf89e5b1f46391f986929e4bc14676ac45831d6c149"
+    }
+  ],
+  "rebates": [
+    {
+      "trader": "0x1B97531b6Df3E96ab6899F880db7B11F2f45Acce",
+      "volumeEth": "0.000926516806504824",
+      "amountEth": "0.000000694887604878",
+      "tx": "0x6e24fa6a9daf51c2d24c3dfb37307bb708355bd6d7a0e96f5c3d1b17452b7762"
+    }
+  ],
+  "makers": [],
+  "makerAttribution": "tx sender of each positive ModifyLiquidity on venture pools; protocol addresses excluded",
+  "dryRun": false,
+  "generatedAt": "2026-09-16T18:00:33.815Z"
+}

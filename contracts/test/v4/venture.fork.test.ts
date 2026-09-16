@@ -259,4 +259,70 @@ describe("Venture bonding-curve launchpad (fork)", function () {
     await (await erc.connect(whale).claim()).wait();
     expect((await stockErc.balanceOf(whale.address)) - before, "holder claimed real stock").to.be.greaterThan(0n);
   });
+
+  it("quotes two-sided walls and recenters them after the price moves", async () => {
+    const [admin, founder, whale, trader, treasury] = await ethers.getSigners();
+    const { hook, factory, tokenDeployer, router } = await deployAll(admin, treasury);
+    const coin = await launch(factory, tokenDeployer, founder, WETH);
+    const erc = await ethers.getContractAt("QuiverToken", coin);
+    const startBlock = await ethers.provider.getBlockNumber();
+
+    await (await factory.connect(whale).buy(coin, { value: ethers.parseEther("2.1") })).wait();
+    await (await factory.finalize(coin)).wait();
+    await network.provider.send("evm_increaseTime", [20]);
+    await network.provider.send("evm_mine");
+
+    // One buy and one sell: the MM bucket must refill BOTH sides of the book.
+    await (await router.connect(trader).buy(coin, "0x", 0, { value: ethers.parseEther("0.02") })).wait();
+    const held = await erc.balanceOf(trader.address);
+    await (await erc.connect(trader).approve(await router.getAddress(), ethers.MaxUint256)).wait();
+    await (await router.connect(trader).sell(coin, held / 2n, "0x", 0)).wait();
+
+    const adds = await hook.queryFilter(hook.filters.LiquidityAdded(), startBlock);
+    const walls = adds.filter((l: any) => l.args.wall);
+    const wallCurrencies = new Set(walls.map((l: any) => String(l.args.currency).toLowerCase()));
+    expect(walls.length, "quote walls placed").to.be.greaterThan(1);
+    expect(wallCurrencies.size, "both sides of the book quoted").to.equal(2);
+
+    // Push the price hard so the old walls go stale.
+    const dump = await erc.balanceOf(trader.address);
+    await (await router.connect(trader).sell(coin, dump, "0x", 0)).wait();
+
+    // Keeper-style reconstruction: net wall bands from add/remove events.
+    const removes = await hook.queryFilter(hook.filters.WallRemoved(), startBlock);
+    const net = new Map<string, bigint>();
+    for (const l of await hook.queryFilter(hook.filters.LiquidityAdded(), startBlock)) {
+      if (!(l as any).args.wall) continue;
+      const k = `${(l as any).args.tickLower}:${(l as any).args.tickUpper}`;
+      net.set(k, (net.get(k) ?? 0n) + BigInt((l as any).args.liquidity));
+    }
+    for (const l of removes) {
+      const k = `${(l as any).args.tickLower}:${(l as any).args.tickUpper}`;
+      net.set(k, (net.get(k) ?? 0n) - BigInt((l as any).args.liquidity));
+    }
+    const bands = [...net.entries()].filter(([, v]) => v > 0n).map(([k, liquidity]) => {
+      const [lower, upper] = k.split(":").map(Number);
+      return { lower, upper, liquidity };
+    });
+    expect(bands.length).to.be.greaterThan(0);
+
+    // Anyone can recenter; the walls migrate beside the new price.
+    const tickBefore = await hook.poolTick(coin);
+    await (await hook.connect(trader).recenter(coin, bands)).wait();
+    const recentered = await hook.queryFilter(hook.filters.WallRecentered(), startBlock);
+    expect(recentered.length, "WallRecentered emitted").to.equal(1);
+
+    // Fresh walls sit beside the current tick, and the pool still trades.
+    const addsAfter = await hook.queryFilter(hook.filters.LiquidityAdded(), Number(recentered[0].blockNumber));
+    const fresh = addsAfter.filter((l: any) => l.args.wall);
+    expect(fresh.length, "fresh quotes placed").to.be.greaterThan(0);
+    for (const l of fresh) {
+      const near = Math.min(
+        Math.abs(Number((l as any).args.tickLower) - Number(tickBefore)),
+        Math.abs(Number((l as any).args.tickUpper) - Number(tickBefore)),
+      );
+      expect(near, "fresh wall hugs the price").to.be.lessThanOrEqual(60 * 3);
+    }
+    await (await router.connect(trader).buy(coin, "0x", 0, { value: ethers.parseEther("0.005") })).wait();
+  });
 });

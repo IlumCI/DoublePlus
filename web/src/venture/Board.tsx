@@ -113,7 +113,7 @@ function JackpotCard() {
         <p className="vn-eyebrow" style={{ color: "var(--v-amber)" }}>weekly flywheel · epoch {m.epoch}{m.dryRun ? " (dry run)" : ""}</p>
         <p className="mt-1 text-[13px]" style={{ color: "var(--v-ink-2)" }}>
           {m.totalVolumeEth} ETH routed · {m.budgetEth} ETH jackpot — top-3 ventures bought back &amp; burned,
-          top traders rebated in ETH. Trade more, win more.
+          top traders rebated, outside makers rewarded. Trade or make markets, win either way.
         </p>
       </div>
       <div className="flex-1" />

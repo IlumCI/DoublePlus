@@ -5,9 +5,13 @@
 //      volume per venture and per trader;
 //   2) size the jackpot: the protocol's estimated epoch revenue in ETH
 //      (volume x platformFeeBps) x JACKPOT_BPS, capped by the keeper wallet;
-//   3) spend it — 50% market-buys the top-3 ventures by volume (weighted
-//      50/30/20) and burns the tokens to dEaD; 50% pays ETH rebates to the
-//      top-10 traders pro-rata by volume;
+//   3) spend it three ways — 40% market-buys the top-3 ventures by volume
+//      (weighted 50/30/20) and burns the tokens to dEaD; 30% pays ETH rebates
+//      to the top-10 traders pro-rata by volume; 30% pays OUTSIDE makers who
+//      added liquidity to venture pools during the epoch (attributed to the
+//      transaction sender of each ModifyLiquidity, protocol addresses
+//      excluded; rolls into the burn pot when the epoch had no outside
+//      makers);
 //   4) publish a manifest to web/public/rewards/venture/epoch-<n>.json and
 //      advance the cursor in index.json.
 //
@@ -50,7 +54,14 @@ const ERC20_ABI = [
   "function balanceOf(address) view returns (uint256)",
   "function symbol() view returns (string)",
 ];
-const FACTORY_ABI = ["function listings(address) view returns (address creator, address pair, uint16 taxBps, uint64 createdAt, bytes32 poolId)"];
+const FACTORY_ABI = [
+  "function listings(address) view returns (address creator, address pair, uint16 taxBps, uint64 createdAt, bytes32 poolId)",
+  "function totalTokens() view returns (uint256)",
+  "function allTokens(uint256) view returns (address)",
+];
+const PM_ABI = [
+  "event ModifyLiquidity(bytes32 indexed id, address indexed sender, int24 tickLower, int24 tickUpper, int256 liquidityDelta, bytes32 salt)",
+];
 
 const provider = new ethers.JsonRpcProvider(RPC);
 {
@@ -108,10 +119,43 @@ async function main() {
   if (budget > balance / 2n) budget = balance / 2n; // never drain the keeper
   console.log(`volume ${ethers.formatEther(totalVolume)} ETH, jackpot ${ethers.formatEther(budget)} ETH`);
 
-  // 3a) Buyback-and-burn the top-3 ventures, 50/30/20 of half the budget.
+  // 2b) Outside-maker volume: positive liquidity adds on venture pools this
+  // epoch, attributed to the transaction sender, protocol addresses excluded.
+  const pm = new ethers.Contract(dep.contracts.poolManager, PM_ABI, provider);
+  const poolIds = new Set();
+  const totalCoins = Number(await factory.totalTokens());
+  for (let i = 0; i < totalCoins; i++) {
+    const l = await factory.listings(await factory.allTokens(i));
+    if (l.poolId !== ethers.ZeroHash) poolIds.add(l.poolId.toLowerCase());
+  }
+  const protocolAddrs = new Set(
+    [dep.contracts.hook, dep.contracts.factory, dep.contracts.router, wallet.address].map((a) => a.toLowerCase()),
+  );
+  const byMaker = new Map();
+  const mlTopic = pm.interface.getEvent("ModifyLiquidity").topicHash;
+  for (let s2 = fromBlock; s2 <= toBlock; s2 += LOG_CHUNK) {
+    const e2 = Math.min(s2 + LOG_CHUNK - 1, toBlock);
+    const logs = await provider.getLogs({ address: dep.contracts.poolManager, topics: [mlTopic], fromBlock: s2, toBlock: e2 });
+    for (const l of logs) {
+      if (!poolIds.has(l.topics[1].toLowerCase())) continue;
+      const a = pm.interface.parseLog(l).args;
+      const delta = BigInt(a.liquidityDelta);
+      if (delta <= 0n) continue;
+      if (protocolAddrs.has(String(a.sender).toLowerCase())) continue;
+      const tx = await provider.getTransaction(l.transactionHash);
+      const maker = tx?.from?.toLowerCase();
+      if (!maker || protocolAddrs.has(maker)) continue;
+      byMaker.set(maker, (byMaker.get(maker) ?? 0n) + delta);
+    }
+  }
+
+  // 3a) Buyback-and-burn the top-3 ventures: 40% of the budget (plus the
+  // maker share when no outside maker showed up this epoch).
   const topCoins = [...byCoin.entries()].sort((a, b) => (b[1] > a[1] ? 1 : -1)).slice(0, 3);
   const weights = [50, 30, 20];
-  const burnBudget = budget / 2n;
+  const makerBudgetPlanned = (budget * 30n) / 100n;
+  const rebateBudget = (budget * 30n) / 100n;
+  const burnBudget = budget - rebateBudget - (byMaker.size > 0 ? makerBudgetPlanned : 0n);
   const ventures = [];
   for (let i = 0; i < topCoins.length; i++) {
     const [coin, vol] = topCoins[i];
@@ -133,7 +177,6 @@ async function main() {
 
   // 3b) ETH rebates to the top-10 traders, pro-rata by volume.
   const topTraders = [...byTrader.entries()].sort((a, b) => (b[1] > a[1] ? 1 : -1)).slice(0, 10);
-  const rebateBudget = budget - burnBudget;
   const traderVolume = topTraders.reduce((a, [, v]) => a + v, 0n);
   const rebates = [];
   for (const [trader, vol] of topTraders) {
@@ -146,16 +189,30 @@ async function main() {
     rebates.push(entry);
   }
 
+  // 3c) Maker rewards: ETH pro-rata by liquidity added this epoch.
+  const makerTotal = [...byMaker.values()].reduce((a, b) => a + b, 0n);
+  const makers = [];
+  for (const [maker, liq] of [...byMaker.entries()].sort((a, b) => (b[1] > a[1] ? 1 : -1)).slice(0, 10)) {
+    const amount = makerTotal === 0n ? 0n : (makerBudgetPlanned * liq) / makerTotal;
+    const entry = { maker, liquidityAdded: liq.toString(), amountEth: ethers.formatEther(amount), tx: null };
+    if (amount > 0n && !DRY_RUN) {
+      const tx = await (await wallet.sendTransaction({ to: maker, value: amount })).wait();
+      entry.tx = tx.hash;
+    }
+    makers.push(entry);
+  }
+
   // 4) Publish the manifest and advance the cursor.
   const manifest = {
     epoch, fromBlock, toBlock,
     totalVolumeEth: ethers.formatEther(totalVolume),
     budgetEth: ethers.formatEther(budget),
-    ventures, rebates,
+    ventures, rebates, makers,
+    makerAttribution: "tx sender of each positive ModifyLiquidity on venture pools; protocol addresses excluded",
     dryRun: DRY_RUN, generatedAt: new Date().toISOString(),
   };
   writeFileSync(join(MANIFEST_DIR, `epoch-${epoch}.json`), JSON.stringify(manifest, null, 2));
   writeFileSync(indexPath, JSON.stringify({ epoch, lastBlock: toBlock }, null, 2));
-  console.log(`epoch ${epoch} published: ${ventures.length} burns, ${rebates.length} rebates`);
+  console.log(`epoch ${epoch} published: ${ventures.length} burns, ${rebates.length} rebates, ${makers.length} maker rewards`);
 }
 main().catch((e) => { console.error(e); process.exit(1); });

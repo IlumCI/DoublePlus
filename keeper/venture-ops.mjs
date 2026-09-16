@@ -16,6 +16,8 @@
 //   RPC_URL             (default https://rpc.testnet.chain.robinhood.com)
 //   DEPLOYMENT_FILE     (default ../contracts/deployments/venture-testnet.json)
 //   MIN_DELIVER         (default 1e12 wei of the reward token)
+//   RECENTER_SPACINGS   (default 10) recenter walls whose near edge drifted
+//                       more than this many tick-spacings from the price
 //   LOG_CHUNK           (default 500000) block span per getLogs page
 //   CONFIRMATIONS       (default 3)
 //   DRY_RUN             set to log intended actions without sending txs
@@ -32,6 +34,8 @@ const RPC = process.env.RPC_URL ?? "https://rpc.testnet.chain.robinhood.com";
 const KEY = process.env.KEEPER_PRIVATE_KEY;
 if (!KEY) { console.error("Set KEEPER_PRIVATE_KEY."); process.exit(1); }
 const MIN_DELIVER = BigInt(process.env.MIN_DELIVER ?? "1000000000000");
+const RECENTER_SPACINGS = Number(process.env.RECENTER_SPACINGS ?? "10");
+const SPACING = 60; // the factory's pools all use tickSpacing 60
 const LOG_CHUNK = Number(process.env.LOG_CHUNK ?? "500000");
 const CONFIRMATIONS = Number(process.env.CONFIRMATIONS ?? "3");
 const DRY_RUN = process.env.DRY_RUN != null;
@@ -52,6 +56,13 @@ const TOKEN_ABI = [
   "function pendingRewards(address) view returns (uint256)",
   "function claimForMany(address[])",
 ];
+const HOOK_ABI = [
+  "function poolTick(address) view returns (int24)",
+  "function recenter(address coin, (int24 lower, int24 upper, uint128 liquidity)[] bands)",
+  "event LiquidityAdded(bytes32 indexed id, address currency, uint256 amount, uint128 liquidity, bool wall, int24 tickLower, int24 tickUpper)",
+  "event WallRemoved(bytes32 indexed id, int24 tickLower, int24 tickUpper, uint128 liquidity)",
+];
+const LISTINGS_ABI = ["function listings(address) view returns (address creator, address pair, uint16 taxBps, uint64 createdAt, bytes32 poolId)"];
 
 const provider = new ethers.JsonRpcProvider(RPC);
 {
@@ -70,6 +81,56 @@ const provider = new ethers.JsonRpcProvider(RPC);
 }
 const wallet = new ethers.Wallet(KEY, provider);
 const factory = new ethers.Contract(dep.contracts.factory, FACTORY_ABI, wallet);
+const factoryListings = new ethers.Contract(dep.contracts.factory, LISTINGS_ABI, wallet);
+const hook = new ethers.Contract(dep.contracts.hook, HOOK_ABI, wallet);
+
+/** Live wall set for a pool: LiquidityAdded(wall) minus WallRemoved, netted
+ *  per (lower, upper) band. */
+async function wallBands(poolId, toBlock) {
+  const from = Number(dep.startBlock ?? 0);
+  const bands = new Map(); // "lower:upper" -> liquidity
+  const addTopic = hook.interface.getEvent("LiquidityAdded").topicHash;
+  const remTopic = hook.interface.getEvent("WallRemoved").topicHash;
+  for (let start = from; start <= toBlock; start += LOG_CHUNK) {
+    const end = Math.min(start + LOG_CHUNK - 1, toBlock);
+    const logs = await provider.getLogs({
+      address: dep.contracts.hook, topics: [[addTopic, remTopic], poolId], fromBlock: start, toBlock: end,
+    });
+    for (const l of logs) {
+      if (l.topics[0] === addTopic) {
+        const a = hook.interface.parseLog(l).args;
+        if (!a.wall) continue;
+        const k = `${a.tickLower}:${a.tickUpper}`;
+        bands.set(k, (bands.get(k) ?? 0n) + BigInt(a.liquidity));
+      } else {
+        const a = hook.interface.parseLog(l).args;
+        const k = `${a.tickLower}:${a.tickUpper}`;
+        bands.set(k, (bands.get(k) ?? 0n) - BigInt(a.liquidity));
+      }
+    }
+  }
+  return [...bands.entries()]
+    .filter(([, liq]) => liq > 0n)
+    .map(([k, liquidity]) => {
+      const [lower, upper] = k.split(":").map(Number);
+      return { lower, upper, liquidity };
+    });
+}
+
+/** Migrate stale quote walls back beside the price when they have drifted. */
+async function maybeRecenter(coin, poolId, toBlock) {
+  const bands = await wallBands(poolId, toBlock);
+  if (bands.length === 0) return;
+  const tick = Number(await hook.poolTick(coin));
+  const maxDrift = RECENTER_SPACINGS * SPACING;
+  const stale = bands.some((b) => {
+    const nearEdge = tick < b.lower ? b.lower : tick > b.upper ? b.upper : tick;
+    return Math.abs(tick - nearEdge) > maxDrift;
+  });
+  if (!stale) return;
+  console.log(`recenter ${coin}: ${bands.length} wall band(s), tick ${tick}`);
+  if (!DRY_RUN) await (await hook.recenter(coin, bands)).wait();
+}
 
 async function holdersOf(coin, toBlock) {
   const balances = new Map();
@@ -117,6 +178,14 @@ async function main() {
       continue; // dividends only exist after graduation
     }
     if (!st.finalized) continue;
+
+    // Keep the quote walls hugging the price.
+    try {
+      const listing = await factoryListings.listings(coin);
+      await maybeRecenter(coin, listing.poolId, head);
+    } catch (e) {
+      console.log(`recenter check failed for ${coin}: ${String(e?.message ?? e).slice(0, 120)}`);
+    }
 
     const token = new ethers.Contract(coin, TOKEN_ABI, wallet);
     const holders = await holdersOf(coin, head);

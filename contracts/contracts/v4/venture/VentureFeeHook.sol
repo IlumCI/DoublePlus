@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
+import {IUnlockCallback} from "@uniswap/v4-core/src/interfaces/callback/IUnlockCallback.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
 import {BeforeSwapDelta} from "@uniswap/v4-core/src/types/BeforeSwapDelta.sol";
@@ -37,14 +40,16 @@ import {IQuiverToken} from "../interfaces/IQuiverToken.sol";
 ///             holders via QuiverToken.distributeRewards (pull-claimable).
 ///           - liquidity  : re-added as single-sided liquidity in a band beside
 ///             the price, permanently hook-owned (a one-way floor deepener).
-///           - market-making : normalised to the pair token and placed as a
-///             narrow bid wall directly under the current price — standing
-///             on-chain buy support that trading itself keeps refilling.
+///           - market-making : split into TWO tight hook-owned bands — a bid
+///             wall of the pair token under the price and an ask band of the
+///             coin above it. Every trade refills both sides, so the fee
+///             stream is a standing spread-tightener; permissionless
+///             recenter() migrates stale walls back beside the price.
 ///
 ///         Anti-snipe: for the first seconds after graduation trades pay a
 ///         decaying premium (15% under 5s, 5% under 15s) and the entire
 ///         premium is routed into the bid wall — snipers fund the floor.
-contract VentureFeeHook is IHooks {
+contract VentureFeeHook is IHooks, ReentrancyGuard, IUnlockCallback {
     using PoolIdLibrary for PoolKey;
     using StateLibrary for IPoolManager;
     using SafeCast for uint256;
@@ -55,7 +60,9 @@ contract VentureFeeHook is IHooks {
     uint16 public constant MAX_PLATFORM_BPS = 100; // 1%
     uint256 public constant PAYOUT_GAS = 100_000;
     int24 internal constant LP_WIDTH = 10; // auto-liquidity band, in spacings
-    int24 internal constant WALL_WIDTH = 2; // bid wall: tight band under price
+    int24 internal constant WALL_WIDTH = 2; // quote walls: tight bands beside price
+    int24 internal constant TICK_SPACING = 60; // mirrors the factory's pools
+    uint24 internal constant LP_FEE = 0;
     uint64 internal constant SNIPE_T1 = 5; // seconds
     uint64 internal constant SNIPE_T2 = 15;
     uint16 internal constant SNIPE_BPS_1 = 1_500; // 15%
@@ -69,6 +76,12 @@ contract VentureFeeHook is IHooks {
         uint16 dividendBps;
         uint16 liquidityBps;
         uint16 mmBps;
+    }
+
+    struct Band {
+        int24 lower;
+        int24 upper;
+        uint128 liquidity;
     }
 
     struct Config {
@@ -106,7 +119,11 @@ contract VentureFeeHook is IHooks {
     event PoolConfigured(PoolId indexed id, address indexed coin, FeePolicy policy);
     event FeeTaken(PoolId indexed id, Currency currency, bool isBuy, uint256 platform, uint256 founderTax, uint256 sniper);
     event BucketsSettled(PoolId indexed id, uint256 dev, uint256 dividends, uint256 liquidity, uint256 wall);
-    event LiquidityAdded(PoolId indexed id, Currency currency, uint256 amount, uint128 liquidity, bool wall);
+    event LiquidityAdded(
+        PoolId indexed id, Currency currency, uint256 amount, uint128 liquidity, bool wall, int24 tickLower, int24 tickUpper
+    );
+    event WallRemoved(PoolId indexed id, int24 tickLower, int24 tickUpper, uint128 liquidity);
+    event WallRecentered(PoolId indexed id, uint256 bandsRemoved, uint256 bidPlaced, uint256 askPlaced);
     event DevWalletChanged(address indexed coin, address indexed from, address indexed to);
     event ReferrerBound(address indexed user, address indexed referrer);
     event ReferralPaid(address indexed trader, address indexed referrer, Currency currency, uint256 amount);
@@ -243,7 +260,7 @@ contract VentureFeeHook is IHooks {
             _payOut(feeCurrency, platformTreasury, platformFee - toReferrer);
         }
         if (founderTax > 0) _settleBuckets(key, id, c, feeCurrency, founderTax, sniperFee);
-        else if (sniperFee > 0) _placeWall(key, id, c, feeCurrency, sniperFee);
+        else if (sniperFee > 0) _placeQuotes(key, id, c, feeCurrency, sniperFee);
 
         // Band placement and conversions round in pool-favouring directions,
         // which can strand dust credit on either currency; an unlock only
@@ -296,7 +313,7 @@ contract VentureFeeHook is IHooks {
         if (toLiquidity > 0) liquidityAdded = _addBand(key, id, feeCurrency, toLiquidity, LP_WIDTH, false);
 
         uint256 wallPlaced;
-        if (toWall > 0) wallPlaced = _placeWall(key, id, c, feeCurrency, toWall);
+        if (toWall > 0) wallPlaced = _placeQuotes(key, id, c, feeCurrency, toWall);
 
         // Whatever a bucket could not place (band out of range, failed
         // conversion) goes to the dev wallet rather than getting stuck.
@@ -328,34 +345,38 @@ contract VentureFeeHook is IHooks {
         IQuiverToken(c.coin).distributeRewards(pairAmount);
     }
 
-    /// @dev The market-making wall: normalise to the pair token and post a
-    ///      tight band of buy support directly under the current price.
-    function _placeWall(PoolKey calldata key, PoolId id, Config memory c, Currency feeCurrency, uint256 amount)
+    /// @dev Two-sided quoting: half the market-making amount is posted as a
+    ///      tight band in its own currency (coin fees refill the ask above the
+    ///      price, pair fees the bid below), the other half is converted and
+    ///      posted on the opposite side — so every trade tightens the spread
+    ///      from both directions.
+    function _placeQuotes(PoolKey memory key, PoolId id, Config memory c, Currency feeCurrency, uint256 amount)
         private
         returns (uint256 used)
     {
-        bool feeIsCoin = Currency.unwrap(feeCurrency) == c.coin;
-        Currency pairCurrency = c.coinIsCurrency0 ? key.currency1 : key.currency0;
-        uint256 pairAmount = amount;
-        if (feeIsCoin) {
-            (uint256 spent, uint256 got) = _convert(key, feeCurrency, amount);
-            if (got == 0) return 0;
-            used = spent;
-            pairAmount = got;
-        } else {
-            used = amount;
-        }
-        uint256 placed = _addBand(key, id, pairCurrency, pairAmount, WALL_WIDTH, true);
-        if (placed < pairAmount) {
-            // Unplaceable remainder (price at the edge): leave it as pool
-            // credit for the dev wallet rather than reverting the trade.
-            _payOut(pairCurrency, c.policy.devWallet, pairAmount - placed);
+        if (amount == 0) return 0;
+        Currency other = Currency.unwrap(feeCurrency) == Currency.unwrap(key.currency0) ? key.currency1 : key.currency0;
+
+        uint256 direct = amount / 2;
+        uint256 toFlip = amount - direct;
+
+        used = _addBand(key, id, feeCurrency, direct, WALL_WIDTH, true);
+
+        (uint256 spent, uint256 got) = _convert(key, feeCurrency, toFlip);
+        used += spent;
+        if (got > 0) {
+            uint256 placed = _addBand(key, id, other, got, WALL_WIDTH, true);
+            if (placed < got) {
+                // Unplaceable remainder (price at the edge): pool credit to
+                // the dev wallet rather than reverting the trade.
+                _payOut(other, c.policy.devWallet, got - placed);
+            }
         }
     }
 
     /// @dev Sell `amount` of `currencyIn` through the pool for the other side.
     ///      Self-swaps skip the fee logic via the sender guard in afterSwap.
-    function _convert(PoolKey calldata key, Currency currencyIn, uint256 amount)
+    function _convert(PoolKey memory key, Currency currencyIn, uint256 amount)
         private
         returns (uint256 spent, uint256 got)
     {
@@ -379,7 +400,7 @@ contract VentureFeeHook is IHooks {
         }
     }
 
-    function _addBand(PoolKey calldata key, PoolId id, Currency currency, uint256 amount, int24 widthSpacings, bool wall)
+    function _addBand(PoolKey memory key, PoolId id, Currency currency, uint256 amount, int24 widthSpacings, bool wall)
         private
         returns (uint256 spent)
     {
@@ -412,7 +433,7 @@ contract VentureFeeHook is IHooks {
         ) returns (BalanceDelta callerDelta, BalanceDelta) {
             int128 cost = isToken0 ? callerDelta.amount0() : callerDelta.amount1();
             spent = cost < 0 ? uint256(uint128(-cost)) : 0;
-            emit LiquidityAdded(id, currency, spent, liquidity, wall);
+            emit LiquidityAdded(id, currency, spent, liquidity, wall, lower, upper);
         } catch {
             spent = 0;
         }
@@ -440,6 +461,77 @@ contract VentureFeeHook is IHooks {
             poolManager.mint(to, currency.toId(), amount);
             emit PayoutDeferred(to, currency, amount);
         }
+    }
+
+    // ---------------------------------------------------------------------
+    // Wall re-centering: anyone can migrate the hook's stale quote walls back
+    // beside the current price. The caller supplies the live band set
+    // (reconstructed off-chain from LiquidityAdded/WallRemoved events); a
+    // wrong list simply reverts. Only WALL_WIDTH bands qualify, so the
+    // permanent auto-liquidity book can never be churned through this path.
+    // ---------------------------------------------------------------------
+
+    /// @notice Current pool tick for a registered coin (keeper convenience).
+    function poolTick(address coin) external view returns (int24 tick) {
+        PoolId id = _poolOf[coin];
+        if (!configOf[id].set) revert BadPolicy();
+        (, tick,,) = poolManager.getSlot0(id);
+    }
+
+    function recenter(address coin, Band[] calldata bands) external nonReentrant {
+        Config storage c = configOf[_poolOf[coin]];
+        if (!c.set) revert BadPolicy();
+        if (bands.length == 0) revert BadPolicy();
+        poolManager.unlock(abi.encode(coin, bands));
+    }
+
+    function unlockCallback(bytes calldata data) external onlyPoolManager returns (bytes memory) {
+        (address coin, Band[] memory bands) = abi.decode(data, (address, Band[]));
+        Config memory c = configOf[_poolOf[coin]];
+
+        bool c0 = c.coinIsCurrency0;
+        PoolKey memory key = PoolKey({
+            currency0: Currency.wrap(c0 ? c.coin : c.pair),
+            currency1: Currency.wrap(c0 ? c.pair : c.coin),
+            fee: LP_FEE,
+            tickSpacing: TICK_SPACING,
+            hooks: IHooks(address(this))
+        });
+        PoolId id = key.toId();
+
+        // 1) Pull every supplied wall band back into pool credit.
+        uint256 amt0;
+        uint256 amt1;
+        for (uint256 i = 0; i < bands.length; i++) {
+            Band memory b = bands[i];
+            if (b.upper - b.lower != WALL_WIDTH * TICK_SPACING) revert BadPolicy();
+            (BalanceDelta d,) = poolManager.modifyLiquidity(
+                key,
+                ModifyLiquidityParams({
+                    tickLower: b.lower,
+                    tickUpper: b.upper,
+                    liquidityDelta: -int256(uint256(b.liquidity)),
+                    salt: bytes32(0)
+                }),
+                ""
+            );
+            if (d.amount0() > 0) amt0 += uint256(uint128(d.amount0()));
+            if (d.amount1() > 0) amt1 += uint256(uint128(d.amount1()));
+            emit WallRemoved(id, b.lower, b.upper, b.liquidity);
+        }
+
+        // 2) Re-post everything as fresh tight quotes beside the current
+        //    price: currency0 credit on the ask side of its book, currency1
+        //    on the bid side (each _addBand picks the correct side itself).
+        uint256 placed0 = amt0 > 0 ? _addBand(key, id, key.currency0, amt0, WALL_WIDTH, true) : 0;
+        uint256 placed1 = amt1 > 0 ? _addBand(key, id, key.currency1, amt1, WALL_WIDTH, true) : 0;
+        if (amt0 > placed0) _payOut(key.currency0, c.policy.devWallet, amt0 - placed0);
+        if (amt1 > placed1) _payOut(key.currency1, c.policy.devWallet, amt1 - placed1);
+        _sweep(key.currency0, c.policy.devWallet);
+        _sweep(key.currency1, c.policy.devWallet);
+
+        emit WallRecentered(id, bands.length, c0 ? placed1 : placed0, c0 ? placed0 : placed1);
+        return "";
     }
 
     // ---------------------------------------------------------------------
