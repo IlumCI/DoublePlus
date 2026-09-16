@@ -97,7 +97,7 @@
       var y = h - (pts[i] / 100) * h;
       s += '<rect x="' + (i * bw).toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + Math.max(1, bw - 1).toFixed(1) + '" height="2.4" fill="currentColor"/>';
     }
-    return '<svg class="spark" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + " " + h + '" aria-hidden="true" style="color:' + (up ? "var(--phosphor)" : "#d98a8a") + '">' + s + "</svg>";
+    return '<svg class="spark" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + " " + h + '" aria-hidden="true" style="color:' + (up ? "var(--phosphor)" : "var(--down)") + '">' + s + "</svg>";
   }
 
   /* pixel candles */
@@ -107,7 +107,7 @@
       var o = pts[i], c = pts[i + 1], up = c >= o;
       var top = h - Math.max(o, c) / 100 * h, bh = Math.max(2, Math.abs(c - o) / 100 * h);
       var wickT = top - 4 - (i % 5), wickB = top + bh + 3 + (i % 4);
-      var col = up ? "var(--phosphor)" : "#d98a8a";
+      var col = up ? "var(--phosphor)" : "var(--down)";
       s += '<rect x="' + (i * cw + cw / 2 - 0.7).toFixed(1) + '" y="' + Math.max(0, wickT).toFixed(1) + '" width="1.4" height="' + (wickB - wickT).toFixed(1) + '" fill="' + col + '" opacity=".55"/>';
       s += '<rect x="' + (i * cw + 1).toFixed(1) + '" y="' + top.toFixed(1) + '" width="' + (cw - 2.4).toFixed(1) + '" height="' + bh.toFixed(1) + '" fill="' + (up ? col : "none") + '" stroke="' + col + '" stroke-width="1.2"/>';
     }

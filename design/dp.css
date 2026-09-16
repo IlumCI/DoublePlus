@@ -23,24 +23,27 @@
 @property --stamp-angle { syntax: "<angle>"; inherits: false; initial-value: -4deg; }
 
 :root {
-  /* dark frame (telescreen promoted to the whole site) */
-  --bg:      #0b0e0c;
-  --panel:   #11150f;
-  --panel-2: #171c14;
-  --line:    #262c20;
-  --line-2:  #38402f;
-  --text:    #e9e2cf;   /* paper-tinted white */
-  --dim:     #9a937e;
-  --faint:   #6b665a;
-  /* accents (artifact-sourced) */
-  --up:      #8cc9a4;   /* banknote phosphor  */
-  --up-dim:  #4d7a5f;
-  --down:    #e07f79;
-  --paper:   #fce8ca;   /* GDR form paper     */
-  --violet:  #b394c9;   /* stamp ink, lit     */
-  --red:     #c9605a;
-  --buy:     #2e7d4f;
-  --sell:    #8c3a36;
+  /* dark frame — catppuccin-mocha construction, 1984 cast:
+     blue-violet night base, party-cream text, pastel accents */
+  --bg:      #15151f;   /* crust  */
+  --panel:   #1d1d2b;   /* base   */
+  --panel-2: #252537;   /* surface */
+  --line:    #30304433; /* soft hairline */
+  --line:    #303044;
+  --line-2:  #44445c;
+  --text:    #ece4d0;   /* party-issue cream (paper-tinted) */
+  --dim:     #a6a1b2;
+  --faint:   #6f6c80;
+  /* accents */
+  --up:      #a5dbb2;   /* victory green (banknote, pastelized) */
+  --up-dim:  #5b8a6c;
+  --down:    #ee8a80;   /* down / warnings */
+  --paper:   #fce8ca;   /* GDR form paper  */
+  --violet:  #cba6f7;   /* stamp ink, mauve */
+  --red:     #e8756b;   /* INGSOC red      */
+  --blue:    #8fb4e3;   /* overall blue    */
+  --buy:     #a5dbb2;
+  --sell:    #ee8a80;
   /* faces */
   --display: "VG5000", monospace;
   --body: "Karrik", "Helvetica Neue", sans-serif;
@@ -78,10 +81,10 @@ body {
   line-height: 1.45;
   color: var(--text);
   background:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='7'/%3E%3CfeColorMatrix values='0 0 0 0 0.55 0 0 0 0 0.58 0 0 0 0 0.45 0 0 0 0.03 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='7'/%3E%3CfeColorMatrix values='0 0 0 0 0.62 0 0 0 0 0.58 0 0 0 0 0.72 0 0 0 0.028 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
     linear-gradient(var(--bg), var(--bg));
   background-color: var(--bg);
-  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='26'%3E%3Cpath d='M3 23 L7 12 L11 3 L13 3 L17 12 L21 23 L12 19 Z' fill='%23fce8ca' stroke='%230b0e0c' stroke-width='1'/%3E%3Ccircle cx='12' cy='17' r='1.6' fill='%230b0e0c'/%3E%3C/svg%3E") 12 23, auto;
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='26'%3E%3Cpath d='M3 23 L7 12 L11 3 L13 3 L17 12 L21 23 L12 19 Z' fill='%23fce8ca' stroke='%2315151f' stroke-width='1'/%3E%3Ccircle cx='12' cy='17' r='1.6' fill='%2315151f'/%3E%3C/svg%3E") 12 23, auto;
 }
 ::selection { background: var(--violet); color: var(--bg); }
 
@@ -89,10 +92,10 @@ a { color: var(--up); text-decoration-thickness: 1px; text-underline-offset: 2px
 a:hover { background: var(--up); color: var(--bg); text-decoration: none; }
 
 a, button, summary, label, select, input[type="range"], [role="button"] {
-  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28'%3E%3Crect x='9' y='2' width='10' height='7' rx='2' fill='%23b394c9'/%3E%3Crect x='12.5' y='9' width='3' height='6' fill='%23b394c9'/%3E%3Crect x='5' y='15' width='18' height='6' rx='1' fill='%23b394c9' stroke='%230b0e0c' stroke-width='1'/%3E%3Crect x='5' y='23' width='18' height='2.5' fill='%23c9605a'/%3E%3C/svg%3E") 14 25, pointer !important;
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28'%3E%3Crect x='9' y='2' width='10' height='7' rx='2' fill='%23cba6f7'/%3E%3Crect x='12.5' y='9' width='3' height='6' fill='%23cba6f7'/%3E%3Crect x='5' y='15' width='18' height='6' rx='1' fill='%23cba6f7' stroke='%2315151f' stroke-width='1'/%3E%3Crect x='5' y='23' width='18' height='2.5' fill='%23c9605a'/%3E%3C/svg%3E") 14 25, pointer !important;
 }
 body.busy, body.busy * {
-  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='26'%3E%3Cg fill='none' stroke='%23c9605a' stroke-width='2'%3E%3Cpath d='M6 4 h14 M6 22 h14 M8 4 c0 6 10 6 10 9 c0 3 -10 3 -10 9 M18 4 c0 6 -10 6 -10 9 c0 3 10 3 10 9'/%3E%3C/g%3E%3C/svg%3E") 13 13, wait !important;
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='26'%3E%3Cg fill='none' stroke='%23e8756b' stroke-width='2'%3E%3Cpath d='M6 4 h14 M6 22 h14 M8 4 c0 6 10 6 10 9 c0 3 -10 3 -10 9 M18 4 c0 6 -10 6 -10 9 c0 3 10 3 10 9'/%3E%3C/g%3E%3C/svg%3E") 13 13, wait !important;
 }
 
 h1, h2, h3 { font-family: var(--display); font-weight: 400; letter-spacing: .01em; text-wrap: balance; margin: 0; }
@@ -154,8 +157,8 @@ p { text-wrap: pretty; }
 
 /* featured slot — earned by performance, not editorial */
 .king { display: grid; grid-template-columns: auto 1fr auto; gap: 16px; align-items: center;
-  background: linear-gradient(90deg, color-mix(in srgb, var(--violet) 14%, var(--panel)), var(--panel));
-  border: 1px solid var(--line-2); border-radius: 8px; padding: 14px 18px; margin-bottom: 16px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--red) 16%, var(--panel)), color-mix(in srgb, var(--violet) 8%, var(--panel)));
+  border: 1px solid var(--line-2); border-radius: 12px; padding: 14px 18px; margin-bottom: 16px;
   text-decoration: none; color: inherit; }
 .king:hover { background: var(--panel-2); border-color: var(--violet); }
 .king .klabel { position: absolute; } /* unused fallback */
@@ -170,7 +173,7 @@ p { text-wrap: pretty; }
 
 .tcard {
   display: block; text-decoration: none; color: inherit; position: relative;
-  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px;
   transition: border-color .15s, background .15s;
 }
 .tcard:hover { background: var(--panel-2); border-color: var(--up-dim); }
@@ -243,7 +246,7 @@ p { text-wrap: pretty; }
 .coingrid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 14px; align-items: start; }
 @media (max-width: 940px) { .coingrid { grid-template-columns: 1fr; } }
 
-.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
 .panel .phead { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); font-family: var(--mono); font-size: 11px; color: var(--dim); letter-spacing: .08em; text-transform: uppercase; }
 .panel .pbody { padding: 14px; }
 
@@ -269,9 +272,9 @@ p { text-wrap: pretty; }
 .quicks button:hover { color: var(--text); border-color: var(--line-2); }
 .tb-est { font-family: var(--mono); font-size: 11px; color: var(--dim); margin: 10px 0; }
 .tb-est b { color: var(--text); font-weight: 400; }
-.tb-go { width: 100%; font-family: var(--mono); font-size: 14px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; border: none; border-radius: 6px; padding: 13px 0 11px; color: #fff; }
-.tb-go.buy { background: var(--buy); } .tb-go.buy:hover { background: #379159; }
-.tb-go.sell { background: var(--sell); } .tb-go.sell:hover { background: #a34641; }
+.tb-go { width: 100%; font-family: var(--mono); font-size: 14px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; border: none; border-radius: 8px; padding: 13px 0 11px; color: var(--bg); }
+.tb-go.buy { background: var(--buy); color: var(--bg); } .tb-go.buy:hover { background: var(--paper); }
+.tb-go.sell { background: var(--sell); color: var(--bg); } .tb-go.sell:hover { background: var(--paper); }
 .tb-note { font-size: 10.5px; color: var(--faint); margin: 10px 0 0; line-height: 1.45; }
 .tb-slip { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 10.5px; color: var(--faint); margin-top: 10px; }
 
