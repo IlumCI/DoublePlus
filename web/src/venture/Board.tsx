@@ -105,6 +105,6 @@ function Card({ v }: { v: Venture }) {
 function Badge({ v }: { v: Venture }) {
   if (v.phase === "graduated") return <span className="vn-badge graduated">Trading</span>;
   if (v.phase === "failed") return <span className="vn-badge failed">Refunds open</span>;
-  if (v.phase === "expired") return <span className="vn-badge funded">Funded ✓</span>;
+  if (v.phase === "expired") return <span className="vn-badge funded">Doubleplusgood ✓</span>;
   return <span className="vn-badge raising"><i />Raising</span>;
 }

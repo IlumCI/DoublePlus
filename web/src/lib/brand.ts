@@ -59,22 +59,22 @@ const FLAVORS: Record<string, Brand> = {
       "basedstonk.fun. Launch a memecoin on Base paired with a tokenized stock. Every trade rewards holders in that stock: hold the coin, earn NVIDIA, Apple, Google and more.",
     title: "basedstonk | launch a coin, earn real stock",
   },
-  // Venture: the startup-funding launchpad on Robinhood Chain. Founders open
-  // an all-or-nothing bonding-curve raise with an on-chain term sheet; hitting
+  // The startup-funding launchpad on Robinhood Chain. Founders open an
+  // all-or-nothing bonding-curve raise with an on-chain term sheet; hitting
   // the target pays the founder their cut and graduates the coin into a locked
-  // dividend-paying pool. Working brand name — rename here and in
-  // vite.config.ts FLAVOR_META + the venture.css [data-brand] block.
+  // dividend-paying pool. The flavor key stays "venture" (build wiring + CSS
+  // scope); the brand is doubleplus — Orwell's newspeak "doubleplusgood".
   venture: {
-    name: "venture",
+    name: "doubleplus",
     tld: ".fund",
-    domain: "venture.fund",
-    url: "https://venture.fund",
+    domain: "doubleplus.fund",
+    url: "https://doubleplus.fund",
     twitter: "https://x.com/",
     twitterHandle: "",
-    tagline: "launch and fund your startup as a decentralized stock",
+    tagline: "doubleplusgood venture funding",
     description:
-      "venture. Found a startup on Robinhood Chain: publish your term sheet on-chain, raise ETH on a rising curve, and graduate into a dividend-paying market. All-or-nothing raises, vested founder stakes, holders earn 80% of every trade fee.",
-    title: "venture | launch and fund your startup as a decentralized stock",
+      "doubleplus. Found a startup on Robinhood Chain: publish your term sheet on-chain, raise ETH on a rising curve, and graduate into a dividend-paying market. All-or-nothing raises, vested founder stakes, holders earn 80% of every trade fee. Doubleplusgood.",
+    title: "doubleplus | doubleplusgood venture funding",
   },
   steadypads: {
     name: "steadypads",

@@ -82,6 +82,10 @@ function How() {
     <div className="vn-shell vn-rise" style={{ paddingBottom: 90, maxWidth: 720 }}>
       <p className="vn-eyebrow mt-10">how it works</p>
       <h1 className="vn-title mt-2">Launch and fund a startup as a decentralized stock-style token.</h1>
+      <p className="mt-2 text-[13px]" style={{ color: "var(--v-ink-3)" }}>
+        doubleplus, from Orwell's newspeak: <i>doubleplusgood</i> — the strongest possible good. That's the bar for
+        what graduates here.
+      </p>
 
       <div className="mt-6 space-y-5 text-[14px] leading-relaxed" style={{ color: "var(--v-ink-2)" }}>
         <p>

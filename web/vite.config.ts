@@ -15,9 +15,9 @@ const FLAVOR_META: Record<string, { title: string; description: string; icon?: s
       "hammr. dutch-auction launchpad on Robinhood Chain: coins start at 10x and fall for one hour, then the hammer drops, liquidity locks, and holders earn the pair token on every trade.",
   },
   venture: {
-    title: "venture | launch and fund your startup as a decentralized stock",
+    title: "doubleplus | doubleplusgood venture funding",
     description:
-      "venture. Found a startup on Robinhood Chain: publish your term sheet on-chain, raise ETH on a rising curve, and graduate into a dividend-paying market. All-or-nothing raises, vested founder stakes, holders earn 80% of every trade fee.",
+      "doubleplus. Found a startup on Robinhood Chain: publish your term sheet on-chain, raise ETH on a rising curve, and graduate into a dividend-paying market. All-or-nothing raises, vested founder stakes, holders earn 80% of every trade fee. Doubleplusgood.",
   },
   steadypads: {
     title: "steadypads | the stable launchpad",

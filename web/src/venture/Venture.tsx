@@ -212,7 +212,7 @@ function GraduatePanel({ v }: { v: VentureT }) {
   return (
     <div className="vn-card p-6 text-center">
       <Flag size={36} />
-      <p className="vn-title mt-3" style={{ fontSize: 22 }}>Round fully funded.</p>
+      <p className="vn-title mt-3" style={{ fontSize: 22 }}>Doubleplusgood — round fully funded.</p>
       <p className="mx-auto mt-1 max-w-xs text-[13px]" style={{ color: "var(--v-ink-2)" }}>
         {fmtEth(v.raisedWei, 4)} ETH raised. Anyone can trigger graduation: the founder is paid their
         {" "}{(v.founderRaiseBps / 100).toFixed(1)}% cut ({fmtEth(founderCut, 4)} ETH), the rest becomes locked
@@ -264,7 +264,7 @@ function FailPanel({ v }: { v: VentureT }) {
 
   return (
     <div className="vn-card p-6 text-center">
-      <p className="vn-title mt-1" style={{ fontSize: 22 }}>This round didn't make it.</p>
+      <p className="vn-title mt-1" style={{ fontSize: 22 }}>Doubleplusungood — this round didn't make it.</p>
       <p className="mx-auto mt-1 max-w-xs text-[13px]" style={{ color: "var(--v-ink-2)" }}>
         The deadline passed below target. All-or-nothing means nobody is left holding the bag: return your
         ${v.symbol} and reclaim your full spend.
