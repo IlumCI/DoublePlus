@@ -2,14 +2,19 @@ import { ethers, network } from "hardhat";
 import { writeFileSync, mkdirSync } from "fs";
 import { join } from "path";
 
-// Venture bonding-curve launchpad deploy. Serves both Robinhood Chain
+// Venture (doubleplus) launchpad deploy. Serves both Robinhood Chain
 // networks through the env-driven `robinhood` network entry:
 //
 //   mainnet: ROBINHOOD_RPC_URL=https://rpc.mainnet.chain.robinhood.com ROBINHOOD_CHAIN_ID=4663
 //   testnet: ROBINHOOD_RPC_URL=https://rpc.testnet.chain.robinhood.com ROBINHOOD_CHAIN_ID=46630
 //
-// The V4 PoolManager sits at the same address on both. WETH differs; the
-// testnet has no self-deployed V3 stack, so venture launches there are
+// Env:
+//   ADMIN            protocolAdmin for the factory's LP-recovery lever (default: deployer)
+//   TREASURY         protocol fee treasury baked into the hook (default: ADMIN)
+//   PLATFORM_FEE_BPS protocol fee on every trade, 50..100 (default 100 = 1%)
+//
+// The V4 PoolManager sits at the same address on both networks. WETH differs;
+// the testnet has no self-deployed V3 stack, so venture launches there are
 // WETH-paired only (v3Router = zero, never called for WETH pairs).
 const INFRA: Record<number, { poolManager: string; weth: string; v3Router: string; file: string }> = {
   4663: {
@@ -26,7 +31,8 @@ const INFRA: Record<number, { poolManager: string; weth: string; v3Router: strin
   },
 };
 
-const HOOK_FLAGS = (1n << 6n) | (1n << 2n); // afterSwap | afterSwapReturnDelta
+// beforeInitialize | afterSwap | afterSwapReturnDelta
+const HOOK_FLAGS = (1n << 13n) | (1n << 6n) | (1n << 2n);
 const FLAG_MASK = (1n << 14n) - 1n;
 
 async function main() {
@@ -36,19 +42,36 @@ async function main() {
 
   const [signer] = await ethers.getSigners();
   const admin = process.env.ADMIN ?? signer.address;
-  console.log(`network: ${network.name} (${chainId})  deployer: ${signer.address}  admin: ${admin}`);
+  const treasury = process.env.TREASURY ?? admin;
+  const platformFeeBps = Number(process.env.PLATFORM_FEE_BPS ?? 100);
+  console.log(`network: ${network.name} (${chainId})  deployer: ${signer.address}`);
+  console.log(`admin: ${admin}  treasury: ${treasury}  platformFeeBps: ${platformFeeBps}`);
 
-  // 1) CREATE2 deployer + hook at a flag-matching address.
+  // 1) CREATE2 deployer + vesting deployer, then pin the factory address two
+  //    creates ahead so the hook (immutable launcher) and the token deployer
+  //    can both bake it in before the factory exists.
   const c2 = await (await ethers.getContractFactory("HookDeployer")).deploy();
   await c2.waitForDeployment();
   const c2Addr = await c2.getAddress();
 
-  const Hook = await ethers.getContractFactory("RhFinalHook");
-  const hookArgs = ethers.AbiCoder.defaultAbiCoder().encode(["address", "address"], [infra.poolManager, signer.address]);
+  const vestingDeployer = await (await ethers.getContractFactory("VestingDeployer")).deploy();
+  await vestingDeployer.waitForDeployment();
+
+  const nonce = await ethers.provider.getTransactionCount(signer.address);
+  // nonce n+0: hook deploy tx (CREATE2 via c2 — does not consume a signer create)
+  // ...but it IS a tx from the signer, so plain creates land at n+1 and n+2.
+  const predictedFactory = ethers.getCreateAddress({ from: signer.address, nonce: nonce + 2 });
+
+  // 2) Mine + deploy the hook at a flag-matching address, launcher pre-baked.
+  const Hook = await ethers.getContractFactory("VentureFeeHook");
+  const hookArgs = ethers.AbiCoder.defaultAbiCoder().encode(
+    ["address", "address", "address", "uint16"],
+    [infra.poolManager, treasury, predictedFactory, platformFeeBps],
+  );
   const hookInit = ethers.concat([Hook.bytecode, hookArgs]);
   const hookHash = ethers.keccak256(hookInit);
   let hookAddr = "", salt = "";
-  for (let i = 0n; i < 2_000_000n; i++) {
+  for (let i = 0n; i < 4_000_000n; i++) {
     const s = ethers.zeroPadValue(ethers.toBeHex(i), 32);
     const a = ethers.getCreate2Address(c2Addr, s, hookHash);
     if ((BigInt(a) & FLAG_MASK) === HOOK_FLAGS) { hookAddr = a; salt = s; break; }
@@ -56,15 +79,8 @@ async function main() {
   if (!hookAddr) throw new Error("no hook salt");
   await (await c2.deploy(salt, hookInit)).wait();
   console.log("hook:", hookAddr);
-  const hook = await ethers.getContractAt("RhFinalHook", hookAddr);
 
-  // 2) Vesting deployer (unbound) + token deployer bound to the factory one
-  //    nonce ahead, then the factory itself at the predicted address.
-  const vestingDeployer = await (await ethers.getContractFactory("VestingDeployer")).deploy();
-  await vestingDeployer.waitForDeployment();
-
-  const nonce = await ethers.provider.getTransactionCount(signer.address);
-  const predictedFactory = ethers.getCreateAddress({ from: signer.address, nonce: nonce + 1 });
+  // 3) Token deployer bound to the predicted factory, then the factory itself.
   const tokenDeployer = await (await ethers.getContractFactory("VentureTokenDeployer")).deploy(predictedFactory);
   await tokenDeployer.waitForDeployment();
 
@@ -77,8 +93,6 @@ async function main() {
   if (factoryAddr !== predictedFactory) throw new Error(`factory address drift: ${factoryAddr} != ${predictedFactory}`);
   console.log("factory:", factoryAddr);
 
-  await (await hook.setFactory(factoryAddr)).wait();
-
   const router = await (await ethers.getContractFactory("RhRouter")).deploy(
     infra.poolManager, factoryAddr, infra.weth, infra.v3Router,
   );
@@ -86,14 +100,15 @@ async function main() {
   const routerAddr = await router.getAddress();
   console.log("router:", routerAddr);
 
-  await (await hook.renounceOwnership()).wait();
   await (await factory.renounceOwnership()).wait();
-  console.log("ownership renounced on hook + factory");
+  console.log("factory ownership renounced (hook has no owner by construction)");
 
   const startBlock = await ethers.provider.getBlockNumber();
   const out = {
     chainId,
     admin,
+    treasury,
+    platformFeeBps,
     startBlock,
     contracts: {
       hookDeployer: c2Addr,

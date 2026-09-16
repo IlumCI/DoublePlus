@@ -96,7 +96,7 @@ function Card({ v }: { v: Venture }) {
 
       <div className="mt-3 flex flex-wrap gap-1.5 text-[10.5px]">
         <span className="vn-chip" style={{ padding: "2px 8px" }}>founder {v.founderRaiseBps / 100}% of raise</span>
-        <span className="vn-chip" style={{ padding: "2px 8px" }}>{(v.taxBps / 100).toFixed(1)}% fee → dividends</span>
+        <span className="vn-chip" style={{ padding: "2px 8px" }}>{(v.policy.buyTaxBps / 100).toFixed(1)}%/{(v.policy.sellTaxBps / 100).toFixed(1)}% buy/sell tax</span>
       </div>
     </Link>
   );

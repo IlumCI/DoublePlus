@@ -103,8 +103,15 @@ function How() {
         <p>
           <b style={{ color: "var(--v-ink)" }}>3 · Graduate.</b> Hit the target and anyone can trigger graduation: the
           founder's declared cut of the raise is paid out as funding, and everything else — the remaining supply and the
-          rest of the raise — becomes protocol-managed liquidity in a Uniswap V4 pool. From then on every trade pays a
-          fee split 80% to holders as dividends and 20% to the founder, forever.
+          rest of the raise — becomes protocol-managed liquidity in a Uniswap V4 pool.
+        </p>
+        <p>
+          <b style={{ color: "var(--v-ink)" }}>4 · Earn.</b> The founder writes the fee policy at launch and it runs
+          on-chain forever: separate buy and sell taxes (0–4% each), split across four engines in any proportion —
+          the dev wallet, ETH dividends to every holder, auto-liquidity locked beside the price, and a market-making
+          bid wall of standing buy support under the price. Trades in the first seconds after graduation pay a
+          decaying sniper premium that lands in the bid wall: snipers fund the floor. A protocol fee of up to 1% per
+          trade keeps the lights on.
         </p>
         <p>
           <b style={{ color: "var(--v-ink)" }}>Missed the deadline?</b> The round fails safe: the founder's allocation

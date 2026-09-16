@@ -15,25 +15,31 @@ async function deployStack() {
   const weth = await (await ethers.getContractFactory("WETH9")).deploy();
   await weth.waitForDeployment();
 
-  // Hook/poolManager/v3Router are inert during the curve phase; any
-  // code-bearing address that is never called works for these tests.
-  const hookPlaceholder = await weth.getAddress();
+  // poolManager/v3Router are inert during the curve phase; any code-bearing
+  // address that is never called works for these tests. The hook is real so
+  // launch() can read its MAX_SIDE_TAX_BPS guardrail (its flags are only
+  // checked by the PoolManager, which the curve phase never touches).
+  const placeholder = await weth.getAddress();
 
   const vestingDeployer = await (await ethers.getContractFactory("VestingDeployer")).deploy();
   await vestingDeployer.waitForDeployment();
 
   const nonce = await ethers.provider.getTransactionCount(admin.address);
-  const predictedFactory = ethers.getCreateAddress({ from: admin.address, nonce: nonce + 1 });
+  const predictedFactory = ethers.getCreateAddress({ from: admin.address, nonce: nonce + 2 });
+  const hook = await (await ethers.getContractFactory("VentureFeeHook")).deploy(
+    placeholder, admin.address, predictedFactory, 100,
+  );
+  await hook.waitForDeployment();
   const tokenDeployer = await (await ethers.getContractFactory("VentureTokenDeployer")).deploy(predictedFactory);
   await tokenDeployer.waitForDeployment();
 
   const factory = await (await ethers.getContractFactory("VentureFactory")).deploy(
     admin.address,
     admin.address,
-    hookPlaceholder, // poolManager (unused pre-finalize)
-    hookPlaceholder, // hook (unused pre-finalize)
+    placeholder, // poolManager (unused pre-finalize)
+    await hook.getAddress(),
     await weth.getAddress(),
-    hookPlaceholder, // v3Router (unused when pair is WETH)
+    placeholder, // v3Router (unused when pair is WETH)
     await vestingDeployer.getAddress(),
     await tokenDeployer.getAddress(),
   );
@@ -69,7 +75,13 @@ async function launch(
     symbol: "VNT",
     metadataURI: "",
     pair: weth,
-    taxBps: 300,
+    buyTaxBps: 300,
+    sellTaxBps: 300,
+    devWallet: "0x0000000000000000000000000000000000000000",
+    devBps: 2500,
+    dividendBps: 2500,
+    liquidityBps: 2500,
+    mmBps: 2500,
     ethUsdPrice8: ETH_USD_8,
     targetRaiseWei: TARGET,
     raiseDurationSecs: 2 * DAY,
@@ -87,7 +99,7 @@ async function launch(
     10n ** 27n,
     creator.address,
     await factory.getAddress(),
-    params.taxBps,
+    params.buyTaxBps,
     params.pair,
   ]);
   await (await factory.connect(creator).launch(params, salt)).wait();
@@ -182,6 +194,9 @@ describe("Venture bonding-curve launchpad (unit)", function () {
       { raiseDurationSecs: DAY / 2, symbol: "X3" },
       { targetRaiseWei: ethers.parseEther("0.5"), symbol: "X4" }, // below p0*C
       { maxBuyWei: TARGET / 500n, symbol: "X5" }, // cap makes raise impossible
+      { buyTaxBps: 401, symbol: "X6" }, // over the 4% per-side ceiling
+      { sellTaxBps: 500, symbol: "X7" },
+      { devBps: 3000, symbol: "X8" }, // buckets no longer sum to 100%
     ]) {
       await expect(launch(factory, tokenDeployer, creator, wethAddr, bad)).to.be.revertedWithCustomError(
         factory,

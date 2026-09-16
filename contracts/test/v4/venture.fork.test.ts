@@ -9,37 +9,42 @@ const POOL_MANAGER = process.env.FORK_POOL_MANAGER ?? "0x8366a39cc670b4001a1121b
 const WETH = process.env.FORK_WETH ?? "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73";
 const V3_ROUTER = process.env.FORK_V3_ROUTER ?? "0xCaf681a66D020601342297493863E78C959E5cb2";
 
-const HOOK_FLAGS = (1n << 6n) | (1n << 2n);
+const HOOK_FLAGS = (1n << 13n) | (1n << 6n) | (1n << 2n); // beforeInitialize | afterSwap | afterSwapReturnDelta
 const FLAG_MASK = (1n << 14n) - 1n;
 const ETH_USD_8 = 1865n * 10n ** 8n;
 const TARGET = ethers.parseEther("2");
 const DAY = 86_400;
 
-async function deployAll(admin: any) {
+async function deployAll(admin: any, treasury: any) {
   const c2 = await (await ethers.getContractFactory("HookDeployer")).deploy();
   await c2.waitForDeployment();
   const c2Addr = await c2.getAddress();
 
-  const Hook = await ethers.getContractFactory("RhFinalHook");
-  const hookArgs = ethers.AbiCoder.defaultAbiCoder().encode(["address", "address"], [POOL_MANAGER, admin.address]);
+  const vestingDeployer = await (await ethers.getContractFactory("VestingDeployer")).deploy();
+  await vestingDeployer.waitForDeployment();
+
+  // hook deploy is a plain tx (CREATE2 via c2), then tokenDeployer and the
+  // factory are the next two creates from the admin signer.
+  const nonce = await ethers.provider.getTransactionCount(admin.address);
+  const predictedFactory = ethers.getCreateAddress({ from: admin.address, nonce: nonce + 2 });
+
+  const Hook = await ethers.getContractFactory("VentureFeeHook");
+  const hookArgs = ethers.AbiCoder.defaultAbiCoder().encode(
+    ["address", "address", "address", "uint16"],
+    [POOL_MANAGER, treasury.address, predictedFactory, 100],
+  );
   const hookInit = ethers.concat([Hook.bytecode, hookArgs]);
   const hookHash = ethers.keccak256(hookInit);
   let hookAddr = "", salt = "";
-  for (let i = 0n; i < 500_000n; i++) {
+  for (let i = 0n; i < 4_000_000n; i++) {
     const s = ethers.zeroPadValue(ethers.toBeHex(i), 32);
     const a = ethers.getCreate2Address(c2Addr, s, hookHash);
     if ((BigInt(a) & FLAG_MASK) === HOOK_FLAGS) { hookAddr = a; salt = s; break; }
   }
   if (!hookAddr) throw new Error("no hook salt");
   await (await c2.deploy(salt, hookInit)).wait();
-  const hook = await ethers.getContractAt("RhFinalHook", hookAddr);
+  const hook = await ethers.getContractAt("VentureFeeHook", hookAddr);
 
-  const vestingDeployer = await (await ethers.getContractFactory("VestingDeployer")).deploy();
-  await vestingDeployer.waitForDeployment();
-
-  // tokenDeployer binds to the factory one nonce ahead.
-  const nonce = await ethers.provider.getTransactionCount(admin.address);
-  const predictedFactory = ethers.getCreateAddress({ from: admin.address, nonce: nonce + 1 });
   const tokenDeployer = await (await ethers.getContractFactory("VentureTokenDeployer")).deploy(predictedFactory);
   await tokenDeployer.waitForDeployment();
 
@@ -49,7 +54,6 @@ async function deployAll(admin: any) {
   );
   await factory.waitForDeployment();
   expect(await factory.getAddress()).to.equal(predictedFactory);
-  await (await hook.setFactory(await factory.getAddress())).wait();
 
   const router = await (await ethers.getContractFactory("RhRouter")).deploy(
     POOL_MANAGER, await factory.getAddress(), WETH, V3_ROUTER,
@@ -61,14 +65,16 @@ async function deployAll(admin: any) {
 async function launch(factory: any, tokenDeployer: any, signer: any, pair: string) {
   const Token = await ethers.getContractFactory("QuiverToken");
   const params = {
-    name: "Venture", symbol: "VNT", metadataURI: "", pair, taxBps: 300,
+    name: "Venture", symbol: "VNT", metadataURI: "", pair,
+    buyTaxBps: 200, sellTaxBps: 400, devWallet: ethers.ZeroAddress,
+    devBps: 2500, dividendBps: 2500, liquidityBps: 2500, mmBps: 2500,
     ethUsdPrice8: ETH_USD_8, targetRaiseWei: TARGET, raiseDurationSecs: 3 * DAY,
     maxBuyWei: TARGET, founderRaiseBps: 3000, founderSupplyBps: 1000,
     vestingSecs: 180 * DAY, v3Path: "0x",
   };
   const args = ethers.AbiCoder.defaultAbiCoder().encode(
     ["string", "string", "string", "uint256", "address", "address", "uint16", "address"],
-    ["Venture", "VNT", "", 10n ** 27n, signer.address, await factory.getAddress(), 300, pair],
+    ["Venture", "VNT", "", 10n ** 27n, signer.address, await factory.getAddress(), 200, pair],
   );
   const hash = ethers.keccak256(ethers.concat([Token.bytecode, args]));
   const depAddr = await tokenDeployer.getAddress();
@@ -86,9 +92,9 @@ describe("Venture bonding-curve launchpad (fork)", function () {
   this.timeout(600_000);
   if (process.env.FORK !== "1") { it.skip("requires FORK=1", () => {}); return; }
 
-  it("funds on the curve, graduates with the founder cut, trades and pays dividends", async () => {
-    const [admin, founder, backer, whale, trader] = await ethers.getSigners();
-    const { hook, factory, tokenDeployer, router } = await deployAll(admin);
+  it("funds on the curve, graduates with the founder cut, trades and settles the fee policy", async () => {
+    const [admin, founder, backer, whale, trader, treasury] = await ethers.getSigners();
+    const { factory, tokenDeployer, router } = await deployAll(admin, treasury);
     const coin = await launch(factory, tokenDeployer, founder, WETH);
     const erc = await ethers.getContractAt("QuiverToken", coin);
 
@@ -120,21 +126,38 @@ describe("Venture bonding-curve launchpad (fork)", function () {
     expect(await vesting.startTime()).to.be.greaterThan(0n);
     expect(await vesting.totalAllocation()).to.equal(10n ** 26n);
 
-    // Post-graduation trading through the router, both directions.
+    // A trade inside the sniper window succeeds and pays the premium into
+    // the bid wall (the trader simply gets fewer tokens).
+    await (await router.connect(whale).buy(coin, "0x", 0, { value: ethers.parseEther("0.002") })).wait();
+
+    // Clear the sniper window, then trade at the base policy rates.
+    await network.provider.send("evm_increaseTime", [20]);
+    await network.provider.send("evm_mine");
+
+    // BUY: fee lands in the coin. Protocol treasury (1%) and the dev wallet
+    // (founder) both receive coin; the dividend bucket is normalised to WETH
+    // and credited to holders inline — no keeper, no harvest step.
+    const dividendsBefore = await erc.totalRewardsDistributed();
+    const treasuryCoinBefore = await erc.balanceOf(treasury.address);
+    const devCoinBefore = await erc.balanceOf(founder.address);
     await (await router.connect(trader).buy(coin, "0x", 0, { value: ethers.parseEther("0.01") })).wait();
     const held = await erc.balanceOf(trader.address);
     expect(held).to.be.greaterThan(0n);
+    expect(await erc.balanceOf(treasury.address) - treasuryCoinBefore, "protocol fee on buys").to.be.greaterThan(0n);
+    expect(await erc.balanceOf(founder.address) - devCoinBefore, "dev bucket on buys").to.be.greaterThan(0n);
+    expect(await erc.totalRewardsDistributed() - dividendsBefore, "dividend bucket on buys").to.be.greaterThan(0n);
+
+    // SELL: fee lands in WETH; the protocol treasury earns WETH this time and
+    // the 4% sell side is settled through the same buckets.
+    const weth = await ethers.getContractAt("QuiverToken", WETH);
+    const treasuryWethBefore = await weth.balanceOf(treasury.address);
+    const dividendsBeforeSell = await erc.totalRewardsDistributed();
     await (await erc.connect(trader).approve(await router.getAddress(), ethers.MaxUint256)).wait();
     await (await router.connect(trader).sell(coin, held / 4n, "0x", 0)).wait();
+    expect(await weth.balanceOf(treasury.address) - treasuryWethBefore, "protocol fee on sells").to.be.greaterThan(0n);
+    expect(await erc.totalRewardsDistributed() - dividendsBeforeSell, "dividend bucket on sells").to.be.greaterThan(0n);
 
-    // Trade fees harvest into holder dividends (80%) + founder (20%).
-    const weth = await ethers.getContractAt("QuiverToken", WETH);
-    const founderWethBefore = await weth.balanceOf(founder.address);
-    await (await hook.harvest(coin)).wait();
-    expect(await weth.balanceOf(founder.address) - founderWethBefore, "founder got 20%").to.be.greaterThan(0n);
-    expect(await erc.totalRewardsDistributed(), "holders got 80%").to.be.greaterThan(0n);
-
-    // A curve backer is a holder and claims dividends.
+    // A curve backer is a holder and claims dividends in WETH.
     expect(await erc.pendingRewards(backer.address)).to.be.greaterThan(0n);
     const before = await weth.balanceOf(backer.address);
     await (await erc.connect(backer).claim()).wait();

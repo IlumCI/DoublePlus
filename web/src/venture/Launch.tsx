@@ -28,7 +28,15 @@ export function LaunchVenture() {
   const [founderStake, setFounderStake] = useState(10); // % of supply
   const [vestDays, setVestDays] = useState(365);
   const [capPct, setCapPct] = useState(2); // per-wallet, % of target
-  const [taxPct, setTaxPct] = useState(3);
+  const [buyTaxPct, setBuyTaxPct] = useState(2); // 0-4, founder trade tax on buys
+  const [sellTaxPct, setSellTaxPct] = useState(3); // 0-4, on sells
+  // Where the founder tax goes, in % that must total 100.
+  const [alloc, setAlloc] = useState({ dev: 40, dividends: 30, liquidity: 15, mm: 15 });
+  const allocTotal = alloc.dev + alloc.dividends + alloc.liquidity + alloc.mm;
+  const setBucket = (k: keyof typeof alloc) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = Math.max(0, Math.min(100, Math.round(Number(e.target.value) || 0)));
+    setAlloc((a) => ({ ...a, [k]: v }));
+  };
   const [logoData, setLogoData] = useState("");
   const [busy, setBusy] = useState(false);
   const [mining, setMining] = useState(false);
@@ -75,6 +83,9 @@ export function LaunchVenture() {
     if (minTargetEth > 0 && Number(target) < minTargetEth * 0.999) {
       return pushToast({ kind: "error", title: `Target too low`, body: `Minimum is ~${minTargetEth.toFixed(4)} ETH (the curve's $${START_FDV_USD} starting FDV).` });
     }
+    if (allocTotal !== 100) {
+      return pushToast({ kind: "error", title: "Fee split must total 100%", body: `It totals ${allocTotal}% right now.` });
+    }
     setBusy(true);
     try {
       const ethUsd8 = BigInt(Math.round(ethUsd * 1e8));
@@ -88,7 +99,7 @@ export function LaunchVenture() {
         website: form.website.trim(),
         twitter: form.twitter.trim(),
       });
-      const taxBps = Math.round(taxPct * 100);
+      const buyTaxBps = Math.round(buyTaxPct * 100);
       const symbol = form.symbol.trim().toUpperCase();
 
       // Mine the CREATE2 vanity salt (token addresses end in the chain's 4663).
@@ -99,7 +110,7 @@ export function LaunchVenture() {
           { type: "string" }, { type: "string" }, { type: "string" }, { type: "uint256" },
           { type: "address" }, { type: "address" }, { type: "uint16" }, { type: "address" },
         ],
-        [form.name.trim(), symbol, metadataURI, TOTAL_SUPPLY, me, VENTURE.factory, taxBps, VENTURE.weth],
+        [form.name.trim(), symbol, metadataURI, TOTAL_SUPPLY, me, VENTURE.factory, buyTaxBps, VENTURE.weth],
       );
       const initCodeHash = keccak256(concatHex([QUIVER_TOKEN_BYTECODE as `0x${string}`, args]));
       let salt: `0x${string}` | null = null;
@@ -121,7 +132,13 @@ export function LaunchVenture() {
             symbol,
             metadataURI,
             pair: VENTURE.weth,
-            taxBps,
+            buyTaxBps,
+            sellTaxBps: Math.round(sellTaxPct * 100),
+            devWallet: "0x0000000000000000000000000000000000000000" as const, // defaults to the founder
+            devBps: alloc.dev * 100,
+            dividendBps: alloc.dividends * 100,
+            liquidityBps: alloc.liquidity * 100,
+            mmBps: alloc.mm * 100,
             ethUsdPrice8: ethUsd8,
             targetRaiseWei: parsedTarget,
             raiseDurationSecs: BigInt(days * 86_400),
@@ -242,12 +259,45 @@ export function LaunchVenture() {
               <input type="range" className="vn-range" min={90} max={730} step={5} value={vestDays} disabled={founderStake === 0} onChange={(e) => setVestDays(Number(e.target.value))} />
               <p className="vn-hint">90–730 days, linear</p>
             </div>
-            <div className="sm:col-span-2">
-              <label className="vn-label">Trade fee after graduation: <b>{taxPct}%</b></label>
-              <input type="range" className="vn-range" min={0} max={10} step={0.5} value={taxPct} onChange={(e) => setTaxPct(Number(e.target.value))} />
-              <p className="vn-hint">80% of it pays your holders as dividends, 20% pays you — forever</p>
+            <div>
+              <label className="vn-label">Buy tax after graduation: <b>{buyTaxPct}%</b></label>
+              <input type="range" className="vn-range" min={0} max={4} step={0.25} value={buyTaxPct} onChange={(e) => setBuyTaxPct(Number(e.target.value))} />
+              <p className="vn-hint">0–4%, charged on every buy</p>
+            </div>
+            <div>
+              <label className="vn-label">Sell tax after graduation: <b>{sellTaxPct}%</b></label>
+              <input type="range" className="vn-range" min={0} max={4} step={0.25} value={sellTaxPct} onChange={(e) => setSellTaxPct(Number(e.target.value))} />
+              <p className="vn-hint">0–4%, charged on every sell</p>
             </div>
           </div>
+        </div>
+
+        {/* Fee allocation */}
+        <div>
+          <p className="vn-eyebrow mb-1">2b · where your trade tax goes</p>
+          <p className="vn-hint mb-3">
+            Split 100% of your tax across four engines. Settled automatically on every trade, on-chain, forever —
+            plus the protocol fee of {(VENTURE.platformFeeBps / 100).toFixed(2)}% per trade on top.
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {(
+              [
+                ["dev", "Dev wallet", "paid straight to your team wallet, in the trade currency"],
+                ["dividends", "Holder dividends", "paid to every holder pro-rata in ETH — your stock pays a yield"],
+                ["liquidity", "Auto-liquidity", "re-added beside the price, permanently locked — deepens your book"],
+                ["mm", "Market-making wall", "converted to ETH and posted as standing buy support under the price"],
+              ] as const
+            ).map(([k, label, hint]) => (
+              <div key={k}>
+                <label className="vn-label">{label}: <b>{alloc[k]}%</b></label>
+                <input type="range" className="vn-range" min={0} max={100} step={5} value={alloc[k]} onChange={setBucket(k)} />
+                <p className="vn-hint">{hint}</p>
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 text-[12.5px]" style={{ color: allocTotal === 100 ? "var(--v-green-2)" : "var(--v-red)" }}>
+            Allocation total: {allocTotal}% {allocTotal === 100 ? "✓" : "— must equal 100%"}
+          </p>
         </div>
 
         {/* Summary */}
@@ -258,7 +308,8 @@ export function LaunchVenture() {
             <div className="tr"><span>Raise</span><span className="vn-num">{target || "—"} ETH in ≤ {days}d, all-or-nothing</span></div>
             <div className="tr"><span>Founder take</span><span>{founderCut}% of raise + {founderStake}% supply vested {founderStake > 0 ? `${vestDays}d` : ""}</span></div>
             <div className="tr"><span>Liquidity</span><span>{100 - founderCut}% of raise + unsold supply, locked at graduation</span></div>
-            <div className="tr"><span>Holder yield</span><span>80% of the {taxPct}% fee on every trade</span></div>
+            <div className="tr"><span>Trade taxes</span><span>{buyTaxPct}% buy / {sellTaxPct}% sell + {(VENTURE.platformFeeBps / 100).toFixed(2)}% protocol</span></div>
+            <div className="tr"><span>Tax split</span><span>{alloc.dev}% dev · {alloc.dividends}% dividends · {alloc.liquidity}% liquidity · {alloc.mm}% MM wall</span></div>
           </div>
         </div>
 

@@ -1,14 +1,16 @@
 {
   "chainId": 46630,
   "admin": "0x1B97531b6Df3E96ab6899F880db7B11F2f45Acce",
-  "startBlock": 120431441,
+  "treasury": "0x1B97531b6Df3E96ab6899F880db7B11F2f45Acce",
+  "platformFeeBps": 100,
+  "startBlock": 120440055,
   "contracts": {
-    "hookDeployer": "0x22804Ced209B67B17f34c2B73b168e3c05120217",
-    "hook": "0x62459F349fD75e363E6caF312575f75306b84044",
-    "factory": "0x68F4004e8af101857E54abb202D02d999B869BFB",
-    "router": "0xE83d1e4357fc4f2a30663B13875ee908C48d5A38",
-    "tokenDeployer": "0x3Da67edEf050dE3149Bff3c7084b7388fE1BC6C7",
-    "vestingDeployer": "0x7E89b0dF08ED6dbd84b73b7ADDF2EA2b6343a06e",
+    "hookDeployer": "0x5dd712929d40250bBdBad3477696E6A8f5dfd382",
+    "hook": "0x94A1d17b66222174469AC9c0c9e57890fd922044",
+    "factory": "0x61ACf571F53DFF7f1a8A3d7Bb9534DacF076309C",
+    "router": "0xd33baa4f12EF2E0306d86bDAAAB2B68bCf7d1fD8",
+    "tokenDeployer": "0x305E65C2173be2e8217A31e738Fda954f9E3C8d1",
+    "vestingDeployer": "0x237Be4656e8700eA24C860BdE6a7D8DB718841d8",
     "poolManager": "0x8366a39cc670b4001a1121b8f6a443a643e40951",
     "weth": "0x33e4191705c386532ba27cBF171Db86919200B94",
     "v3Router": "0x0000000000000000000000000000000000000000"

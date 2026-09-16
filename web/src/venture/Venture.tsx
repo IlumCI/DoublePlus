@@ -51,7 +51,7 @@ export function VenturePage() {
               {v.phase === "failed" && <span className="vn-badge failed">Round failed · refunds open</span>}
               <h1 className="vn-title mt-1.5">{v.name} <span className="vn-num" style={{ fontSize: "0.55em", color: "var(--v-green-2)" }}>${v.symbol}</span></h1>
               <p className="mt-1 text-[12px]" style={{ color: "var(--v-ink-3)" }}>
-                founded by {short(v.creator)}{v.meta.sector ? <> · {v.meta.sector}</> : null} · {(v.taxBps / 100).toFixed(1)}% trade fee, 80% paid to holders
+                founded by {short(v.creator)}{v.meta.sector ? <> · {v.meta.sector}</> : null} · {(v.policy.buyTaxBps / 100).toFixed(1)}% buy / {(v.policy.sellTaxBps / 100).toFixed(1)}% sell tax
               </p>
             </div>
           </div>
@@ -113,7 +113,10 @@ function TermSheet({ v }: { v: VentureT }) {
         <div className="tr"><span>Founder stake</span><span>{v.vesting === "0x0000000000000000000000000000000000000000" ? "none" : "vested linearly after graduation"}</span></div>
         <div className="tr"><span>Round deadline</span><span>{days} day{days === 1 ? "" : "s"} · all-or-nothing refunds</span></div>
         <div className="tr"><span>Per-wallet cap</span><span className="vn-num">{fmtEth(v.maxBuyWei, 4)} ETH</span></div>
-        <div className="tr"><span>Trade fee after graduation</span><span>{(v.taxBps / 100).toFixed(1)}% · 80% holders / 20% founder</span></div>
+        <div className="tr"><span>Trade taxes after graduation</span><span className="vn-num">{(v.policy.buyTaxBps / 100).toFixed(2)}% buy / {(v.policy.sellTaxBps / 100).toFixed(2)}% sell</span></div>
+        <div className="tr"><span>Protocol fee</span><span>{(VENTURE.platformFeeBps / 100).toFixed(2)}% per trade, on top</span></div>
+        <div className="tr"><span>Tax allocation</span><span>{v.policy.devBps / 100}% dev · {v.policy.dividendBps / 100}% dividends · {v.policy.liquidityBps / 100}% liquidity · {v.policy.mmBps / 100}% MM wall</span></div>
+        <div className="tr"><span>Anti-snipe</span><span>15% premium first 5s, 5% to 15s → the bid wall</span></div>
       </div>
     </>
   );
@@ -383,7 +386,9 @@ function TradePanel({ v }: { v: VentureT }) {
         </div>
       )}
       <p className="mt-3 text-center text-[11.5px]" style={{ color: "var(--v-ink-3)" }}>
-        Every trade pays holders 80% of the {(v.taxBps / 100).toFixed(1)}% fee — a dividend for holding the stock.
+        {v.policy.dividendBps > 0
+          ? `${v.policy.dividendBps / 100}% of the trade tax pays holders as ETH dividends — a yield for holding the stock.`
+          : "This venture routes its trade tax to its dev, liquidity and market-making engines."}
       </p>
     </div>
   );

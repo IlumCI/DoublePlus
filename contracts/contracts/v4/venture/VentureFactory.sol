@@ -19,7 +19,7 @@ import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
 import {LiquidityAmounts} from "@uniswap/v4-periphery/src/libraries/LiquidityAmounts.sol";
 
 import {QuiverToken} from "../QuiverToken.sol";
-import {RhFinalHook} from "../robinhood/RhFinalHook.sol";
+import {VentureFeeHook} from "./VentureFeeHook.sol";
 import {FounderVesting} from "./FounderVesting.sol";
 import {VestingDeployer} from "./VestingDeployer.sol";
 import {VentureTokenDeployer} from "./VentureTokenDeployer.sol";
@@ -42,9 +42,11 @@ interface ISwapRouterV3V {
 /// @notice Startup-funding launchpad for the Robinhood chain: a founder
 ///         launches a coin that represents their venture, the public funds it
 ///         on a linear bonding curve in plain ETH, and hitting the target
-///         graduates the coin into a factory-locked Uniswap V4 pool with the
-///         proven pair=reward hook economics (every trade's tax split 80% to
-///         holders as dividends / 20% to the founder).
+///         graduates the coin into a factory-locked Uniswap V4 pool governed
+///         by the founder's own fee policy (VentureFeeHook): separate buy and
+///         sell taxes (0-4% each) split across dev wallet / holder dividends /
+///         auto-liquidity / a market-making bid wall, plus the protocol fee
+///         on every trade.
 ///
 ///         Raise mechanics, designed against the documented failure modes of
 ///         open bonding curves (sniper cohorts, order-splitting, dead curves):
@@ -86,11 +88,10 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
     uint16 public constant MAX_FOUNDER_SUPPLY_BPS = 1_500; // <= 15% of supply
     int24 public constant TICK_SPACING = 60;
     uint24 public constant LP_FEE = 0;
-    uint16 public constant MAX_TAX_BPS = 1000;
     uint16 internal constant BPS = 10_000;
 
     IPoolManager public immutable poolManager;
-    RhFinalHook public immutable hook;
+    VentureFeeHook public immutable hook;
     IWETH9V public immutable weth;
     ISwapRouterV3V public immutable v3Router;
     VestingDeployer public immutable vestingDeployer;
@@ -130,6 +131,7 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
     mapping(address token => Listing) public listings;
     mapping(address token => Curve) internal _curves;
     mapping(address token => address) public vestingOf;
+    mapping(address token => VentureFeeHook.FeePolicy) public feePolicyOf;
     mapping(address token => Position) public tokenPositions;
     mapping(address token => Position) public pairPositions;
     mapping(address token => mapping(address buyer => uint256)) public spentWei;
@@ -142,7 +144,13 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         string symbol;
         string metadataURI; // JSON: description, logo, links + pitch/sector
         address pair;       // trading quote + dividend currency
-        uint16 taxBps;
+        uint16 buyTaxBps;   // 0..400: founder tax on buys after graduation
+        uint16 sellTaxBps;  // 0..400: founder tax on sells after graduation
+        address devWallet;  // dev-fee recipient; 0 => the founder
+        uint16 devBps;      // the four buckets split the founder tax and
+        uint16 dividendBps; // must sum to 10_000
+        uint16 liquidityBps;
+        uint16 mmBps;
         uint256 ethUsdPrice8;    // ETH USD price, 8dp (sizes the curve start)
         uint256 targetRaiseWei;  // graduation trigger
         uint64 raiseDurationSecs;
@@ -191,7 +199,7 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         address owner_,
         address protocolAdmin_,
         IPoolManager poolManager_,
-        RhFinalHook hook_,
+        VentureFeeHook hook_,
         address weth_,
         ISwapRouterV3V v3Router_,
         VestingDeployer vestingDeployer_,
@@ -228,7 +236,8 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
     function launch(LaunchParams calldata p, bytes32 salt) external nonReentrant returns (address token) {
         if (launchesPaused) revert LaunchesPaused_();
         if (bytes(p.name).length == 0 || bytes(p.symbol).length == 0) revert InvalidParams();
-        if (p.taxBps > MAX_TAX_BPS) revert InvalidParams();
+        if (p.buyTaxBps > hook.MAX_SIDE_TAX_BPS() || p.sellTaxBps > hook.MAX_SIDE_TAX_BPS()) revert InvalidParams();
+        if (uint256(p.devBps) + p.dividendBps + p.liquidityBps + p.mmBps != BPS) revert InvalidParams();
         if (p.ethUsdPrice8 == 0) revert InvalidParams();
         if (p.pair == address(0) || p.pair.code.length == 0) revert InvalidParams();
         if (p.pair != address(weth) && p.v3Path.length == 0) revert InvalidParams();
@@ -258,7 +267,7 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         if (maxBuy < p.targetRaiseWei / 200) revert InvalidParams(); // cap can't make the raise impossible
 
         token = tokenDeployer.deployToken(
-            salt, p.name, p.symbol, p.metadataURI, TOTAL_SUPPLY, msg.sender, p.taxBps, p.pair
+            salt, p.name, p.symbol, p.metadataURI, TOTAL_SUPPLY, msg.sender, p.buyTaxBps, p.pair
         );
         if (uint160(token) & 0xffff != 0x4663) revert BadVanity();
         if (token == p.pair) revert InvalidParams();
@@ -293,13 +302,22 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
             maxBuyWei: maxBuy,
             v3Path: p.v3Path
         });
+        feePolicyOf[token] = VentureFeeHook.FeePolicy({
+            devWallet: p.devWallet == address(0) ? msg.sender : p.devWallet,
+            buyTaxBps: p.buyTaxBps,
+            sellTaxBps: p.sellTaxBps,
+            devBps: p.devBps,
+            dividendBps: p.dividendBps,
+            liquidityBps: p.liquidityBps,
+            mmBps: p.mmBps
+        });
         listings[token] =
-            Listing({creator: msg.sender, pair: p.pair, taxBps: p.taxBps, createdAt: uint64(block.timestamp), poolId: 0});
+            Listing({creator: msg.sender, pair: p.pair, taxBps: p.buyTaxBps, createdAt: uint64(block.timestamp), poolId: 0});
         allTokens.push(token);
         _tokensByCreator[msg.sender].push(token);
 
         emit Launched(
-            token, msg.sender, p.pair, p.taxBps, p.targetRaiseWei, uint64(block.timestamp) + p.raiseDurationSecs, vesting
+            token, msg.sender, p.pair, p.buyTaxBps, p.targetRaiseWei, uint64(block.timestamp) + p.raiseDurationSecs, vesting
         );
     }
 
@@ -470,7 +488,7 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
 
         poolId = PoolId.unwrap(key.toId());
         l.poolId = poolId;
-        hook.registerPool(key, token, pair, l.creator, l.taxBps, tokenIsCurrency0);
+        hook.registerPool(key, token, pair, feePolicyOf[token], tokenIsCurrency0);
 
         // 5) Start the founder's vesting clock.
         address vesting = vestingOf[token];

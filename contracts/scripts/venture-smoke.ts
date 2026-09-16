@@ -25,7 +25,7 @@ async function main() {
 
   const factory = await ethers.getContractAt("VentureFactory", dep.contracts.factory);
   const router = await ethers.getContractAt("RhRouter", dep.contracts.router);
-  const hook = await ethers.getContractAt("RhFinalHook", dep.contracts.hook);
+  const hook = await ethers.getContractAt("VentureFeeHook", dep.contracts.hook);
   const weth = dep.contracts.weth;
 
   const ethUsd8 = BigInt(process.env.ETH_USD_8 ?? 1_865_000n * 10n ** 8n);
@@ -37,7 +37,13 @@ async function main() {
     symbol: "SMOKE",
     metadataURI: JSON.stringify({ description: "venture smoke test", pitch: "throwaway" }),
     pair: weth,
-    taxBps: 300,
+    buyTaxBps: 200,
+    sellTaxBps: 400,
+    devWallet: "0x0000000000000000000000000000000000000000",
+    devBps: 2500,
+    dividendBps: 2500,
+    liquidityBps: 2500,
+    mmBps: 2500,
     ethUsdPrice8: ethUsd8,
     targetRaiseWei: target,
     raiseDurationSecs: DAY,
@@ -50,7 +56,7 @@ async function main() {
   const Token = await ethers.getContractFactory("QuiverToken");
   const args = ethers.AbiCoder.defaultAbiCoder().encode(
     ["string", "string", "string", "uint256", "address", "address", "uint16", "address"],
-    [params.name, params.symbol, params.metadataURI, 10n ** 27n, signer.address, dep.contracts.factory, params.taxBps, weth],
+    [params.name, params.symbol, params.metadataURI, 10n ** 27n, signer.address, dep.contracts.factory, params.buyTaxBps, weth],
   );
   const hash = ethers.keccak256(ethers.concat([Token.bytecode, args]));
   let salt = "";
@@ -81,9 +87,14 @@ async function main() {
   await (await router.sell(coin, held / 4n, "0x", 0)).wait();
   console.log("router round-trip ok");
 
-  // 5) Harvest dividends and report vesting state.
-  await (await hook.harvest(coin)).wait();
-  console.log("harvested. holder rewards so far:", (await erc.totalRewardsDistributed()).toString());
+  // 5) Fees settle inline on every trade — read the results.
+  const [policy] = await hook.policyOf(coin);
+  console.log("fee policy:", {
+    buyTaxBps: policy.buyTaxBps.toString(), sellTaxBps: policy.sellTaxBps.toString(),
+    devBps: policy.devBps.toString(), dividendBps: policy.dividendBps.toString(),
+    liquidityBps: policy.liquidityBps.toString(), mmBps: policy.mmBps.toString(),
+  });
+  console.log("holder dividends distributed inline:", (await erc.totalRewardsDistributed()).toString());
   const vestingAddr = await factory.vestingOf(coin);
   const vesting = await ethers.getContractAt("FounderVesting", vestingAddr);
   console.log("vesting:", vestingAddr, "started:", (await vesting.startTime()).toString(),

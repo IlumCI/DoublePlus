@@ -15,6 +15,8 @@ export const VENTURE = {
   /** ETH/USD 8dp fallback for chains whose explorer can't price ETH (testnet).
    *  The curve sizes its $3k start FDV from this when live pricing fails. */
   ethUsd8Fallback: BigInt(String(import.meta.env.VITE_ETH_USD_8_FALLBACK ?? "0")),
+  /** Protocol fee charged on every trade, mirrors the hook's immutable value. */
+  platformFeeBps: Number(import.meta.env.VITE_PLATFORM_FEE_BPS ?? 100),
 };
 
 export const TOTAL_SUPPLY = 1_000_000_000;
@@ -66,6 +68,21 @@ export const factoryAbi = [
     ],
   },
   { type: "function", name: "priceNow", stateMutability: "view", inputs: [{ type: "address" }], outputs: [{ type: "uint128" }] },
+  {
+    type: "function",
+    name: "feePolicyOf",
+    stateMutability: "view",
+    inputs: [{ type: "address" }],
+    outputs: [
+      { name: "devWallet", type: "address" },
+      { name: "buyTaxBps", type: "uint16" },
+      { name: "sellTaxBps", type: "uint16" },
+      { name: "devBps", type: "uint16" },
+      { name: "dividendBps", type: "uint16" },
+      { name: "liquidityBps", type: "uint16" },
+      { name: "mmBps", type: "uint16" },
+    ],
+  },
   { type: "function", name: "tokensForValue", stateMutability: "view", inputs: [{ type: "address" }, { type: "uint256" }], outputs: [{ type: "uint256" }] },
   { type: "function", name: "spentWei", stateMutability: "view", inputs: [{ type: "address" }, { type: "address" }], outputs: [{ type: "uint256" }] },
   { type: "function", name: "boughtTokens", stateMutability: "view", inputs: [{ type: "address" }, { type: "address" }], outputs: [{ type: "uint256" }] },
@@ -86,7 +103,13 @@ export const factoryAbi = [
           { name: "symbol", type: "string" },
           { name: "metadataURI", type: "string" },
           { name: "pair", type: "address" },
-          { name: "taxBps", type: "uint16" },
+          { name: "buyTaxBps", type: "uint16" },
+          { name: "sellTaxBps", type: "uint16" },
+          { name: "devWallet", type: "address" },
+          { name: "devBps", type: "uint16" },
+          { name: "dividendBps", type: "uint16" },
+          { name: "liquidityBps", type: "uint16" },
+          { name: "mmBps", type: "uint16" },
           { name: "ethUsdPrice8", type: "uint256" },
           { name: "targetRaiseWei", type: "uint256" },
           { name: "raiseDurationSecs", type: "uint64" },
@@ -175,6 +198,15 @@ export interface Venture {
   founderRaiseBps: number;
   maxBuyWei: bigint;
   vesting: Address;
+  policy: {
+    devWallet: Address;
+    buyTaxBps: number;
+    sellTaxBps: number;
+    devBps: number;
+    dividendBps: number;
+    liquidityBps: number;
+    mmBps: number;
+  };
   basePriceWei: bigint;
   slopeQ: bigint;
   phase: Phase;
@@ -209,10 +241,11 @@ export async function loadVentures(): Promise<Venture[]> {
 }
 
 export async function loadVenture(address: Address): Promise<Venture> {
-  const [listing, curve, terms, name, symbol, metaRaw] = await Promise.all([
+  const [listing, curve, terms, policyRaw, name, symbol, metaRaw] = await Promise.all([
     venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "listings", args: [address] }),
     venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "curveState", args: [address] }),
     venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "terms", args: [address] }),
+    venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "feePolicyOf", args: [address] }),
     venturePc.readContract({ address, abi: ercAbi, functionName: "name" }),
     venturePc.readContract({ address, abi: ercAbi, functionName: "symbol" }),
     venturePc.readContract({ address, abi: ercAbi, functionName: "metadataURI" }).catch(() => ""),
@@ -220,6 +253,7 @@ export async function loadVenture(address: Address): Promise<Venture> {
   const [creator, pair, taxBps, createdAt, poolId] = listing as unknown as [Address, Address, number, bigint, string];
   const c = curve as unknown as [bigint, bigint, bigint, bigint, bigint, bigint, boolean, boolean];
   const t = terms as unknown as [number, bigint, Address, bigint, bigint];
+  const pol = policyRaw as unknown as [Address, number, number, number, number, number, number];
   let meta: VentureMeta = {};
   try {
     meta = JSON.parse(String(metaRaw));
@@ -255,6 +289,15 @@ export async function loadVenture(address: Address): Promise<Venture> {
     founderRaiseBps: Number(t[0]),
     maxBuyWei: t[1],
     vesting: t[2],
+    policy: {
+      devWallet: pol[0],
+      buyTaxBps: Number(pol[1]),
+      sellTaxBps: Number(pol[2]),
+      devBps: Number(pol[3]),
+      dividendBps: Number(pol[4]),
+      liquidityBps: Number(pol[5]),
+      mmBps: Number(pol[6]),
+    },
     basePriceWei: t[3],
     slopeQ: t[4],
     phase: phaseOf(base),
