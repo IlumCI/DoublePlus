@@ -8,6 +8,7 @@ import { Header } from "./components/Header";
 import { Skeleton, Toasts } from "./components/ui";
 import { BRAND_FLAVOR, IS_STOCK_BOARD } from "./lib/brand";
 import { HammrApp } from "./hammr/HammrApp";
+import { VentureApp } from "./venture/VentureApp";
 import { wagmiConfig } from "./lib/wagmi";
 import { Explore } from "./pages/Explore";
 
@@ -51,6 +52,16 @@ export default function App() {
       <WagmiProvider config={wagmiConfig}>
         <QueryClientProvider client={queryClient}>
           <HammrApp />
+        </QueryClientProvider>
+      </WagmiProvider>
+    );
+  }
+  // The venture flavor is the self-contained startup-funding launchpad.
+  if (BRAND_FLAVOR === "venture") {
+    return (
+      <WagmiProvider config={wagmiConfig}>
+        <QueryClientProvider client={queryClient}>
+          <VentureApp />
         </QueryClientProvider>
       </WagmiProvider>
     );

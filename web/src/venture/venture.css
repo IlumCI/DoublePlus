@@ -1,0 +1,109 @@
+/* Venture: the startup-funding launchpad. A term-sheet aesthetic — deep
+   boardroom navy, ledger rules, spring-green capital accents, tabular
+   numerals for everything that counts money. */
+
+:root[data-brand="venture"] {
+  --v-bg: #0a0f1a;
+  --v-bg-2: #0d1424;
+  --v-panel: #101828;
+  --v-panel-2: #16203a;
+  --v-edge: #1f2c47;
+  --v-edge-2: #2b3a5c;
+  --v-ink: #eef3fb;
+  --v-ink-2: #aebad0;
+  --v-ink-3: #6b7a90;
+  --v-green: #2fd575;
+  --v-green-2: #7fe8ab;
+  --v-green-fg: #06130b;
+  --v-red: #ff6b6b;
+  --v-amber: #ffc857;
+  color-scheme: dark;
+}
+
+[data-brand="venture"] body,
+:root[data-brand="venture"] body {
+  background:
+    radial-gradient(1100px 500px at 85% -10%, #12325122, transparent 60%),
+    radial-gradient(900px 420px at -10% 0%, #0f3d2a22, transparent 55%),
+    var(--v-bg);
+  color: var(--v-ink);
+  font-family: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+.vn-shell { margin: 0 auto; max-width: 1080px; padding: 0 16px; }
+
+.vn-rise { animation: vnRise 0.35s ease both; }
+@keyframes vnRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+/* Chrome */
+.vn-header { position: sticky; top: 0; z-index: 30; border-bottom: 1px solid var(--v-edge); background: #0a0f1acc; backdrop-filter: blur(10px); }
+.vn-footer { border-top: 1px solid var(--v-edge); color: var(--v-ink-3); font-size: 12.5px; }
+.vn-footer a { color: var(--v-ink-2); }
+.vn-word { font-weight: 800; font-size: 18px; letter-spacing: -0.02em; color: var(--v-ink); }
+.vn-word b { color: var(--v-green); font-weight: 800; }
+.vn-nav a { padding: 7px 12px; border-radius: 10px; font-size: 13.5px; font-weight: 600; color: var(--v-ink-3); }
+.vn-nav a.on { color: var(--v-ink); background: var(--v-panel-2); }
+.vn-connect { border: 1px solid var(--v-edge-2); background: var(--v-panel); color: var(--v-ink); font-weight: 700; font-size: 13px; border-radius: 12px; padding: 8px 14px; }
+.vn-connect:hover { border-color: var(--v-green); }
+
+.vn-chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--v-edge); background: var(--v-panel); color: var(--v-ink-2); border-radius: 999px; padding: 4px 11px; font-size: 12px; font-weight: 600; }
+
+/* Type */
+.vn-eyebrow { font-size: 11.5px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--v-ink-3); }
+.vn-title { font-weight: 800; font-size: clamp(24px, 4.6vw, 34px); letter-spacing: -0.03em; line-height: 1.05; }
+.vn-num, .vn-count { font-variant-numeric: tabular-nums; font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; }
+.vn-num-big { font-size: clamp(26px, 5vw, 36px); font-weight: 700; letter-spacing: -0.02em; }
+.vn-count b { color: var(--v-green-2); }
+
+/* Status badges */
+.vn-badge { display: inline-flex; align-items: center; gap: 7px; border-radius: 999px; padding: 4px 12px; font-size: 11.5px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
+.vn-badge.raising { color: var(--v-green-2); background: #2fd57514; border: 1px solid #2fd57544; }
+.vn-badge.raising i { width: 7px; height: 7px; border-radius: 99px; background: var(--v-green); animation: vnPulse 1.6s ease infinite; }
+.vn-badge.funded { color: var(--v-amber); background: #ffc85712; border: 1px solid #ffc85742; }
+.vn-badge.graduated { color: var(--v-green-2); background: #2fd57510; border: 1px solid #2fd57538; }
+.vn-badge.failed { color: var(--v-red); background: #ff6b6b10; border: 1px solid #ff6b6b3a; }
+@keyframes vnPulse { 50% { opacity: 0.35; } }
+
+/* Cards */
+.vn-card { border: 1px solid var(--v-edge); background: linear-gradient(180deg, var(--v-panel), var(--v-bg-2)); border-radius: 18px; }
+.vn-card-link { display: block; transition: transform 0.15s ease, border-color 0.15s ease; }
+.vn-card-link:hover { transform: translateY(-2px); border-color: var(--v-edge-2); }
+
+/* Funding progress */
+.vn-track { position: relative; height: 10px; border-radius: 99px; background: var(--v-panel-2); overflow: hidden; border: 1px solid var(--v-edge); }
+.vn-track i { position: absolute; inset: 0 auto 0 0; width: var(--pct, 0%); border-radius: 99px; background: linear-gradient(90deg, #1f9e58, var(--v-green)); box-shadow: 0 0 14px #2fd57566; transition: width 0.5s ease; }
+
+/* Term sheet */
+.vn-sheet { border: 1px solid var(--v-edge); border-radius: 14px; overflow: hidden; }
+.vn-sheet .tr { display: flex; justify-content: space-between; gap: 12px; padding: 10px 14px; font-size: 13px; border-top: 1px solid var(--v-edge); background: var(--v-bg-2); }
+.vn-sheet .tr:first-child { border-top: 0; background: var(--v-panel-2); font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; font-size: 11px; color: var(--v-ink-3); }
+.vn-sheet .tr span:first-child { color: var(--v-ink-3); }
+.vn-sheet .tr span:last-child { color: var(--v-ink); font-weight: 600; }
+
+/* Inputs */
+.vn-field { display: flex; align-items: center; gap: 10px; border: 1px solid var(--v-edge-2); background: var(--v-bg-2); border-radius: 14px; padding: 12px 14px; }
+.vn-field:focus-within { border-color: var(--v-green); }
+.vn-field input { flex: 1; min-width: 0; background: transparent; border: 0; outline: 0; color: var(--v-ink); font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.vn-input { width: 100%; border: 1px solid var(--v-edge-2); background: var(--v-bg-2); border-radius: 12px; padding: 11px 13px; color: var(--v-ink); font-size: 14px; outline: 0; }
+.vn-input:focus { border-color: var(--v-green); }
+textarea.vn-input { resize: vertical; min-height: 84px; }
+.vn-label { display: block; font-size: 12px; font-weight: 700; color: var(--v-ink-2); margin-bottom: 6px; }
+.vn-hint { font-size: 11.5px; color: var(--v-ink-3); }
+
+/* Range rows */
+.vn-range { width: 100%; accent-color: var(--v-green); }
+
+/* CTA */
+.vn-cta { width: 100%; border-radius: 14px; padding: 13px 18px; font-size: 14.5px; font-weight: 800; color: var(--v-green-fg); background: linear-gradient(180deg, var(--v-green-2), var(--v-green)); box-shadow: 0 6px 24px #2fd57533; }
+.vn-cta:disabled { opacity: 0.55; }
+.vn-cta.ghost { background: var(--v-panel-2); color: var(--v-ink); box-shadow: none; border: 1px solid var(--v-edge-2); }
+.vn-cta.danger { background: linear-gradient(180deg, #ff9a9a, var(--v-red)); color: #1a0606; }
+
+/* Ledger rows (fills, holders) */
+.vn-rows .r { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 2px; font-size: 12.5px; border-top: 1px dashed var(--v-edge); }
+.vn-rows .r:first-child { border-top: 0; }
+
+/* Segmented control */
+.vn-seg { display: flex; border: 1px solid var(--v-edge-2); border-radius: 12px; overflow: hidden; }
+.vn-seg button { flex: 1; padding: 9px 0; font-size: 13px; font-weight: 700; color: var(--v-ink-3); background: transparent; }
+.vn-seg button.on { color: var(--v-green-fg); background: linear-gradient(180deg, var(--v-green-2), var(--v-green)); }
