@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>doubleplus.fund — Handbook</title>
+<meta name="description" content="The founder's handbook: how a raise works, what the machine promises, and what it refuses to promise.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23fce8ca'/%3E%3Ctext x='4' y='24' font-family='monospace' font-size='20' fill='%234f2b60'%3E%2B%2B%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="dp.css">
+</head>
+<body>
+<main class="shell">
+  <div class="page-head">
+    <p class="form-no">PAMPHLET HB-5 · ISSUED FREE TO ALL CITIZENS · READING IT IS NEVERTHELESS RARE</p>
+    <h1 class="page-title">THE FOUNDER'S HANDBOOK.</h1>
+    <div style="display:flex; flex-wrap:wrap; gap:10px 26px; align-items:baseline; justify-content:space-between">
+      <p style="max-width:56ch; margin:6px 0 0"><i>doubleplus</i>, from Newspeak: <i>doubleplusgood</i>, the strongest
+      possible good. That is the graduation bar, and this pamphlet is everything behind it.</p>
+      <label class="type" style="font-size:11px; letter-spacing:.08em">TYPE DENSITY
+        <select id="density"><option value="standard">standard issue</option><option value="compact">clerk (compact)</option><option value="loupe">reader (large)</option></select>
+      </label>
+    </div>
+  </div>
+
+  <div class="doc-grid" style="margin-top:14px">
+    <div class="dropcap" id="prose">
+      <h2 style="font-size:22px; margin:18px 0 8px">1 · Found.</h2>
+      <p>One transaction deploys your venture's coin and opens a funding round on a rising price
+      curve<button class="fn" popovertarget="fn-curve">1</button>: the earlier a backer commits, the cheaper the entry.
+      You swear the full term sheet up front — target, your cut of the raise (to 30%), your vested allocation (to 15%,
+      unlocking linearly only after success), the deadline, the per-wallet cap. It is public before anyone commits and
+      amendable by no one after, including you. Especially you.</p>
+
+      <h2 style="font-size:22px; margin:26px 0 8px">2 · Fund.</h2>
+      <p>Backers buy along the curve in plain ETH. Pricing is the exact integral of the curve, so splitting orders or
+      sniping the first block gains nothing, and the cap keeps any single citizen from cornering the round. The
+      arithmetic is disclosed; the trick is that there is no trick.</p>
+
+      <h2 style="font-size:22px; margin:26px 0 8px">3 · Graduate.</h2>
+      <p>Hit the target and anyone — you, a backer, a bored keeper — may trigger graduation. Your declared cut of the
+      raise pays out as funding; everything else, remaining supply and remaining ETH alike, becomes protocol-managed
+      liquidity in a Uniswap V4 pool. The DOUBLEPLUSGOOD stamp lands. It is the only stamp the machine gives out
+      gladly.</p>
+
+      <h2 style="font-size:22px; margin:26px 0 8px">4 · Earn.</h2>
+      <p>Your fee policy runs on-chain forever: separate buy and sell taxes (0–4% each), split in any proportion across
+      four engines — the dev wallet; ETH dividends pushed to every holder<button class="fn" popovertarget="fn-div">2</button>;
+      auto-liquidity locked beside the price; and a market-making engine that quotes both sides — a tight bid wall
+      under the price and an ask band above it, re-centered by keeper when the market drifts. Trades in the first
+      seconds after graduation pay a decaying sniper premium that lands in the walls: snipers fund the book. The
+      protocol adds up to 1% per trade to keep the lights on, and pays a fifth of that to referrers.</p>
+
+      <h2 style="font-size:22px; margin:26px 0 8px">5 · Compound.</h2>
+      <p>Share any page with your <span class="mono">?ref=</span> chit: whoever binds it pays you a fifth of the
+      protocol fee on every trade they ever make. Weekly, the flywheel returns a slice of revenue as buyback-burns,
+      trader rebates, and maker rewards, each epoch published as a manifest with the transactions to
+      check<button class="fn" popovertarget="fn-manifest">3</button>. Dividends deliver themselves every fifteen
+      minutes. Raises graduate themselves at target. Refunds open themselves at the deadline. The machine is
+      punctual so that nobody has to be trusted.</p>
+
+      <h2 style="font-size:22px; margin:26px 0 8px">6 · Fail, properly.</h2>
+      <p>Miss the deadline and the round fails safe: your allocation burns, and every backer reclaims their full spend
+      by returning their tokens. All or nothing, like a proper raise, with the MEMORY-HOLED stamp for your file and no
+      further correspondence entered into.</p>
+
+      <details class="dossier" style="margin-top:30px">
+        <summary>Annex I — What the machine refuses to promise <span class="agate">plain talk, small print, same thing</span></summary>
+        <div class="body type" style="font-size:12.5px">
+          These are open, freely-transferable tokens whose economics rhyme with equity — a funded raise, a vested
+          founder stake, dividend-paying trading fees. They are not registered securities, carry no legal claim on any
+          company, and the contracts are unaudited. Liquidity is protocol-managed, not burned. The weekly jackpot is
+          treasury policy v1: transparent in the manifests, not yet contract-enforced. Back only what you can afford
+          to lose, and read Exhibit A twice.
+        </div>
+      </details>
+      <details class="dossier">
+        <summary>Annex II — For founders in a hurry</summary>
+        <div class="body type" style="font-size:12.5px">
+          File <a href="launch.html">Form DP-1</a>. Balance the ration to 100% or the clerk will not stamp it. Set
+          taxes you would be willing to pay yourself. Your token address will end in <span class="mono">0x4663</span>,
+          mined in your browser while you hesitate.
+        </div>
+      </details>
+    </div>
+
+    <aside>
+      <p><b>MARGINALIA.</b></p>
+      <p data-aged="1">The graduation bar is named after the strongest word Newspeak permits. Weak rounds are not
+      insulted; they are simply not remembered.</p>
+      <p data-aged="1">The Ministry publishes everything and apologizes for nothing. This pamphlet is the apology.</p>
+      <p data-aged="2">HB-5 replaces HB-4, which was memory-holed for excessive optimism.</p>
+      <p style="margin-top:18px"><span class="stamp blue" style="font-size:9.5px">READ AND UNDERSTOOD<small>SIGNATURE NOT REQUIRED</small></span></p>
+    </aside>
+  </div>
+
+  <div id="fn-curve" popover class="note">A linear bonding curve priced by its closed-form integral: path-independent,
+    so a thousand small buys cost exactly what one large buy costs. First disclosed on this page; enforced in the
+    factory since the first docket.</div>
+  <div id="fn-div" popover class="note">Dividends normalize to the pool's pair currency and push to every holder of
+    record on the keeper's 15-minute round. Holding is the entire job.</div>
+  <div id="fn-manifest" popover class="note">Manifests are JSON, one per epoch, listing volumes, burns, rebates, maker
+    attributions, and the transaction hashes to verify each line. The Gazette is typeset from them, not the other way
+    around.</div>
+</main>
+
+<script src="dp.js"></script>
+<script>
+DP.page({ current: "handbook.html", form: "HB-5" });
+/* density control (arXiv 2603.00688: personalization beats one fixed setting) */
+document.getElementById("density").addEventListener("input", function () {
+  var p = document.getElementById("prose");
+  var v = this.value;
+  p.style.fontSize = v === "compact" ? "13px" : v === "loupe" ? "17.5px" : "";
+  p.style.lineHeight = v === "compact" ? "1.35" : v === "loupe" ? "1.62" : "";
+});
+</script>
+</body>
+</html>
