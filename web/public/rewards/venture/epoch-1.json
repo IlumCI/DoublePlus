@@ -1,0 +1,26 @@
+{
+  "epoch": 1,
+  "fromBlock": 120462801,
+  "toBlock": 120463180,
+  "totalVolumeEth": "0.000700238970135597",
+  "budgetEth": "0.000001750597425338",
+  "ventures": [
+    {
+      "coin": "0x7E140af25D3bb260cFaB2ee04954FEa8653E4663",
+      "volumeEth": "0.000700238970135597",
+      "spendEth": "0.000000437649356334",
+      "burnedTokens": "156602066449062622592926",
+      "burnTx": "0xafa87ed983c2c5efd22e6f8b95d7d406ef88473b368577ef107d73e1e076013a"
+    }
+  ],
+  "rebates": [
+    {
+      "trader": "0x1B97531b6Df3E96ab6899F880db7B11F2f45Acce",
+      "volumeEth": "0.000700238970135597",
+      "amountEth": "0.000000875298712669",
+      "tx": "0x10572d5a30350031341c7edbd3d52ff67b806e780a474ddd5a870b2a1998903e"
+    }
+  ],
+  "dryRun": false,
+  "generatedAt": "2026-09-16T17:29:21.436Z"
+}

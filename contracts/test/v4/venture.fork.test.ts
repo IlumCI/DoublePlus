@@ -30,8 +30,8 @@ async function deployAll(admin: any, treasury: any) {
 
   const Hook = await ethers.getContractFactory("VentureFeeHook");
   const hookArgs = ethers.AbiCoder.defaultAbiCoder().encode(
-    ["address", "address", "address", "uint16"],
-    [POOL_MANAGER, treasury.address, predictedFactory, 100],
+    ["address", "address", "address", "uint16", "uint16"],
+    [POOL_MANAGER, treasury.address, predictedFactory, 100, 2000],
   );
   const hookInit = ethers.concat([Hook.bytecode, hookArgs]);
   const hookHash = ethers.keccak256(hookInit);
@@ -55,11 +55,13 @@ async function deployAll(admin: any, treasury: any) {
   await factory.waitForDeployment();
   expect(await factory.getAddress()).to.equal(predictedFactory);
 
-  const router = await (await ethers.getContractFactory("RhRouter")).deploy(
+  const router = await (await ethers.getContractFactory("VentureRouter")).deploy(
     POOL_MANAGER, await factory.getAddress(), WETH, V3_ROUTER,
   );
   await router.waitForDeployment();
-  return { hook, factory, tokenDeployer, router };
+  const updates = await (await ethers.getContractFactory("VentureUpdates")).deploy(await factory.getAddress());
+  await updates.waitForDeployment();
+  return { hook, factory, tokenDeployer, router, updates };
 }
 
 async function launch(factory: any, tokenDeployer: any, signer: any, pair: string) {
@@ -93,8 +95,8 @@ describe("Venture bonding-curve launchpad (fork)", function () {
   if (process.env.FORK !== "1") { it.skip("requires FORK=1", () => {}); return; }
 
   it("funds on the curve, graduates with the founder cut, trades and settles the fee policy", async () => {
-    const [admin, founder, backer, whale, trader, treasury] = await ethers.getSigners();
-    const { factory, tokenDeployer, router } = await deployAll(admin, treasury);
+    const [admin, founder, backer, whale, trader, treasury, scout] = await ethers.getSigners();
+    const { hook, factory, tokenDeployer, router, updates } = await deployAll(admin, treasury);
     const coin = await launch(factory, tokenDeployer, founder, WETH);
     const erc = await ethers.getContractAt("QuiverToken", coin);
 
@@ -157,6 +159,27 @@ describe("Venture bonding-curve launchpad (fork)", function () {
     expect(await weth.balanceOf(treasury.address) - treasuryWethBefore, "protocol fee on sells").to.be.greaterThan(0n);
     expect(await erc.totalRewardsDistributed() - dividendsBeforeSell, "dividend bucket on sells").to.be.greaterThan(0n);
 
+    // Referrals: the scout recruited the trader; from then on the scout earns
+    // 20% of the protocol fee on everything the trader routes.
+    await (await hook.connect(trader).setReferrer(scout.address)).wait();
+    await expect(hook.connect(trader).setReferrer(admin.address)).to.be.revertedWithCustomError(hook, "AlreadyConfigured");
+    const scoutCoinBefore = await erc.balanceOf(scout.address);
+    const treasuryCoinBefore2 = await erc.balanceOf(treasury.address);
+    await (await router.connect(trader).buy(coin, "0x", 0, { value: ethers.parseEther("0.01") })).wait();
+    const scoutGot = (await erc.balanceOf(scout.address)) - scoutCoinBefore;
+    const treasuryGot = (await erc.balanceOf(treasury.address)) - treasuryCoinBefore2;
+    expect(scoutGot, "referrer earns their cut").to.be.greaterThan(0n);
+    // 20/80 split of the protocol fee, exact up to rounding dust.
+    expect(scoutGot * 4n).to.be.closeTo(treasuryGot, treasuryGot / 100n + 4n);
+
+    // Routed events feed the jackpot keeper's trader ranking.
+    const routedLogs = await router.queryFilter(router.filters.Routed(), -1000);
+    expect(routedLogs.length, "router emits Routed").to.be.greaterThan(0);
+
+    // Founder updates feed: creator-only, event-only.
+    await (await updates.connect(founder).postUpdate(coin, "shipped v1, revenue next week")).wait();
+    await expect(updates.connect(trader).postUpdate(coin, "spam")).to.be.revertedWithCustomError(updates, "NotCreator");
+
     // A curve backer is a holder and claims dividends in WETH.
     expect(await erc.pendingRewards(backer.address)).to.be.greaterThan(0n);
     const before = await weth.balanceOf(backer.address);
@@ -170,5 +193,70 @@ describe("Venture bonding-curve launchpad (fork)", function () {
     expect(claimable).to.be.closeTo(10n ** 26n / 2n, 10n ** 22n);
     await (await vesting.connect(founder).claim()).wait();
     expect(await erc.balanceOf(founder.address)).to.be.greaterThanOrEqual(claimable);
+  });
+
+  it("launches a stock-paired venture: dividends paid in the tokenized stock", async function () {
+    // Only meaningful against mainnet state (self-deployed V3 stack + stocks).
+    if (process.env.FORK_WETH) return this.skip();
+    const USDG = "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168";
+    const routes = require("../../config/rh-stock-routes.json") as { symbol: string; address: string; venue: string; fee: number }[];
+    const stock = routes.find((r) => r.venue === "v3" && r.symbol === "NVDA") ?? routes.find((r) => r.venue === "v3")!;
+    const buyPath = ethers.solidityPacked(
+      ["address", "uint24", "address", "uint24", "address"],
+      [WETH, 100, USDG, stock.fee, stock.address],
+    );
+    const sellPath = ethers.solidityPacked(
+      ["address", "uint24", "address", "uint24", "address"],
+      [stock.address, stock.fee, USDG, 100, WETH],
+    );
+
+    const [admin, founder, whale, trader, treasury] = await ethers.getSigners();
+    const { factory, tokenDeployer, router } = await deployAll(admin, treasury);
+
+    // Launch paired against the stock; the raise converts through the V3 route.
+    const Token = await ethers.getContractFactory("QuiverToken");
+    const params = {
+      name: "Stock Venture", symbol: "SVNT", metadataURI: "", pair: stock.address,
+      buyTaxBps: 200, sellTaxBps: 300, devWallet: ethers.ZeroAddress,
+      devBps: 2500, dividendBps: 5000, liquidityBps: 2500, mmBps: 0,
+      ethUsdPrice8: ETH_USD_8, targetRaiseWei: TARGET, raiseDurationSecs: 3 * DAY,
+      maxBuyWei: TARGET, founderRaiseBps: 2000, founderSupplyBps: 0,
+      vestingSecs: 0, v3Path: buyPath,
+    };
+    const args = ethers.AbiCoder.defaultAbiCoder().encode(
+      ["string", "string", "string", "uint256", "address", "address", "uint16", "address"],
+      ["Stock Venture", "SVNT", "", 10n ** 27n, founder.address, await factory.getAddress(), 200, stock.address],
+    );
+    const hash = ethers.keccak256(ethers.concat([Token.bytecode, args]));
+    const depAddr = await tokenDeployer.getAddress();
+    let salt = "";
+    for (let i = 0n; i < 6_000_000n; i++) {
+      const s = ethers.zeroPadValue(ethers.toBeHex(i), 32);
+      if ((BigInt(ethers.getCreate2Address(depAddr, s, hash)) & 0xffffn) === 0x4663n) { salt = s; break; }
+    }
+    await (await factory.connect(founder).launch(params, salt)).wait();
+    const coin = await factory.allTokens((await factory.totalTokens()) - 1n);
+    const erc = await ethers.getContractAt("QuiverToken", coin);
+
+    await (await factory.connect(whale).buy(coin, { value: ethers.parseEther("2.1") })).wait();
+    await (await factory.finalize(coin)).wait();
+    expect((await factory.listings(coin)).poolId).to.not.equal(ethers.ZeroHash);
+
+    await network.provider.send("evm_increaseTime", [20]);
+    await network.provider.send("evm_mine");
+
+    // Trade through the router with the stock route; dividends accrue in the
+    // STOCK token — hold the coin, earn NVDA.
+    await (await router.connect(trader).buy(coin, buyPath, 0, { value: ethers.parseEther("0.01") })).wait();
+    const held = await erc.balanceOf(trader.address);
+    expect(held).to.be.greaterThan(0n);
+    await (await erc.connect(trader).approve(await router.getAddress(), ethers.MaxUint256)).wait();
+    await (await router.connect(trader).sell(coin, held / 4n, sellPath, 0)).wait();
+    expect(await erc.totalRewardsDistributed(), "dividends paid in the stock").to.be.greaterThan(0n);
+
+    const stockErc = await ethers.getContractAt("QuiverToken", stock.address);
+    const before = await stockErc.balanceOf(whale.address);
+    await (await erc.connect(whale).claim()).wait();
+    expect((await stockErc.balanceOf(whale.address)) - before, "holder claimed real stock").to.be.greaterThan(0n);
   });
 });

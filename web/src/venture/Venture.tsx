@@ -4,9 +4,11 @@ import { useWalletClient } from "wagmi";
 import { formatEther, parseEther, type Address } from "viem";
 
 import {
-  ercAbi, factoryAbi, loadFills, loadVenture, quoteTokens, routerAbi, VENTURE, venturePc, vestingAbi,
-  type Fill, type Venture as VentureT,
+  ercAbi, factoryAbi, hookAbi, loadFills, loadUpdates, loadVenture, quoteTokens, routerAbi, VENTURE, venturePc,
+  vestingAbi, type Fill, type Venture as VentureT,
 } from "./client";
+import { MarketPanel } from "./Chart";
+import { refLink, storedRef } from "./referral";
 import { Countdown, Flag, fmtEth, fmtTok, pct, short, useTick } from "./ui";
 import { useWallet, errorText } from "../lib/useWallet";
 import { useUi } from "../store";
@@ -65,9 +67,13 @@ export function VenturePage() {
             {v.meta.website && <a className="vn-chip" href={v.meta.website} target="_blank" rel="noreferrer">website</a>}
             {v.meta.twitter && <a className="vn-chip" href={v.meta.twitter} target="_blank" rel="noreferrer">x / twitter</a>}
             {env.explorerUrl && <a className="vn-chip" href={`${env.explorerUrl}/token/${v.address}`} target="_blank" rel="noreferrer">contract ↗</a>}
+            <ShareChip />
           </div>
 
           <TermSheet v={v} />
+
+          {v.phase === "graduated" && <MarketPanel v={v} />}
+          <UpdatesFeed v={v} />
 
           <p className="vn-eyebrow mt-8 mb-2">backers</p>
           <div className="vn-rows vn-card px-4 py-1">
@@ -96,6 +102,85 @@ export function VenturePage() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function ShareChip() {
+  const { address: me } = useWallet();
+  const [copied, setCopied] = useState(false);
+  if (!me) return null;
+  return (
+    <button className="vn-chip" style={{ color: "var(--v-green-2)" }} onClick={() => {
+      navigator.clipboard?.writeText(refLink(me)).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); });
+    }}>
+      {copied ? "link copied ✓" : `refer & earn ${VENTURE.refShareBps / 100}% of fees`}
+    </button>
+  );
+}
+
+function UpdatesFeed({ v }: { v: VentureT }) {
+  const [updates, setUpdates] = useState<{ author: string; text: string; txHash: string }[]>([]);
+  useEffect(() => {
+    let live = true;
+    loadUpdates(v.address).then((u) => live && setUpdates(u)).catch(() => undefined);
+    return () => { live = false; };
+  }, [v.address]);
+  if (updates.length === 0) return null;
+  return (
+    <>
+      <p className="vn-eyebrow mt-8 mb-2">founder updates · on-chain</p>
+      <div className="vn-rows vn-card px-4 py-1">
+        {updates.slice().reverse().map((u) => (
+          <div className="r" key={u.txHash} style={{ alignItems: "flex-start" }}>
+            <span className="min-w-0 flex-1 text-[13px]" style={{ color: "var(--v-ink-2)", whiteSpace: "pre-wrap" }}>{u.text}</span>
+            {env.explorerUrl && <a className="vn-num shrink-0 text-[11px]" style={{ color: "var(--v-ink-3)" }} href={`${env.explorerUrl}/tx/${u.txHash}`} target="_blank" rel="noreferrer">proof ↗</a>}
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+/** One-tap referral binding: shown when a ?ref= link was followed and the
+ *  connected wallet has not bound a referrer yet. */
+function ReferralBanner() {
+  const { address: me, isConnected } = useWallet();
+  const { data: wc } = useWalletClient();
+  const pushToast = useUi((s) => s.pushToast);
+  const [bound, setBound] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const ref = storedRef();
+
+  useEffect(() => {
+    if (!me) return;
+    venturePc.readContract({ address: VENTURE.hook, abi: hookAbi, functionName: "referrerOf", args: [me] })
+      .then((r) => setBound(String(r))).catch(() => undefined);
+  }, [me, busy]);
+
+  if (!isConnected || !ref || !me || ref.toLowerCase() === me.toLowerCase()) return null;
+  if (!bound || bound !== "0x0000000000000000000000000000000000000000") return null;
+
+  const activate = async () => {
+    if (!wc) return;
+    setBusy(true);
+    try {
+      const hash = await wc.writeContract({ address: VENTURE.hook, abi: hookAbi, functionName: "setReferrer", args: [ref], chain: wc.chain, account: wc.account });
+      await venturePc.waitForTransactionReceipt({ hash });
+      pushToast({ kind: "success", title: "Referral activated", txHash: hash });
+    } catch (e) {
+      pushToast({ kind: "error", title: "Activation failed", body: errorText(e) });
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="mb-3 flex items-center justify-between rounded-xl border px-4 py-3" style={{ borderColor: "#2fd57544", background: "#2fd5750a" }}>
+      <p className="text-[12px]" style={{ color: "var(--v-ink-2)" }}>
+        You arrived through {short(ref)}'s link. Activating costs one tiny transaction and changes none of your fees.
+      </p>
+      <button className="vn-cta" style={{ width: "auto", padding: "8px 14px", fontSize: 12.5 }} disabled={busy} onClick={activate}>
+        {busy ? "Confirm…" : "Activate"}
+      </button>
     </div>
   );
 }
@@ -355,6 +440,7 @@ function TradePanel({ v }: { v: VentureT }) {
 
   return (
     <div className="vn-card p-5">
+      <ReferralBanner />
       <div className="vn-seg">
         {(["buy", "sell"] as const).map((s) => (
           <button key={s} className={side === s ? "on" : ""} onClick={() => { setSide(s); setAmt(""); }}>

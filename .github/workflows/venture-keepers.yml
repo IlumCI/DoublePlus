@@ -1,0 +1,82 @@
+name: Venture keepers (doubleplus)
+
+# Two keepers for the doubleplus startup launchpad:
+#   ops      — every 15 min: auto-graduate curves at target, auto-open refunds
+#              past deadline, push ETH/stock dividends into holder wallets.
+#   flywheel — weekly: rank the epoch's routed volume, buy back & burn the
+#              top-3 ventures, rebate the top-10 traders, publish the epoch
+#              manifest to web/public/rewards/venture/.
+#
+# Required repo secret (crons no-op without it):
+#   VENTURE_KEEPER_PK   the keeper/treasury wallet key, funded for gas + jackpot
+# Optional:
+#   VENTURE_RPC_URL     keyed RPC (defaults to the public testnet endpoint)
+on:
+  schedule:
+    - cron: "*/15 * * * *" # ops (GitHub cron is best-effort)
+    - cron: "0 12 * * 1" # flywheel: Mondays 12:00 UTC
+  workflow_dispatch:
+    inputs:
+      job:
+        description: "which keeper to run (ops | flywheel)"
+        default: "ops"
+
+concurrency:
+  group: venture-keepers
+  cancel-in-progress: false
+
+jobs:
+  ops:
+    if: github.event.schedule == '*/15 * * * *' || github.event.inputs.job == 'ops'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install keeper deps
+        working-directory: keeper
+        run: npm install --no-audit --no-fund
+      - name: Graduate, abort, deliver dividends
+        working-directory: keeper
+        env:
+          KEEPER_PRIVATE_KEY: ${{ secrets.VENTURE_KEEPER_PK }}
+          RPC_URL: ${{ secrets.VENTURE_RPC_URL || 'https://rpc.testnet.chain.robinhood.com' }}
+        run: |
+          if [ -z "$KEEPER_PRIVATE_KEY" ]; then echo "VENTURE_KEEPER_PK not set; skipping"; exit 0; fi
+          node venture-ops.mjs
+
+  flywheel:
+    if: github.event.schedule == '0 12 * * 1' || github.event.inputs.job == 'flywheel'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install keeper deps
+        working-directory: keeper
+        run: npm install --no-audit --no-fund
+      - name: Run the weekly jackpot epoch
+        working-directory: keeper
+        env:
+          KEEPER_PRIVATE_KEY: ${{ secrets.VENTURE_KEEPER_PK }}
+          RPC_URL: ${{ secrets.VENTURE_RPC_URL || 'https://rpc.testnet.chain.robinhood.com' }}
+        run: |
+          if [ -z "$KEEPER_PRIVATE_KEY" ]; then echo "VENTURE_KEEPER_PK not set; skipping"; exit 0; fi
+          node venture-flywheel.mjs
+      - name: Commit the epoch manifest
+        run: |
+          git config user.name "doubleplus-keeper"
+          git config user.email "keeper@users.noreply.github.com"
+          git add web/public/rewards/venture || true
+          if ! git diff --cached --quiet; then
+            git commit -m "keeper: publish venture flywheel epoch manifest"
+            git push
+          else
+            echo "no manifest changes"
+          fi

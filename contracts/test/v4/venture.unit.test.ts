@@ -27,7 +27,7 @@ async function deployStack() {
   const nonce = await ethers.provider.getTransactionCount(admin.address);
   const predictedFactory = ethers.getCreateAddress({ from: admin.address, nonce: nonce + 2 });
   const hook = await (await ethers.getContractFactory("VentureFeeHook")).deploy(
-    placeholder, admin.address, predictedFactory, 100,
+    placeholder, admin.address, predictedFactory, 100, 2000,
   );
   await hook.waitForDeployment();
   const tokenDeployer = await (await ethers.getContractFactory("VentureTokenDeployer")).deploy(predictedFactory);

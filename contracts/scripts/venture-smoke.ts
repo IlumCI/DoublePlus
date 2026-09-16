@@ -24,7 +24,7 @@ async function main() {
   console.log("smoke on", file, "signer:", signer.address);
 
   const factory = await ethers.getContractAt("VentureFactory", dep.contracts.factory);
-  const router = await ethers.getContractAt("RhRouter", dep.contracts.router);
+  const router = await ethers.getContractAt("VentureRouter", dep.contracts.router);
   const hook = await ethers.getContractAt("VentureFeeHook", dep.contracts.hook);
   const weth = dep.contracts.weth;
 
@@ -86,6 +86,19 @@ async function main() {
   await (await erc.approve(dep.contracts.router, ethers.MaxUint256)).wait();
   await (await router.sell(coin, held / 4n, "0x", 0)).wait();
   console.log("router round-trip ok");
+
+  // 4b) Referral leg: bind a fresh scout, trade, confirm the scout got paid
+  // their cut of the protocol fee in the same transaction.
+  const scout = ethers.Wallet.createRandom();
+  const bound = await hook.referrerOf(signer.address);
+  if (bound === ethers.ZeroAddress) {
+    await (await hook.setReferrer(scout.address)).wait();
+  }
+  const scoutBefore = await erc.balanceOf(scout.address);
+  await (await router.buy(coin, "0x", 0, { value: target / 20n })).wait();
+  const scoutGot = (await erc.balanceOf(scout.address)) - scoutBefore;
+  console.log("referral: scout", scout.address, "earned", scoutGot.toString(), "coin from one referred buy");
+  if (scoutGot <= 0n) throw new Error("referral payout missing");
 
   // 5) Fees settle inline on every trade — read the results.
   const [policy] = await hook.policyOf(coin);

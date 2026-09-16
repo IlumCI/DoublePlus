@@ -5,10 +5,14 @@ import { BRAND } from "../lib/brand";
 import { env } from "../lib/env";
 import { useWallet } from "../lib/useWallet";
 import { Board } from "./Board";
+import { Desk } from "./Desk";
 import { LaunchVenture } from "./Launch";
 import { VenturePage } from "./Venture";
 import { Flag } from "./ui";
+import { captureRef } from "./referral";
 import "./venture.css";
+
+captureRef();
 
 /** Self-contained startup-funding launchpad: its own chrome, routes and
  *  design, in the same pattern as the hammr auction app. */
@@ -22,6 +26,7 @@ export function VentureApp() {
             <Route path="/" element={<Board />} />
             <Route path="/venture/:address" element={<VenturePage />} />
             <Route path="/launch" element={<LaunchVenture />} />
+            <Route path="/desk" element={<Desk />} />
             <Route path="/how" element={<How />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
@@ -45,6 +50,7 @@ function Header() {
         <nav className="vn-nav flex items-center gap-1">
           <NavLink to="/" end className={({ isActive }) => (isActive ? "on" : "")}>Raises</NavLink>
           <NavLink to="/launch" className={({ isActive }) => (isActive ? "on" : "")}>Found a startup</NavLink>
+          <NavLink to="/desk" className={({ isActive }) => (isActive ? "on" : "")}>My desk</NavLink>
           <NavLink to="/how" className={({ isActive }) => (isActive ? "on" : "")}>How it works</NavLink>
         </nav>
         <div className="flex-1" />
@@ -112,6 +118,15 @@ function How() {
           bid wall of standing buy support under the price. Trades in the first seconds after graduation pay a
           decaying sniper premium that lands in the bid wall: snipers fund the floor. A protocol fee of up to 1% per
           trade keeps the lights on.
+        </p>
+        <p>
+          <b style={{ color: "var(--v-ink)" }}>5 · Compound.</b> Share any page with your <i>?ref=</i> link: whoever
+          binds it pays you a fifth of the protocol fee on every trade they ever make. Every week the flywheel takes a
+          slice of protocol revenue, buys back and burns the top-3 ventures by volume, and rebates the most active
+          traders — each epoch is published as a manifest with the transactions to check. Dividends are pushed to
+          wallets automatically every 15 minutes, raises graduate themselves the moment they hit target, and refunds
+          open themselves the moment a deadline passes. (The weekly jackpot is treasury policy v1 — transparent in the
+          manifests, not yet contract-enforced.)
         </p>
         <p>
           <b style={{ color: "var(--v-ink)" }}>Missed the deadline?</b> The round fails safe: the founder's allocation

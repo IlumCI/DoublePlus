@@ -12,6 +12,7 @@ import { join } from "path";
 //   ADMIN            protocolAdmin for the factory's LP-recovery lever (default: deployer)
 //   TREASURY         protocol fee treasury baked into the hook (default: ADMIN)
 //   PLATFORM_FEE_BPS protocol fee on every trade, 50..100 (default 100 = 1%)
+//   REF_SHARE_BPS    referrer's cut of the protocol fee, 0..5000 (default 2000 = 20%)
 //
 // The V4 PoolManager sits at the same address on both networks. WETH differs;
 // the testnet has no self-deployed V3 stack, so venture launches there are
@@ -44,8 +45,9 @@ async function main() {
   const admin = process.env.ADMIN ?? signer.address;
   const treasury = process.env.TREASURY ?? admin;
   const platformFeeBps = Number(process.env.PLATFORM_FEE_BPS ?? 100);
+  const refShareBps = Number(process.env.REF_SHARE_BPS ?? 2000);
   console.log(`network: ${network.name} (${chainId})  deployer: ${signer.address}`);
-  console.log(`admin: ${admin}  treasury: ${treasury}  platformFeeBps: ${platformFeeBps}`);
+  console.log(`admin: ${admin}  treasury: ${treasury}  platformFeeBps: ${platformFeeBps}  refShareBps: ${refShareBps}`);
 
   // 1) CREATE2 deployer + vesting deployer, then pin the factory address two
   //    creates ahead so the hook (immutable launcher) and the token deployer
@@ -65,8 +67,8 @@ async function main() {
   // 2) Mine + deploy the hook at a flag-matching address, launcher pre-baked.
   const Hook = await ethers.getContractFactory("VentureFeeHook");
   const hookArgs = ethers.AbiCoder.defaultAbiCoder().encode(
-    ["address", "address", "address", "uint16"],
-    [infra.poolManager, treasury, predictedFactory, platformFeeBps],
+    ["address", "address", "address", "uint16", "uint16"],
+    [infra.poolManager, treasury, predictedFactory, platformFeeBps, refShareBps],
   );
   const hookInit = ethers.concat([Hook.bytecode, hookArgs]);
   const hookHash = ethers.keccak256(hookInit);
@@ -93,12 +95,16 @@ async function main() {
   if (factoryAddr !== predictedFactory) throw new Error(`factory address drift: ${factoryAddr} != ${predictedFactory}`);
   console.log("factory:", factoryAddr);
 
-  const router = await (await ethers.getContractFactory("RhRouter")).deploy(
+  const router = await (await ethers.getContractFactory("VentureRouter")).deploy(
     infra.poolManager, factoryAddr, infra.weth, infra.v3Router,
   );
   await router.waitForDeployment();
   const routerAddr = await router.getAddress();
   console.log("router:", routerAddr);
+
+  const updates = await (await ethers.getContractFactory("VentureUpdates")).deploy(factoryAddr);
+  await updates.waitForDeployment();
+  console.log("updates:", await updates.getAddress());
 
   await (await factory.renounceOwnership()).wait();
   console.log("factory ownership renounced (hook has no owner by construction)");
@@ -109,12 +115,14 @@ async function main() {
     admin,
     treasury,
     platformFeeBps,
+    refShareBps,
     startBlock,
     contracts: {
       hookDeployer: c2Addr,
       hook: hookAddr,
       factory: factoryAddr,
       router: routerAddr,
+      updates: await updates.getAddress(),
       tokenDeployer: await tokenDeployer.getAddress(),
       vestingDeployer: await vestingDeployer.getAddress(),
       poolManager: infra.poolManager,

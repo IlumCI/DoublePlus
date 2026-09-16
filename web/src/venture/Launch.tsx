@@ -6,7 +6,13 @@ import { concatHex, encodeAbiParameters, formatEther, getContractAddress, keccak
 import { factoryAbi, VENTURE, venturePc } from "./client";
 import { Flag, fmtUsdV } from "./ui";
 import { QUIVER_TOKEN_BYTECODE } from "../lib/rh/tokenBytecode";
-import { pairUsd } from "../lib/rh/routes";
+import { pairUsd, resolvePairRoute } from "../lib/rh/routes";
+import { STOCKS } from "../lib/v4/stocks";
+import { env } from "../lib/env";
+
+// Stock-paired ventures need the self-deployed V3 stack, which exists on
+// mainnet (4663) only; the testnet build keeps every pool ETH-quoted.
+const STOCK_PAIRS_ENABLED = env.chainId === 4663;
 import { errorText, useWallet } from "../lib/useWallet";
 import { useUi } from "../store";
 
@@ -28,6 +34,8 @@ export function LaunchVenture() {
   const [founderStake, setFounderStake] = useState(10); // % of supply
   const [vestDays, setVestDays] = useState(365);
   const [capPct, setCapPct] = useState(2); // per-wallet, % of target
+  const [pairMode, setPairMode] = useState<"eth" | "stock">("eth");
+  const [stock, setStock] = useState<string>(STOCKS[0]?.address ?? "");
   const [buyTaxPct, setBuyTaxPct] = useState(2); // 0-4, founder trade tax on buys
   const [sellTaxPct, setSellTaxPct] = useState(3); // 0-4, on sells
   // Where the founder tax goes, in % that must total 100.
@@ -91,6 +99,14 @@ export function LaunchVenture() {
       const ethUsd8 = BigInt(Math.round(ethUsd * 1e8));
       if (ethUsd8 <= 0n) throw new Error("Could not read the ETH price. Try again in a moment.");
 
+      const pair = (STOCK_PAIRS_ENABLED && pairMode === "stock" ? stock : VENTURE.weth) as `0x${string}`;
+      let v3Path: `0x${string}` = "0x";
+      if (pair.toLowerCase() !== VENTURE.weth.toLowerCase()) {
+        const route = await resolvePairRoute(venturePc, pair);
+        if (!route.buy || route.buy === "0x") throw new Error("No live route to that stock. Pick another.");
+        v3Path = route.buy as `0x${string}`;
+      }
+
       const metadataURI = JSON.stringify({
         description: form.pitch.trim(),
         pitch: form.pitch.trim(),
@@ -110,7 +126,7 @@ export function LaunchVenture() {
           { type: "string" }, { type: "string" }, { type: "string" }, { type: "uint256" },
           { type: "address" }, { type: "address" }, { type: "uint16" }, { type: "address" },
         ],
-        [form.name.trim(), symbol, metadataURI, TOTAL_SUPPLY, me, VENTURE.factory, buyTaxBps, VENTURE.weth],
+        [form.name.trim(), symbol, metadataURI, TOTAL_SUPPLY, me, VENTURE.factory, buyTaxBps, pair],
       );
       const initCodeHash = keccak256(concatHex([QUIVER_TOKEN_BYTECODE as `0x${string}`, args]));
       let salt: `0x${string}` | null = null;
@@ -131,7 +147,7 @@ export function LaunchVenture() {
             name: form.name.trim(),
             symbol,
             metadataURI,
-            pair: VENTURE.weth,
+            pair,
             buyTaxBps,
             sellTaxBps: Math.round(sellTaxPct * 100),
             devWallet: "0x0000000000000000000000000000000000000000" as const, // defaults to the founder
@@ -146,7 +162,7 @@ export function LaunchVenture() {
             founderRaiseBps: founderCut * 100,
             founderSupplyBps: founderStake * 100,
             vestingSecs: founderStake > 0 ? vestDays * 86_400 : 0,
-            v3Path: "0x",
+            v3Path,
           },
           salt,
         ],
@@ -259,6 +275,25 @@ export function LaunchVenture() {
               <input type="range" className="vn-range" min={90} max={730} step={5} value={vestDays} disabled={founderStake === 0} onChange={(e) => setVestDays(Number(e.target.value))} />
               <p className="vn-hint">90–730 days, linear</p>
             </div>
+            {STOCK_PAIRS_ENABLED && (
+              <div className="sm:col-span-2">
+                <label className="vn-label">What do your holders earn?</label>
+                <div className="vn-seg" style={{ maxWidth: 340 }}>
+                  <button type="button" className={pairMode === "eth" ? "on" : ""} onClick={() => setPairMode("eth")}>ETH dividends</button>
+                  <button type="button" className={pairMode === "stock" ? "on" : ""} onClick={() => setPairMode("stock")}>Stock dividends</button>
+                </div>
+                {pairMode === "stock" && (
+                  <select className="vn-input mt-2" value={stock} onChange={(e) => setStock(e.target.value)}>
+                    {STOCKS.map((st) => <option key={st.address} value={st.address}>{st.symbol} — {st.name}</option>)}
+                  </select>
+                )}
+                <p className="vn-hint mt-1">
+                  {pairMode === "stock"
+                    ? "Your pool quotes in the tokenized stock and every dividend pays out in it — hold the coin, earn the stock."
+                    : "Your pool quotes in ETH and dividends pay out in ETH."}
+                </p>
+              </div>
+            )}
             <div>
               <label className="vn-label">Buy tax after graduation: <b>{buyTaxPct}%</b></label>
               <input type="range" className="vn-range" min={0} max={4} step={0.25} value={buyTaxPct} onChange={(e) => setBuyTaxPct(Number(e.target.value))} />

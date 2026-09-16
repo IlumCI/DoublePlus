@@ -17,6 +17,10 @@ export const VENTURE = {
   ethUsd8Fallback: BigInt(String(import.meta.env.VITE_ETH_USD_8_FALLBACK ?? "0")),
   /** Protocol fee charged on every trade, mirrors the hook's immutable value. */
   platformFeeBps: Number(import.meta.env.VITE_PLATFORM_FEE_BPS ?? 100),
+  /** Referrer's cut of the protocol fee, mirrors the hook's immutable value. */
+  refShareBps: Number(import.meta.env.VITE_REF_SHARE_BPS ?? 2000),
+  updates: (import.meta.env.VITE_VENTURE_UPDATES ?? "0x0000000000000000000000000000000000000000") as Address,
+  poolManager: (import.meta.env.VITE_V4_POOL_MANAGER ?? "0x8366a39cc670b4001a1121b8f6a443a643e40951") as Address,
 };
 
 export const TOTAL_SUPPLY = 1_000_000_000;
@@ -152,6 +156,29 @@ export const ercAbi = [
   { type: "function", name: "totalRewardsDistributed", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
   { type: "function", name: "claim", stateMutability: "nonpayable", inputs: [], outputs: [{ type: "uint256" }] },
 ] as const;
+
+export const hookAbi = [
+  { type: "function", name: "setReferrer", stateMutability: "nonpayable", inputs: [{ type: "address" }], outputs: [] },
+  { type: "function", name: "referrerOf", stateMutability: "view", inputs: [{ type: "address" }], outputs: [{ type: "address" }] },
+  { type: "function", name: "refShareBps", stateMutability: "view", inputs: [], outputs: [{ type: "uint16" }] },
+] as const;
+
+export const updatesAbi = [
+  { type: "function", name: "postUpdate", stateMutability: "nonpayable", inputs: [{ type: "address" }, { type: "string" }], outputs: [] },
+] as const;
+
+export const updatePostedEvent = parseAbiItem(
+  "event UpdatePosted(address indexed token, address indexed author, string update)",
+);
+export const referralPaidEvent = parseAbiItem(
+  "event ReferralPaid(address indexed trader, address indexed referrer, address currency, uint256 amount)",
+);
+export const routedEvent = parseAbiItem(
+  "event Routed(address indexed trader, address indexed coin, bool isBuy, uint256 ethIn, uint256 ethOut)",
+);
+export const poolSwapEvent = parseAbiItem(
+  "event Swap(bytes32 indexed id, address indexed sender, int128 amount0, int128 amount1, uint160 sqrtPriceX96, uint128 liquidity, int24 tick, uint24 fee)",
+);
 
 export const boughtEvent = parseAbiItem(
   "event CurveBuy(address indexed token, address indexed buyer, uint256 ethIn, uint256 tokensOut, uint128 priceWei)",
@@ -347,4 +374,112 @@ function sqrtBig(n: bigint): bigint {
   let x = n, y = (x + 1n) / 2n;
   while (y < x) { x = y; y = (x + n / x) / 2n; }
   return x;
+}
+
+// ---------------------------------------------------------------------------
+// Post-graduation market data, straight from the pool's V4 swap log.
+// ---------------------------------------------------------------------------
+
+export interface PoolTrade {
+  isBuy: boolean; // coin left the pool
+  coinAmount: bigint;
+  pairAmount: bigint;
+  priceWei: bigint; // pair-wei per whole coin
+  blockNumber: number;
+  ts: number; // estimated
+  txHash: string;
+}
+
+export interface Candle { time: number; open: number; high: number; low: number; close: number }
+
+const Q96 = 2n ** 96n;
+
+function priceFromSqrt(sqrtPriceX96: bigint, coinIsC0: boolean): bigint {
+  // pair-wei per 1e18 coin-wei
+  const p = (sqrtPriceX96 * sqrtPriceX96 * 10n ** 18n) / Q96 / Q96; // price1per0 * 1e18
+  if (coinIsC0) return p;
+  return p === 0n ? 0n : (10n ** 36n) / p;
+}
+
+export async function loadPoolTrades(v: Venture): Promise<PoolTrade[]> {
+  if (!v.finalized || v.poolId === "0x" + "0".repeat(64)) return [];
+  const latest = await venturePc.getBlockNumber();
+  const logs = await venturePc.getLogs({
+    address: VENTURE.poolManager,
+    event: poolSwapEvent,
+    args: { id: v.poolId as `0x${string}` },
+    fromBlock: VENTURE.startBlock,
+    toBlock: latest,
+  });
+  if (logs.length === 0) return [];
+  const coinIsC0 = BigInt(v.address) < BigInt(v.pair);
+  // Estimate timestamps: anchor first and last blocks, interpolate between.
+  const firstB = Number(logs[0].blockNumber), lastB = Number(logs[logs.length - 1].blockNumber);
+  const [first, last] = await Promise.all([
+    venturePc.getBlock({ blockNumber: BigInt(firstB) }),
+    venturePc.getBlock({ blockNumber: BigInt(lastB) }),
+  ]);
+  const perBlock = lastB > firstB ? Number(last.timestamp - first.timestamp) / (lastB - firstB) : 1;
+  return logs.map((l) => {
+    const a0 = l.args.amount0 as bigint, a1 = l.args.amount1 as bigint;
+    const coinDelta = coinIsC0 ? a0 : a1;
+    const pairDelta = coinIsC0 ? a1 : a0;
+    return {
+      isBuy: coinDelta > 0n, // positive delta = paid out of the pool to the swapper
+      coinAmount: coinDelta < 0n ? -coinDelta : coinDelta,
+      pairAmount: pairDelta < 0n ? -pairDelta : pairDelta,
+      priceWei: priceFromSqrt(l.args.sqrtPriceX96 as bigint, coinIsC0),
+      blockNumber: Number(l.blockNumber),
+      ts: Number(first.timestamp) + Math.round((Number(l.blockNumber) - firstB) * perBlock),
+      txHash: l.transactionHash,
+    };
+  });
+}
+
+/** Bucket trades into candles of `intervalSecs` (price in pair per coin, 1e18-scaled to float). */
+export function toCandles(trades: PoolTrade[], intervalSecs: number): Candle[] {
+  const out: Candle[] = [];
+  let cur: Candle | null = null;
+  for (const t of trades) {
+    const bucket = Math.floor(t.ts / intervalSecs) * intervalSecs;
+    const px = Number(t.priceWei) / 1e18;
+    if (!cur || cur.time !== bucket) {
+      if (cur) out.push(cur);
+      cur = { time: bucket, open: cur ? cur.close : px, high: px, low: px, close: px };
+    }
+    cur.high = Math.max(cur.high, px);
+    cur.low = Math.min(cur.low, px);
+    cur.close = px;
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+
+/** All updates a founder posted for a venture, oldest first. */
+export async function loadUpdates(token: Address): Promise<{ author: Address; text: string; blockNumber: number; txHash: string }[]> {
+  if (VENTURE.updates === "0x0000000000000000000000000000000000000000") return [];
+  const latest = await venturePc.getBlockNumber();
+  const logs = await venturePc.getLogs({
+    address: VENTURE.updates, event: updatePostedEvent, args: { token }, fromBlock: VENTURE.startBlock, toBlock: latest,
+  });
+  return logs.map((l) => ({
+    author: l.args.author as Address,
+    text: String(l.args.update),
+    blockNumber: Number(l.blockNumber),
+    txHash: l.transactionHash,
+  }));
+}
+
+/** Lifetime referral earnings credited to `referrer`, by currency address. */
+export async function loadReferralEarnings(referrer: Address): Promise<Map<string, bigint>> {
+  const latest = await venturePc.getBlockNumber();
+  const logs = await venturePc.getLogs({
+    address: VENTURE.hook, event: referralPaidEvent, args: { referrer }, fromBlock: VENTURE.startBlock, toBlock: latest,
+  });
+  const sums = new Map<string, bigint>();
+  for (const l of logs) {
+    const c = String(l.args.currency).toLowerCase();
+    sums.set(c, (sums.get(c) ?? 0n) + (l.args.amount as bigint));
+  }
+  return sums;
 }

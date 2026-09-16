@@ -86,6 +86,12 @@ contract VentureFeeHook is IHooks {
     /// @notice Protocol fee in bps, charged on every trade on top of the
     ///         founder taxes. Fixed for the life of the hook.
     uint16 public immutable platformFeeBps;
+    /// @notice Share of the protocol fee paid to a bound referrer, in bps of
+    ///         the protocol fee (not of volume). Fixed for the life of the hook.
+    uint16 public immutable refShareBps;
+
+    /// @notice One-time, self-bound referral registry: who recruited whom.
+    mapping(address user => address referrer) public referrerOf;
 
     mapping(PoolId => Config) public configOf;
     mapping(address coin => PoolId) internal _poolOf;
@@ -102,6 +108,8 @@ contract VentureFeeHook is IHooks {
     event BucketsSettled(PoolId indexed id, uint256 dev, uint256 dividends, uint256 liquidity, uint256 wall);
     event LiquidityAdded(PoolId indexed id, Currency currency, uint256 amount, uint128 liquidity, bool wall);
     event DevWalletChanged(address indexed coin, address indexed from, address indexed to);
+    event ReferrerBound(address indexed user, address indexed referrer);
+    event ReferralPaid(address indexed trader, address indexed referrer, Currency currency, uint256 amount);
     event PayoutDeferred(address indexed to, Currency indexed currency, uint256 amount);
 
     modifier onlyPoolManager() {
@@ -109,13 +117,34 @@ contract VentureFeeHook is IHooks {
         _;
     }
 
-    constructor(IPoolManager _poolManager, address _platformTreasury, address _launcher, uint16 _platformFeeBps) {
+    constructor(
+        IPoolManager _poolManager,
+        address _platformTreasury,
+        address _launcher,
+        uint16 _platformFeeBps,
+        uint16 _refShareBps
+    ) {
         require(_platformTreasury != address(0) && _launcher != address(0), "zero");
         require(_platformFeeBps >= MIN_PLATFORM_BPS && _platformFeeBps <= MAX_PLATFORM_BPS, "platform bps");
+        require(_refShareBps <= 5_000, "ref bps"); // at most half the protocol fee
         poolManager = _poolManager;
         platformTreasury = _platformTreasury;
         launcher = _launcher;
         platformFeeBps = _platformFeeBps;
+        refShareBps = _refShareBps;
+    }
+
+    // ---------------------------------------------------------------------
+    // Referrals: whoever recruits a trader earns refShareBps of the protocol
+    // fee on every trade that trader ever routes, forever.
+    // ---------------------------------------------------------------------
+
+    /// @notice Bind your referrer. Once, immutable, no self-referral.
+    function setReferrer(address ref) external {
+        if (ref == address(0) || ref == msg.sender) revert BadPolicy();
+        if (referrerOf[msg.sender] != address(0)) revert AlreadyConfigured();
+        referrerOf[msg.sender] = ref;
+        emit ReferrerBound(msg.sender, ref);
     }
 
     // ---------------------------------------------------------------------
@@ -163,11 +192,13 @@ contract VentureFeeHook is IHooks {
     // Fee engine
     // ---------------------------------------------------------------------
 
-    function afterSwap(address sender, PoolKey calldata key, SwapParams calldata params, BalanceDelta delta, bytes calldata)
-        external
-        onlyPoolManager
-        returns (bytes4, int128)
-    {
+    function afterSwap(
+        address sender,
+        PoolKey calldata key,
+        SwapParams calldata params,
+        BalanceDelta delta,
+        bytes calldata hookData
+    ) external onlyPoolManager returns (bytes4, int128) {
         // Internal normalisation swaps (dividends / bid wall) re-enter the
         // pool with this hook as the sender: never tax our own plumbing.
         if (sender == address(this)) return (IHooks.afterSwap.selector, 0);
@@ -194,9 +225,32 @@ contract VentureFeeHook is IHooks {
         uint256 total = platformFee + founderTax + sniperFee;
         if (total == 0) return (IHooks.afterSwap.selector, 0);
 
-        if (platformFee > 0) _payOut(feeCurrency, platformTreasury, platformFee);
+        if (platformFee > 0) {
+            // Routers pass the end trader as 32-byte hookData; a bound
+            // referrer earns their cut of the protocol fee on every trade.
+            uint256 toReferrer;
+            if (hookData.length == 32) {
+                address trader = abi.decode(hookData, (address));
+                address ref = referrerOf[trader];
+                if (ref != address(0)) {
+                    toReferrer = (platformFee * refShareBps) / BPS;
+                    if (toReferrer > 0) {
+                        _payOut(feeCurrency, ref, toReferrer);
+                        emit ReferralPaid(trader, ref, feeCurrency, toReferrer);
+                    }
+                }
+            }
+            _payOut(feeCurrency, platformTreasury, platformFee - toReferrer);
+        }
         if (founderTax > 0) _settleBuckets(key, id, c, feeCurrency, founderTax, sniperFee);
         else if (sniperFee > 0) _placeWall(key, id, c, feeCurrency, sniperFee);
+
+        // Band placement and conversions round in pool-favouring directions,
+        // which can strand dust credit on either currency; an unlock only
+        // closes when every delta is zero, so sweep whatever remains to the
+        // dev wallet before handing control back.
+        _sweep(key.currency0, c.policy.devWallet);
+        _sweep(key.currency1, c.policy.devWallet);
 
         emit FeeTaken(id, feeCurrency, coinIsOutput, platformFee, founderTax, sniperFee);
         return (IHooks.afterSwap.selector, total.toInt128());
@@ -362,6 +416,20 @@ contract VentureFeeHook is IHooks {
         } catch {
             spent = 0;
         }
+    }
+
+    function _sweep(Currency currency, address to) private {
+        // Inlined TransientStateLibrary.currencyDelta (that library's imports
+        // need a Cancun compile target; exttload is just an external call).
+        bytes32 slot;
+        address self = address(this);
+        assembly ("memory-safe") {
+            mstore(0, and(self, 0xffffffffffffffffffffffffffffffffffffffff))
+            mstore(32, and(currency, 0xffffffffffffffffffffffffffffffffffffffff))
+            slot := keccak256(0, 64)
+        }
+        int256 d = int256(uint256(poolManager.exttload(slot)));
+        if (d > 0) _payOut(currency, to, uint256(d));
     }
 
     function _payOut(Currency currency, address to, uint256 amount) private {
