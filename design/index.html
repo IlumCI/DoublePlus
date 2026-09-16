@@ -10,13 +10,29 @@
 </head>
 <body>
 <main class="shell">
-  <div class="boardhead">
-    <h1>Fund what's next.</h1>
-    <p class="sub">Every launch is a startup raise: terms on-chain before any money moves, full refund if it
-      misses target<button class="fn" popovertarget="fn-aon">?</button>. Founders earn from every trade, forever.</p>
+  <div class="boardhead" style="display:block; padding-bottom:6px">
+    <h1 style="font-size:clamp(24px, 3.2vw, 34px); max-width:30ch; line-height:1.15">Day-zero funding for startups
+      and research projects.</h1>
+    <p class="sub" style="max-width:78ch; margin-top:8px; font-size:13px">
+      Each raise issues a <b style="color:var(--paper)">decentralized, security-style stock</b> on Robinhood Chain —
+      a primary market for ideas, not a meme board. Terms are sworn on-chain before the first wei moves; a raise
+      that misses its target refunds every backer in full<button class="fn" popovertarget="fn-aon">?</button>;
+      graduated stocks pay ETH dividends out of real fee flow.</p>
   </div>
   <div id="fn-aon" popover class="note">All-or-nothing, enforced by contract: if the deadline passes below target,
     the founder allocation burns and every backer reclaims their full spend by returning their tokens.</div>
+
+  <div class="three-col" style="margin:14px 0 18px">
+    <div class="record"><span class="k">Sworn terms</span>
+      <p class="foot" style="font-size:11.5px; color:var(--dim); margin-top:6px">Target, founder cut, vesting, taxes —
+      published on-chain before anyone commits, immutable after. The term sheet is the prospectus.</p></div>
+    <div class="record"><span class="k">All-or-nothing raises</span>
+      <p class="foot" style="font-size:11.5px; color:var(--dim); margin-top:6px">Miss the deadline and every backer is
+      refunded in full while the founder stake burns. Funding is earned, never taken.</p></div>
+    <div class="record"><span class="k">Dividends, not promises</span>
+      <p class="foot" style="font-size:11.5px; color:var(--dim); margin-top:6px">Graduated stocks pay ETH dividends
+      from trading fees every 15 minutes; liquidity is locked and market-made on both sides by the protocol.</p></div>
+  </div>
 
   <a class="king" id="king" href="#" style="position:relative">
     <span class="monogram lg" id="king-mono">?</span>
@@ -31,6 +47,8 @@
 
   <div class="chips" id="chips">
     <button data-f="all" class="on">All</button>
+    <button data-f="startup">Startups</button>
+    <button data-f="research">Research</button>
     <button data-f="raising">Raising</button>
     <button data-f="soon">About to graduate</button>
     <button data-f="graduated">Trading</button>
@@ -94,6 +112,8 @@ DP.page({ current: "index.html" });
 
   function draw() {
     var list = DP.VENTURES.slice(), out = "", i, v;
+    if (filter === "startup") list = list.filter(function (v) { return v.kind === "startup"; });
+    if (filter === "research") list = list.filter(function (v) { return v.kind === "research"; });
     if (filter === "raising") list = list.filter(function (v) { return v.phase === "raising"; });
     if (filter === "soon") list = list.filter(function (v) { return v.phase === "raising" && DP.pct(v) >= 85; });
     if (filter === "graduated") list = list.filter(function (v) { return v.phase === "graduated"; });

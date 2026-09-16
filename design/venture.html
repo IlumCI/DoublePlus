@@ -37,7 +37,7 @@
 
       <div class="tabbar" id="tabs">
         <button data-t="thread" class="on">Thread <span class="cnt" id="cnt-thread"></span></button>
-        <button data-t="about">The startup</button>
+        <button data-t="about">The project</button>
         <button data-t="trades" id="tab-trades" hidden>Trades</button>
         <button data-t="holders">Holders</button>
         <button data-t="terms">Terms</button>
@@ -336,6 +336,14 @@ DP.page({ current: "" });
       '<div class="msg"><span class="who">0x1B97…Acce</span><div><time>now</time><p>' + DP.esc(inp.value) + "</p></div></div>");
     inp.value = "";
   });
+
+  /* while raising, the project leads; the thread leads once it trades */
+  if (phase === "raising" || phase === "funded") {
+    var tb2 = document.querySelectorAll("#tabs button");
+    for (i = 0; i < tb2.length; i++) tb2[i].classList.toggle("on", tb2[i].dataset.t === "about");
+    document.getElementById("pane-thread").hidden = true;
+    document.getElementById("pane-about").hidden = false;
+  }
 
   DP.notes();
 })();

@@ -8,38 +8,46 @@
      SAMPLE RECORDS (fake, shaped like the live testnet data)
      ------------------------------------------------------------ */
   var VENTURES = [
-    { no: "0023", sym: "SCRB",  name: "SCRIBE",         pitch: "Voice-to-contract transcription AI, notarized on-chain.", cat: "AI · legal", by: "ana@scribe", phase: "raising", raised: 8.42, target: 9.0, founder: 22, buy: 2.0, sell: 3.0, deadline: "3d 07h", addr: "0x51c0a9b2ee4463f0d1b0a4663c9e2f7a8b3d4663", holders: 214, seed: 9,
+    { no: "0026", sym: "KERN",  name: "OPENKERNEL",     pitch: "Memory-safety fuzzing lab for the mainline kernel. All findings published open.", cat: "research \u00b7 open source", kind: "research", by: "lab@openkernel", phase: "raising", raised: 2.31, target: 5.0, founder: 12, buy: 1.0, sell: 1.0, deadline: "8d 12h", addr: "0x1c33e09a7bd11f4c8802ab41e2f0d5566aa04663", holders: 74, seed: 17,
+      about: ["Fuzzing infrastructure for kernel memory-safety bugs is chronically underfunded because the output is a public good. OpenKernel funds it as one: backers hold the lab's stock, findings ship upstream under GPL, and the lab's fee flow pays dividends instead of a paywall.", "Two maintainers full-time equivalent today; the raise funds a third plus 128 dedicated cores."],
+      funds: "70% engineer-time (12 months), 25% dedicated fuzzing cluster, 5% disclosure coordination.",
+      milestones: [["Harness upstreamed for 3 subsystems", true], ["CVE-credited findings: 11", true], ["Third maintainer hired", false], ["128-core cluster live", false], ["Coverage report v1 published", false]] },
+    { no: "0025", sym: "ARRAY", name: "LONGWAVE",        pitch: "Community-owned low-frequency radio telescope array. Open data, day one.", cat: "research \u00b7 hardware", kind: "research", by: "pi@longwave", phase: "raising", raised: 6.84, target: 20.0, founder: 10, buy: 1.5, sell: 1.5, deadline: "19d 03h", addr: "0x9ab002cd41ee76f0b3aa27cbf171db8691924663", holders: 121, seed: 21,
+      about: ["A 64-antenna low-frequency array on shared farmland, run as a cooperative: backers own the instrument's stock, observation data enters the public domain the moment it is calibrated, and instrument time is scheduled by open queue.", "Four antennas are up and correlating. The raise funds the next sixty."],
+      funds: "80% antennas and correlator hardware, 12% site works, 8% data pipeline hosting.",
+      milestones: [["4-antenna prototype correlating", true], ["Site lease signed (10 years)", true], ["Next 28 antennas", false], ["Full 64-antenna array", false], ["First public data release", false]] },
+    { no: "0023", sym: "SCRB",  name: "SCRIBE",         pitch: "Voice-to-contract transcription AI, notarized on-chain.", cat: "AI · legal", kind: "startup", by: "ana@scribe", phase: "raising", raised: 8.42, target: 9.0, founder: 22, buy: 2.0, sell: 3.0, deadline: "3d 07h", addr: "0x51c0a9b2ee4463f0d1b0a4663c9e2f7a8b3d4663", holders: 214, seed: 9,
       about: ["Every verbal agreement dies in a follow-up email nobody sends. Scribe listens to a call, drafts the contract in real time, and notarizes the signed hash on-chain — so the deal you shook on is the deal on record.", "We have a working prototype transcribing two-party calls with 96% clause accuracy and a waitlist of 40 freelancer collectives. This raise funds the mobile app and the notary contract audit."],
       funds: "60% engineering (two hires), 25% notary-contract audit, 15% pilot with three freelancer collectives.",
       milestones: [["Prototype: live call → draft contract", true], ["Waitlist of 40 collectives", true], ["Mobile app beta", false], ["Notary contract audit", false], ["First 1,000 notarized contracts", false]] },
-    { no: "0021", sym: "HAULR", name: "HAULR",          pitch: "Autonomous last-mile cargo bikes as a service.", cat: "hardware · logistics", by: "jt@haulr", phase: "raising", raised: 3.11, target: 12.0, founder: 15, buy: 1.0, sell: 4.0, deadline: "6d 19h", addr: "0x77aa19c3d24d1f00b3aa27cbf171db8691920021", holders: 96, seed: 4,
+    { no: "0021", sym: "HAULR", name: "HAULR",          pitch: "Autonomous last-mile cargo bikes as a service.", cat: "hardware · logistics", kind: "startup", by: "jt@haulr", phase: "raising", raised: 3.11, target: 12.0, founder: 15, buy: 1.0, sell: 4.0, deadline: "6d 19h", addr: "0x77aa19c3d24d1f00b3aa27cbf171db8691920021", holders: 96, seed: 4,
       about: ["Vans are the wrong tool for the last mile. Haulr's electric cargo bikes drive themselves between micro-depots at night and get pedaled by couriers by day — one fleet, two shifts, half the cost per parcel.", "Two prototype bikes have run 1,400 autonomous depot-to-depot km. The raise buys a ten-bike pilot fleet for one city district."],
       funds: "70% pilot fleet (10 bikes), 20% depot leases, 10% safety certification.",
       milestones: [["2 prototypes, 1,400 autonomous km", true], ["City pilot permit", false], ["10-bike fleet live", false], ["Cost per parcel under €0.90", false]] },
-    { no: "0016", sym: "BREW",  name: "COLDBREW LABS",  pitch: "Robotic nitro-brew kiosks for transit hubs.", cat: "consumer · robotics", by: "marek@coldbrew", phase: "raising", raised: 1.02, target: 6.0, founder: 30, buy: 4.0, sell: 4.0, deadline: "11d 02h", addr: "0x0bd7d3c8f8e1639fab988df18a8011f41eac0016", holders: 41, seed: 2,
+    { no: "0016", sym: "BREW",  name: "COLDBREW LABS",  pitch: "Robotic nitro-brew kiosks for transit hubs.", cat: "consumer · robotics", kind: "startup", by: "marek@coldbrew", phase: "raising", raised: 1.02, target: 6.0, founder: 30, buy: 4.0, sell: 4.0, deadline: "11d 02h", addr: "0x0bd7d3c8f8e1639fab988df18a8011f41eac0016", holders: 41, seed: 2,
       about: ["A barista-free kiosk that pours a perfect nitro cold brew in 40 seconds, sited where the queues are: metro stations and airports. One kiosk clears its own cost in about seven months at 180 cups a day.", "Kiosk #1 has been pouring at a Warsaw metro exit for two months. This raise builds three more and a small roastery contract."],
       funds: "65% three kiosks, 20% roastery contract, 15% maintenance tooling.",
       milestones: [["Kiosk #1 live, 11k cups poured", true], ["Three-kiosk expansion", false], ["Airport concession", false]] },
-    { no: "0012", sym: "ORCL",  name: "ORACLEYARD",     pitch: "Prediction markets settled by sensor networks, not juries.", cat: "infra · data", by: "field@oracleyard", phase: "raising", raised: 5.96, target: 6.0, founder: 18, buy: 0.0, sell: 2.5, deadline: "22h 40m", addr: "0x8366a39cc670b4001a1121b8f6a443a643e40012", holders: 188, seed: 7,
+    { no: "0012", sym: "ORCL",  name: "ORACLEYARD",     pitch: "Prediction markets settled by sensor networks, not juries.", cat: "infra · data", kind: "startup", by: "field@oracleyard", phase: "raising", raised: 5.96, target: 6.0, founder: 18, buy: 0.0, sell: 2.5, deadline: "22h 40m", addr: "0x8366a39cc670b4001a1121b8f6a443a643e40012", holders: 188, seed: 7,
       about: ["Markets about the physical world shouldn't be settled by a vote. Oracleyard settles them with signed readings from weather stations, traffic loops and grid meters — hardware attestations instead of committee outcomes.", "The sensor-attestation contract is deployed and reading 30 stations. This raise funds 200 more stations and the dispute layer."],
       funds: "55% sensor network expansion, 30% dispute-layer development, 15% operations.",
       milestones: [["Attestation contract live, 30 stations", true], ["200-station network", false], ["Dispute layer", false], ["First weather derivatives market", false]] },
-    { no: "0011", sym: "PAGE",  name: "PAGEFORGE",      pitch: "AI serial-fiction studio; readers own the back catalog.", cat: "media", by: "iris@pageforge", phase: "graduated", raised: 10.0, target: 10.0, founder: 25, buy: 2.0, sell: 2.0, price: 0.00000481, change: +12.4, vol24: 3.92, addr: "0x93acce31b154d5225de7608a8b264da825060011", holders: 517, seed: 11,
+    { no: "0011", sym: "PAGE",  name: "PAGEFORGE",      pitch: "AI serial-fiction studio; readers own the back catalog.", cat: "media", kind: "startup", by: "iris@pageforge", phase: "graduated", raised: 10.0, target: 10.0, founder: 25, buy: 2.0, sell: 2.0, price: 0.00000481, change: +12.4, vol24: 3.92, addr: "0x93acce31b154d5225de7608a8b264da825060011", holders: 517, seed: 11,
       about: ["Serialized fiction with a twist: the readers who fund a series own its back catalog and share its licensing revenue. Three series running, 9,000 weekly readers."],
       funds: "Raise funded two new series and the licensing marketplace (shipped).",
       milestones: [["Three series live", true], ["9,000 weekly readers", true], ["Licensing marketplace", true], ["First TV option deal", false]] },
-    { no: "0007", sym: "CACAO", name: "COCOAWORKS",     pitch: "Direct-to-grower chocolate futures with on-chain settlement.", cat: "commodities", by: "kofi@cocoaworks", phase: "graduated", raised: 14.5, target: 14.5, founder: 12, buy: 1.5, sell: 1.5, price: 0.00001260, change: -3.1, vol24: 6.51, addr: "0x5b288e589d0c82149295045edcbc466cd0220007", holders: 903, seed: 5,
+    { no: "0007", sym: "CACAO", name: "COCOAWORKS",     pitch: "Direct-to-grower chocolate futures with on-chain settlement.", cat: "commodities", kind: "startup", by: "kofi@cocoaworks", phase: "graduated", raised: 14.5, target: 14.5, founder: 12, buy: 1.5, sell: 1.5, price: 0.00001260, change: -3.1, vol24: 6.51, addr: "0x5b288e589d0c82149295045edcbc466cd0220007", holders: 903, seed: 5,
       about: ["Growers sell next season's cocoa directly to buyers as on-chain futures, skipping four layers of intermediaries. 212 growers onboarded across two cooperatives; first harvest settled in full this August."],
       funds: "Raise funded co-op onboarding and the settlement escrow (shipped).",
       milestones: [["Two cooperatives, 212 growers", true], ["First harvest settled", true], ["Third cooperative", false]] },
-    { no: "0004", sym: "VAULT", name: "ZEROVAULT",      pitch: "Self-expiring cloud storage for compliance teams.", cat: "SaaS · security", by: "kim@zerovault", phase: "graduated", raised: 7.77, target: 7.77, founder: 20, buy: 3.0, sell: 3.0, price: 0.00000094, change: +48.9, vol24: 11.08, addr: "0xdea6209c26fcb5a77b3941fa63464e1c59fc0004", holders: 1341, seed: 13,
+    { no: "0004", sym: "VAULT", name: "ZEROVAULT",      pitch: "Self-expiring cloud storage for compliance teams.", cat: "SaaS · security", kind: "startup", by: "kim@zerovault", phase: "graduated", raised: 7.77, target: 7.77, founder: 20, buy: 3.0, sell: 3.0, price: 0.00000094, change: +48.9, vol24: 11.08, addr: "0xdea6209c26fcb5a77b3941fa63464e1c59fc0004", holders: 1341, seed: 13,
       about: ["Storage where deletion is the feature: every object carries a cryptographic expiry, and expiry is provable to an auditor. 14 paying compliance teams, €8.2k MRR, growing 20% monthly."],
       funds: "Raise funded SOC 2 audit and enterprise SSO (shipped).",
       milestones: [["14 paying teams", true], ["SOC 2 Type I", true], ["SOC 2 Type II", false]] },
-    { no: "0002", sym: "WIPE",  name: "CLEANSLATE",     pitch: "Automated personal-data deletion, subscription model.", cat: "consumer · privacy", by: "sam@cleanslate", phase: "failed", raised: 0.88, target: 8.0, founder: 28, buy: 4.0, sell: 4.0, addr: "0x24a95e1b6d62e06eb3928913b1601af07ff50002", holders: 27, seed: 3,
+    { no: "0002", sym: "WIPE",  name: "CLEANSLATE",     pitch: "Automated personal-data deletion, subscription model.", cat: "consumer · privacy", kind: "startup", by: "sam@cleanslate", phase: "failed", raised: 0.88, target: 8.0, founder: 28, buy: 4.0, sell: 4.0, addr: "0x24a95e1b6d62e06eb3928913b1601af07ff50002", holders: 27, seed: 3,
       about: ["A subscription agent that files deletion requests against data brokers on your behalf, every month, forever. The raise closed below target; all backers were refunded in full."],
       funds: "—", milestones: [["Raise closed below target — refunds open", true]] },
-    { no: "0001", sym: "CLIPS", name: "CLIPFARM",       pitch: "Short-video licensing marketplace for creators.", cat: "media", by: "leo@clipfarm", phase: "failed", raised: 2.04, target: 20.0, founder: 30, buy: 4.0, sell: 4.0, addr: "0x5346fddce64e39c00090369e1486de20d6210001", holders: 66, seed: 6,
+    { no: "0001", sym: "CLIPS", name: "CLIPFARM",       pitch: "Short-video licensing marketplace for creators.", cat: "media", kind: "startup", by: "leo@clipfarm", phase: "failed", raised: 2.04, target: 20.0, founder: 30, buy: 4.0, sell: 4.0, addr: "0x5346fddce64e39c00090369e1486de20d6210001", holders: 66, seed: 6,
       about: ["A rights marketplace where creators license clips to media houses with automatic revenue splits. The raise closed below target; all backers were refunded in full."],
       funds: "—", milestones: [["Raise closed below target — refunds open", true]] }
   ];
@@ -60,7 +68,7 @@
   ];
 
   var PAGES = [
-    ["index.html",    "Launches"],
+    ["index.html",    "Raises"],
     ["launch.html",   "Launch a token"],
     ["desk.html",     "Portfolio"],
     ["flywheel.html", "Rewards"],
@@ -127,6 +135,7 @@
 
   /* mcap + age display values (fake, per launch) */
   var META = {
+    "0026": ["$11.2K", "3d"], "0025": ["$31.0K", "8d"],
     "0023": ["$28.4K", "5d"], "0021": ["$9.1K", "9d"], "0016": ["$4.2K", "12d"], "0012": ["$19.8K", "6d"],
     "0011": ["$86.2K", "3w"], "0007": ["$226K", "5w"], "0004": ["$61.7K", "6w"], "0002": ["$1.6K", "7w"], "0001": ["$3.7K", "8w"]
   };
