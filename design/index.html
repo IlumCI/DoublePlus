@@ -4,50 +4,42 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>doubleplus.fund — Launches</title>
-<meta name="description" content="Launch and fund startups as decentralized stocks. All terms on-chain; failed raises refund in full.">
+<meta name="description" content="Back startup ideas at the ground floor. All terms on-chain; failed raises refund in full.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23fce8ca'/%3E%3Ctext x='4' y='24' font-family='monospace' font-size='20' fill='%234f2b60'%3E%2B%2B%3C/text%3E%3C/svg%3E">
 <link rel="stylesheet" href="dp.css">
 </head>
 <body>
 <main class="shell">
-  <div class="page-head">
-    <h1 class="page-title">Launches</h1>
-    <div style="display:flex; flex-wrap:wrap; gap:12px 30px; align-items:end; justify-content:space-between; margin-top:8px">
-      <p style="max-width:56ch; margin:0">
-        Every launch publishes its full terms on-chain before taking any ETH: target, founder cut, vesting,
-        taxes, deadline. Buy on the curve — earlier is cheaper. If a raise misses its deadline, everyone is
-        refunded in full<button class="fn" popovertarget="fn-allornothing">?</button>.
-      </p>
-      <a class="action" href="launch.html">Launch a token</a>
+  <div class="hero">
+    <div>
+      <h1>Back the next startup at the ground floor.</h1>
+      <p class="sub">Founders raise here by selling a stake in their idea as a token. Terms are on-chain before
+        any money moves, early backers pay less on the curve, and a raise that misses its deadline refunds
+        everyone in full<button class="fn" popovertarget="fn-allornothing">?</button>.</p>
+    </div>
+    <div style="display:grid; gap:10px; justify-items:start">
+      <a class="action" href="launch.html">Launch your idea</a>
+      <a class="mono" style="font-size:12px" href="handbook.html">how it works →</a>
     </div>
   </div>
 
   <div id="fn-allornothing" popover class="note">All-or-nothing, enforced by the contract: if the deadline passes below
     target, the founder allocation is burned and every backer reclaims their full spend by returning their tokens.</div>
 
-  <div class="chit" style="margin:18px 0 6px; display:flex; flex-wrap:wrap; gap:8px 26px; align-items:baseline">
+  <p class="mono" style="font-size:11px; letter-spacing:.14em; color:var(--ink); margin:30px 0 12px">RAISING NOW</p>
+  <div class="cards" id="cards"></div>
+
+  <div class="chit" style="margin:26px 0 6px; display:flex; flex-wrap:wrap; gap:8px 26px; align-items:baseline">
     <b>WEEKLY REWARDS — EPOCH 3 SETTLED:</b>
     <span class="mono">41.208 ETH volume · 0.412 ETH distributed · 3 buybacks · 5 trader rebates · 2 LP rewards</span>
     <a href="flywheel.html">see all epochs →</a>
   </div>
 
-  <section>
-    <table class="docket" id="tbl-raising">
-      <caption>Raising now</caption>
-      <thead><tr>
-        <th>#</th><th>Token</th><th>Pitch</th>
-        <th class="num">Raised / target</th><th style="width:14%">Progress</th>
-        <th class="num">Founder cut</th><th class="num">Tax B/S</th><th>Time left</th><th>Status</th>
-      </tr></thead>
-      <tbody></tbody>
-    </table>
-  </section>
-
-  <section style="margin-top:36px">
+  <section style="margin-top:30px">
     <table class="docket" id="tbl-grad">
-      <caption>Trading</caption>
+      <caption>Trading — funded startups, live markets</caption>
       <thead><tr>
-        <th>#</th><th>Token</th><th>Pitch</th>
+        <th>#</th><th>Startup</th>
         <th class="num">Price ETH</th><th class="num">24h</th><th class="num">Vol 24h</th>
         <th>Chart</th><th class="num">Holders</th><th>Status</th>
       </tr></thead>
@@ -59,17 +51,11 @@
     <table class="docket" id="tbl-dead">
       <caption>Failed — refunds open</caption>
       <thead><tr>
-        <th>#</th><th>Token</th><th>Pitch</th>
-        <th class="num">Raised of target</th><th style="width:14%">Final progress</th><th>Status</th>
+        <th>#</th><th>Startup</th><th class="num">Raised of target</th><th style="width:14%">Final progress</th><th>Status</th>
       </tr></thead>
       <tbody></tbody>
     </table>
   </section>
-
-  <p class="agate" style="margin-top:26px; max-width:70ch">
-    Prices are quoted in ETH per token against WETH liquidity. Data refreshes from the chain; nothing here is
-    editorial.
-  </p>
 </main>
 
 <script src="dp.js"></script>
@@ -77,41 +63,40 @@
 DP.page({ current: "index.html" });
 
 (function () {
-  var raising = [], grad = [], dead = [], i, v;
-  function stamp(v) {
+  var cards = [], grad = [], dead = [], i, v;
+  var mono = ["", "m2", "m3", "m4"];
+  function stamp(v, sz) {
     var s = DP.STAMPS[DP.phaseOf(v)];
-    return '<span class="stamp ' + s.cls + '" style="font-size:9.5px; padding:3px 7px">' + s.top + "</span>";
-  }
-  function nameCell(v) {
-    return '<a class="row-link" href="venture.html?f=' + v.no + '"><b>' + DP.esc(v.name) + "</b><br><span class=\"mono\" style=\"font-size:10.5px\">$" + v.sym + "</span></a>";
+    return '<span class="stamp ' + s.cls + '">' + s.top + "</span>";
   }
   for (i = 0; i < DP.VENTURES.length; i++) {
     v = DP.VENTURES[i];
-    var file = '<td><span class="file-no">' + v.no + "</span></td>";
-    var pitch = '<td class="agate" style="max-width:24ch">' + DP.esc(v.pitch) + "</td>";
     if (v.phase === "raising") {
       var done = DP.pct(v) >= 100;
-      raising.push("<tr>" + file + "<td>" + nameCell(v) + "</td>" + pitch +
-        '<td class="num">' + v.raised.toFixed(2) + " / " + v.target.toFixed(1) + "</td>" +
-        '<td><div class="meter' + (done ? " done" : "") + '" style="--pct:' + DP.pct(v) + '%"><i></i></div><span class="agate">' + DP.pct(v) + "% funded</span></td>" +
-        '<td class="num">' + v.founder + "%</td>" +
-        '<td class="num">' + v.buy.toFixed(1) + "/" + v.sell.toFixed(1) + "%</td>" +
-        "<td class=\"mono\" style=\"font-size:11px\">" + v.deadline + "</td><td>" + stamp(v) + "</td></tr>");
+      cards.push('<a class="card" href="venture.html?f=' + v.no + '">' + stamp(v) +
+        '<div class="top"><span class="monogram ' + mono[i % 4] + '">' + v.name[0] + "</span>" +
+        '<div><h3>' + DP.esc(v.name) + '</h3><span class="tick">$' + v.sym + ' · #' + v.no + '</span><br><span class="cat">' + DP.esc(v.cat) + "</span></div></div>" +
+        '<p class="pitch">' + DP.esc(v.pitch) + "</p>" +
+        '<div class="meter' + (done ? " done" : "") + '" style="--pct:' + DP.pct(v) + '%"><i></i></div>' +
+        '<div class="facts"><span>' + v.raised.toFixed(2) + " / " + v.target.toFixed(1) + " ETH</span><span>" + v.holders + " backers</span><span>" + v.deadline + " left</span></div>" +
+        '<div class="facts" style="color:color-mix(in srgb, var(--black) 55%, var(--paper))"><span>' + DP.pct(v) + "% funded</span><span>founder takes " + v.founder + "%</span></div></a>");
     } else if (v.phase === "graduated") {
-      grad.push("<tr>" + file + "<td>" + nameCell(v) + "</td>" + pitch +
+      grad.push('<tr><td><span class="file-no">' + v.no + "</span></td>" +
+        '<td><a class="row-link" href="venture.html?f=' + v.no + '"><b>' + DP.esc(v.name) + '</b> <span class="mono" style="font-size:10.5px">$' + v.sym + '</span><br><span class="agate">' + DP.esc(v.pitch) + "</span></a></td>" +
         '<td class="num">' + v.price.toFixed(8) + "</td>" +
         '<td class="num" style="color:' + (v.change >= 0 ? "var(--engrave)" : "var(--red)") + '">' + (v.change >= 0 ? "+" : "") + v.change.toFixed(1) + "%</td>" +
         '<td class="num">' + v.vol24.toFixed(2) + "</td>" +
         '<td style="background:var(--crt); padding:4px 6px">' + DP.spark(v.seed, 110, 26, v.change >= 0) + "</td>" +
-        '<td class="num">' + v.holders + "</td><td>" + stamp(v) + "</td></tr>");
+        '<td class="num">' + v.holders + '</td><td><span class="stamp" style="font-size:9px; padding:2px 6px">TRADING</span></td></tr>');
     } else {
-      dead.push("<tr style=\"opacity:.72\">" + file + "<td>" + nameCell(v) + "</td>" + pitch +
+      dead.push('<tr style="opacity:.72"><td><span class="file-no">' + v.no + "</span></td>" +
+        '<td><a class="row-link" href="venture.html?f=' + v.no + '"><b>' + DP.esc(v.name) + '</b> <span class="mono" style="font-size:10.5px">$' + v.sym + "</span></a></td>" +
         '<td class="num">' + v.raised.toFixed(2) + " of " + v.target.toFixed(1) + " ETH</td>" +
         '<td><div class="meter dead" style="--pct:' + DP.pct(v) + '%"><i></i></div></td>' +
-        "<td>" + stamp(v) + "</td></tr>");
+        '<td><span class="stamp red" style="font-size:9px; padding:2px 6px">FAILED</span></td></tr>');
     }
   }
-  document.querySelector("#tbl-raising tbody").innerHTML = raising.join("");
+  document.getElementById("cards").innerHTML = cards.join("");
   document.querySelector("#tbl-grad tbody").innerHTML = grad.join("");
   document.querySelector("#tbl-dead tbody").innerHTML = dead.join("");
 })();

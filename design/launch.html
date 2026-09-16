@@ -3,41 +3,64 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>doubleplus.fund — Launch a token</title>
-<meta name="description" content="Deploy a token, set the terms, open the raise. One transaction.">
+<title>doubleplus.fund — Launch your idea</title>
+<meta name="description" content="Describe the idea, set the raise, tune the economics. One transaction.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23fce8ca'/%3E%3Ctext x='4' y='24' font-family='monospace' font-size='20' fill='%234f2b60'%3E%2B%2B%3C/text%3E%3C/svg%3E">
 <link rel="stylesheet" href="dp.css">
 </head>
 <body>
 <main class="shell">
   <div class="page-head">
-    <h1 class="page-title">Launch a token</h1>
-    <p style="max-width:60ch">One transaction deploys the token, locks the terms, and opens the raise.
-      Everything below is immutable after deployment<button class="fn" popovertarget="fn-immutable">?</button>.</p>
+    <h1 class="page-title">Launch your idea</h1>
+    <p style="max-width:60ch">Describe the startup, set the raise, tune the token — one transaction deploys it all
+      and the terms lock forever<button class="fn" popovertarget="fn-immutable">?</button>. Backers see exactly the
+      preview on the right.</p>
   </div>
 
   <div id="fn-immutable" popover class="note">The factory writes your fee policy into the pool hook at graduation.
-    Nobody — including you — can change locked terms afterward. Set them carefully.</div>
+    Nobody — including you — can change locked terms afterward. The pitch and story live in token metadata and stay
+    editable; the numbers do not.</div>
   <div id="fn-mm" popover class="note">The market-making share is converted into tight bid AND ask walls beside the
-    price — a fee-funded spread-tightener that follows the market. A keeper re-centers the walls when price drifts.
-    All of it sits in the pool's own hook, publicly, under one address.</div>
+    price, re-centered automatically when the market moves — fee-funded depth for your token's market.</div>
+  <div id="fn-cut" popover class="note">This is your funding: the share of the raise paid to you when the raise
+    succeeds. It is released only on graduation; if the raise fails, backers are refunded and you get nothing.</div>
 
   <div class="two-col" style="align-items:start">
     <!-- THE FORM -->
     <div>
       <div class="form-sheet">
-        <p class="sec">1 · Token</p>
+        <p class="sec">1 · Your idea</p>
         <div style="display:grid; grid-template-columns:2fr 1fr; gap:0 22px">
-          <div class="field"><label for="f-name">Name</label><input type="text" id="f-name" value="SCRIBE" maxlength="32"></div>
+          <div class="field"><label for="f-name">Startup name</label><input type="text" id="f-name" value="SCRIBE" maxlength="32"></div>
           <div class="field"><label for="f-sym">Ticker</label><input type="text" id="f-sym" value="SCRB" maxlength="8" style="text-transform:uppercase"></div>
         </div>
-        <div class="field"><label for="f-pitch">Pitch</label>
+        <div class="field"><label for="f-pitch">One-liner</label>
           <textarea id="f-pitch">Voice-to-contract transcription AI, notarized on-chain.</textarea>
+        </div>
+        <div class="field"><label for="f-story">The story — what you're building and why it wins</label>
+          <textarea id="f-story" style="min-height:4lh">Every verbal agreement dies in a follow-up email nobody sends. Scribe listens to a call, drafts the contract in real time, and notarizes the signed hash on-chain.</textarea>
+        </div>
+        <div class="field"><label for="f-funds">What the money does</label>
+          <textarea id="f-funds">60% engineering (two hires), 25% notary-contract audit, 15% pilot with three freelancer collectives.</textarea>
         </div>
       </div>
 
       <div class="form-sheet">
-        <p class="sec">2 · Trading fees <span class="agate">0–4% each, locked forever</span></p>
+        <p class="sec">2 · Your raise</p>
+        <div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:0 26px">
+          <div class="field"><label for="f-target">Funding target (ETH)</label><input type="number" id="f-target" value="9.0" step="0.5" min="0.001"></div>
+          <div class="field"><label for="f-days">Deadline (days)</label><input type="number" id="f-days" value="14" min="1" max="60"></div>
+          <div class="field"><label for="f-cut">Your funding — % of raise you take on success (max 30)<button class="fn" popovertarget="fn-cut">?</button></label><input type="range" id="f-cut" min="0" max="30" value="22"><span class="mono" id="o-cut">22%</span></div>
+          <div class="field"><label for="f-supply">Your token stake, vested (max 15%)</label><input type="range" id="f-supply" min="0" max="15" value="10"><span class="mono" id="o-supply">10%</span></div>
+          <div class="field"><label for="f-vest">Vesting (days)</label><input type="number" id="f-vest" value="180" min="0"></div>
+          <div class="field"><label for="f-cap">Per-wallet cap (ETH, 0 = none)</label><input type="number" id="f-cap" value="1.5" step="0.1" min="0"></div>
+        </div>
+        <p class="agate">Everything not taken as your funding or stake becomes locked market liquidity when the raise
+        succeeds. Miss the deadline and backers are refunded in full while your stake burns.</p>
+      </div>
+
+      <div class="form-sheet">
+        <p class="sec">3 · Token economics <span class="agate">taxes 0–4% each · split must total 100%</span></p>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:0 26px">
           <div class="field" style="padding:10px 12px">
             <label for="f-buy">Buy tax</label>
@@ -50,11 +73,6 @@
             <span class="mono" style="font-size:18px"><span id="o-sell">3.00</span>%</span>
           </div>
         </div>
-        <p class="agate">The protocol adds 1.00% per trade on top; 20% of that goes to referrers. Not adjustable.</p>
-      </div>
-
-      <div class="form-sheet">
-        <p class="sec">3 · Fee split <span class="agate">must total exactly 100%</span></p>
         <div class="ration" id="ration">
           <div><span class="who">Dev wallet</span><input type="range" id="r-dev" min="0" max="100" step="5" value="25"><span class="amt" id="o-dev">25%</span></div>
           <div><span class="who">Holder dividends</span><input type="range" id="r-div" min="0" max="100" step="5" value="35"><span class="amt" id="o-div">35%</span></div>
@@ -62,37 +80,34 @@
           <div><span class="who">Market-making<button class="fn" popovertarget="fn-mm">?</button></span><input type="range" id="r-mm" min="0" max="100" step="5" value="20"><span class="amt" id="o-mm">20%</span></div>
         </div>
         <p id="ration-verdict" class="mono" style="margin:10px 0 0; font-size:12.5px"></p>
-      </div>
-
-      <div class="form-sheet">
-        <p class="sec">4 · Raise settings</p>
-        <div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:0 26px">
-          <div class="field"><label for="f-target">Funding target (ETH)</label><input type="number" id="f-target" value="9.0" step="0.5" min="0.001"></div>
-          <div class="field"><label for="f-days">Deadline (days)</label><input type="number" id="f-days" value="14" min="1" max="60"></div>
-          <div class="field"><label for="f-cut">Founder cut of raise (max 30%)</label><input type="range" id="f-cut" min="0" max="30" value="22"><span class="mono" id="o-cut">22%</span></div>
-          <div class="field"><label for="f-supply">Founder supply, vested (max 15%)</label><input type="range" id="f-supply" min="0" max="15" value="10"><span class="mono" id="o-supply">10%</span></div>
-          <div class="field"><label for="f-vest">Vesting (days)</label><input type="number" id="f-vest" value="180" min="0"></div>
-          <div class="field"><label for="f-cap">Per-wallet cap (ETH, 0 = none)</label><input type="number" id="f-cap" value="1.5" step="0.1" min="0"></div>
-        </div>
+        <p class="agate">The protocol adds 1.00% per trade on top; 20% of that goes to referrers. Not adjustable.</p>
       </div>
 
       <div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap; margin-top:22px">
-        <button class="action" id="f-submit">Deploy — one transaction</button>
+        <button class="action" id="f-submit">Launch — one transaction</button>
         <span class="agate" style="max-width:30ch">Your token address will end in <span class="mono">0x…4663</span>, mined in your browser before you sign.</span>
       </div>
     </div>
 
     <!-- LIVE PREVIEW -->
     <div style="position:sticky; top:14px">
-      <div class="form-sheet" style="background:color-mix(in srgb, var(--paper-3) 72%, white)">
-        <p class="sec">Preview — terms as they deploy <span class="agate">updates as you type</span></p>
+      <p class="mono" style="font-size:10.5px; letter-spacing:.14em; color:var(--ink); margin:0 0 8px">PREVIEW — YOUR CARD ON THE BOARD</p>
+      <a class="card" style="pointer-events:none" id="pv-card">
+        <span class="stamp blue">LIVE</span>
+        <div class="top"><span class="monogram m2" id="pv-mono">S</span>
+          <div><h3 id="pv-name">SCRIBE</h3><span class="tick">$<span id="pv-sym">SCRB</span> · #0024</span></div></div>
+        <p class="pitch" id="pv-pitch">—</p>
+        <div class="meter" style="--pct:0%"><i></i></div>
+        <div class="facts"><span>0.00 / <span id="pv-target">9.0</span> ETH</span><span>0 backers</span><span><span id="pv-days">14</span>d left</span></div>
+      </a>
+
+      <div class="form-sheet" style="background:color-mix(in srgb, var(--paper-3) 72%, white); margin-top:16px">
+        <p class="sec">Terms as they deploy <span class="agate">locked forever</span></p>
         <div class="term-sheet"><dl id="carbon"></dl></div>
-        <div class="stamp-row" style="margin-top:18px; justify-content:flex-end">
+        <div class="stamp-row" style="margin-top:16px; justify-content:flex-end">
           <span class="stamp" id="carbon-stamp">NOT READY<small>—</small></span>
         </div>
       </div>
-      <p class="agate" style="margin-top:12px">This is exactly what backers will see on your token page. The chain
-        keeps it verbatim.</p>
     </div>
   </div>
 </main>
@@ -103,7 +118,7 @@ DP.page({ current: "launch.html" });
 
 (function () {
   var $ = function (id) { return document.getElementById(id); };
-  var ids = ["f-name", "f-sym", "f-pitch", "f-buy", "f-sell", "r-dev", "r-div", "r-liq", "r-mm", "f-target", "f-days", "f-cut", "f-supply", "f-vest", "f-cap"];
+  var ids = ["f-name", "f-sym", "f-pitch", "f-story", "f-funds", "f-buy", "f-sell", "r-dev", "r-div", "r-liq", "r-mm", "f-target", "f-days", "f-cut", "f-supply", "f-vest", "f-cap"];
 
   function render() {
     $("o-buy").textContent = (+$("f-buy").value).toFixed(2);
@@ -118,14 +133,21 @@ DP.page({ current: "launch.html" });
     $("o-cut").textContent = $("f-cut").value + "%";
     $("o-supply").textContent = $("f-supply").value + "%";
 
+    /* card preview */
+    var name = $("f-name").value || "—";
+    $("pv-name").textContent = name;
+    $("pv-mono").textContent = (name[0] || "?").toUpperCase();
+    $("pv-sym").textContent = ($("f-sym").value || "—").toUpperCase();
+    $("pv-pitch").textContent = $("f-pitch").value || "—";
+    $("pv-target").textContent = (+$("f-target").value || 0).toFixed(1);
+    $("pv-days").textContent = $("f-days").value;
+
     var rows = [
-      ["Token", DP.esc($("f-name").value || "—") + " ($" + DP.esc(($("f-sym").value || "—").toUpperCase()) + ")"],
-      ["Pitch", DP.esc($("f-pitch").value || "—")],
-      ["Buy tax / sell tax", (+$("f-buy").value).toFixed(2) + "% / " + (+$("f-sell").value).toFixed(2) + "%"],
-      ["Fee split", "dev " + dev + " · dividends " + div + " · liquidity " + liq + " · market-making " + mm],
       ["Funding target", (+$("f-target").value || 0).toFixed(2) + " ETH in " + $("f-days").value + " days"],
-      ["Founder cut of raise", $("f-cut").value + "%, paid only on graduation"],
-      ["Founder supply", $("f-supply").value + "%, vesting " + $("f-vest").value + " days, burns on failure"],
+      ["Founder funding", $("f-cut").value + "% of the raise, on graduation only"],
+      ["Founder stake", $("f-supply").value + "%, vesting " + $("f-vest").value + " days, burns on failure"],
+      ["Buy / sell tax", (+$("f-buy").value).toFixed(2) + "% / " + (+$("f-sell").value).toFixed(2) + "%"],
+      ["Tax split", "dev " + dev + " · dividends " + div + " · liquidity " + liq + " · MM " + mm],
       ["Per-wallet cap", (+$("f-cap").value || 0) > 0 ? (+$("f-cap").value).toFixed(2) + " ETH" : "none"],
       ["Protocol fee", "1.00% per trade; 20% of it to referrers"]
     ];
@@ -148,7 +170,7 @@ DP.page({ current: "launch.html" });
     setTimeout(function () {
       document.body.classList.remove("busy");
       st.className = "stamp big"; st.style.setProperty("--stamp-angle", "-8deg");
-      st.innerHTML = "DEPLOYED<small>LAUNCH #0024 IS LIVE</small>";
+      st.innerHTML = "LIVE<small>LAUNCH #0024 · RAISE OPEN</small>";
     }, 1100);
   });
 })();

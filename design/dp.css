@@ -454,3 +454,55 @@ details.dossier[open]::details-content { block-size: auto; }
   body { background: white; }
   .telescreen { background: white; color: var(--black); border-color: var(--black); box-shadow: none; }
 }
+
+/* ============================================================
+   IDEA-FIRST SURFACES — startup cards, story pages, milestones
+   ============================================================ */
+.hero { padding: 34px 0 8px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px 40px; align-items: end; }
+.hero h1 { font-size: clamp(30px, 5vw, 52px); line-height: 1.02; max-width: 15ch; }
+.hero .sub { max-width: 52ch; margin: 10px 0 0; font-size: 15.5px; }
+@media (max-width: 860px) { .hero { grid-template-columns: 1fr; } }
+
+.monogram {
+  width: 52px; height: 52px; flex: 0 0 52px;
+  display: grid; place-items: center;
+  font-family: var(--display); font-size: 26px; color: var(--paper);
+  background: var(--cloth); border: 1px solid var(--black);
+}
+.monogram.m2 { background: var(--stamp); }
+.monogram.m3 { background: var(--ink); }
+.monogram.m4 { background: var(--red); }
+.monogram.lg { width: 72px; height: 72px; flex-basis: 72px; font-size: 38px; }
+
+.cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+@media (max-width: 1000px) { .cards { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 640px) { .cards { grid-template-columns: 1fr; } }
+.card {
+  display: block; text-decoration: none; color: inherit; position: relative;
+  background: color-mix(in srgb, var(--paper) 82%, white);
+  border: 1px solid var(--rule-2);
+  box-shadow: 3px 3px 0 color-mix(in srgb, var(--black) 16%, transparent);
+  padding: 16px 16px 14px;
+}
+.card:hover { background: white; translate: -1px -1px; box-shadow: 4px 4px 0 color-mix(in srgb, var(--black) 22%, transparent); }
+.card .top { display: flex; gap: 12px; align-items: flex-start; }
+.card h3 { font-size: 19px; line-height: 1.1; font-family: var(--body); font-weight: 700; letter-spacing: -0.01em; }
+.card .tick { font-family: var(--mono); font-size: 11px; color: var(--ink); }
+.card .pitch { font-size: 13px; line-height: 1.45; margin: 10px 0 12px; min-height: 2.8em; color: color-mix(in srgb, var(--black) 86%, var(--paper)); }
+.card .stamp { position: absolute; top: 10px; right: 10px; font-size: 8.5px; padding: 2px 6px; }
+.card .facts { display: flex; justify-content: space-between; gap: 8px; font-family: var(--mono); font-size: 11px; margin-top: 6px; color: var(--ink); }
+.card .cat { font-family: var(--mono); font-size: 10px; color: color-mix(in srgb, var(--black) 60%, var(--paper)); text-transform: uppercase; letter-spacing: .08em; }
+
+.milestones { list-style: none; margin: 0; padding: 0; font-size: 13.5px; }
+.milestones li { display: flex; gap: 10px; align-items: baseline; padding: 5px 0; border-bottom: 1px dotted var(--rule); }
+.milestones li::before { content: "☐"; font-family: var(--mono); color: var(--rule-2); }
+.milestones li.done::before { content: "☑"; color: var(--engrave); }
+.milestones li.done { color: color-mix(in srgb, var(--black) 70%, var(--paper)); }
+
+.back-panel { border: 2px solid var(--black); background: color-mix(in srgb, var(--paper) 78%, white); padding: 18px 20px 20px; box-shadow: 4px 4px 0 color-mix(in srgb, var(--black) 20%, transparent); }
+.back-panel .big { font-family: var(--mono); font-size: 26px; letter-spacing: -0.02em; }
+.back-panel .facts { display: flex; flex-wrap: wrap; gap: 4px 18px; font-family: var(--mono); font-size: 11.5px; color: var(--ink); margin: 8px 0 2px; }
+
+.story h2 { font-size: 20px; font-family: var(--body); font-weight: 700; letter-spacing: -0.01em; margin: 22px 0 8px; }
+.story p { margin: 0 0 10px; font-size: 14.5px; line-height: 1.55; }
+.byline { font-family: var(--mono); font-size: 11px; color: var(--ink); }
