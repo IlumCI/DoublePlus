@@ -125,43 +125,65 @@
       "</defs></svg>";
   }
 
-  function tickerHTML() {
+  /* mcap + age display values (fake, per launch) */
+  var META = {
+    "0023": ["$28.4K", "5d"], "0021": ["$9.1K", "9d"], "0016": ["$4.2K", "12d"], "0012": ["$19.8K", "6d"],
+    "0011": ["$86.2K", "3w"], "0007": ["$226K", "5w"], "0004": ["$61.7K", "6w"], "0002": ["$1.6K", "7w"], "0001": ["$3.7K", "8w"]
+  };
+  function mc(v) { return META[v.no] ? META[v.no][0] : "\u2014"; }
+  function age(v) { return META[v.no] ? META[v.no][1] : "\u2014"; }
+
+  /* comment threads (fake) */
+  var THREADS = {
+    "0023": [["ana@scribe", true, "2h", "Audit quote came in under budget. Milestone list updates the moment it's signed."], ["7xKq\u2026c2f0", false, "3h", "backed 0.4 more. the clause-accuracy demo sold me"], ["mev_enj0yer", false, "6h", "whats the per wallet cap here"], ["ana@scribe", true, "5h", "1.5 ETH per wallet. it's in the terms tab."], ["0x3aa1\u20269e07", false, "1d", "94% lets gooo"]],
+    "0007": [["kofi@cocoaworks", true, "2d", "Third cooperative signed the LOI. Details in the next update."], ["choc_maxi", false, "2d", "dividends hit my wallet again today. this thing just pays"], ["0xb2f4\u202611ce", false, "4d", "walls re-centered clean after the dump, spread stayed tight"]],
+    "0004": [["0x99d1\u2026f00a", false, "1h", "+48% today. compliance teams are real customers"], ["kim@zerovault", true, "3h", "SOC 2 Type II fieldwork started."], ["hodl_hans", false, "8h", "buyback burned 61M last epoch, supply melting"]]
+  };
+  function thread(v) {
+    return THREADS[v.no] || [[v.by, true, age(v), v.phase === "failed" ? "The raise closed below target. Refunds are open with no deadline." : "The raise is live. Terms are locked."]];
+  }
+
+  function feedHTML() {
     var items = [], i, v;
+    var wallets = ["7xKq\u2026c2f0", "0x3aa1\u20269e07", "0xb2f4\u202611ce", "0x99d1\u2026f00a", "0x1B97\u2026Acce", "0x67f2\u2026d2aa"];
     for (i = 0; i < VENTURES.length; i++) {
       v = VENTURES[i];
-      if (v.phase === "graduated") {
-        items.push("<b>$" + v.sym + "</b> " + v.price.toFixed(8) + ' <span class="' + (v.change >= 0 ? "up" : "dn") + '">' + (v.change >= 0 ? "▲" : "▼") + Math.abs(v.change).toFixed(1) + "%</span>");
-      } else if (v.phase === "raising") {
-        items.push("<b>#" + v.no + " $" + v.sym + "</b> raise " + pct(v) + "% · " + v.deadline + " left");
-      }
+      if (v.phase === "failed") continue;
+      var w = wallets[i % wallets.length];
+      var amt = ((v.seed * 37) % 90 / 100 + 0.05).toFixed(2);
+      items.push("<b>" + w + "</b> bought " + amt + " ETH of <b>$" + v.sym + "</b>");
+      if (v.phase === "graduated") items.push("<b>$" + v.sym + "</b> mcap " + mc(v) + ' <span class="' + (v.change >= 0 ? "up" : "dn") + '">' + (v.change >= 0 ? "+" : "") + v.change.toFixed(1) + "%</span>");
+      else items.push("<b>$" + v.sym + "</b> curve " + pct(v) + "% \u00b7 " + v.deadline + " left");
     }
-    items.push("<b>WEEKLY REWARDS</b> epoch 3 settled: 0.412 ETH — 3 buybacks · 5 trader rebates · 2 LP rewards");
-    var reel = items.join(" &nbsp;&nbsp;│&nbsp;&nbsp; ");
-    return '<div class="ticker" role="marquee" aria-label="market ticker"><div class="ticker-reel">' + reel + " &nbsp;&nbsp;│&nbsp;&nbsp; " + reel + "</div></div>";
+    items.push("<b>epoch 3</b> settled: 0.412 ETH \u2014 3 buybacks \u00b7 5 rebates \u00b7 2 LP rewards");
+    var reel = items.join(" &nbsp;\u00b7&nbsp; ");
+    return '<div class="feedbar" role="marquee" aria-label="live activity"><div class="reel">' + reel + " &nbsp;\u00b7&nbsp; " + reel + "</div></div>";
   }
 
   function chromeTop(current) {
     var tabs = "";
     for (var i = 0; i < PAGES.length; i++) {
+      if (PAGES[i][0] === "launch.html") continue; /* create lives as the CTA button */
       var cur = PAGES[i][0] === current ? ' aria-current="page"' : "";
       tabs += '<a href="' + PAGES[i][0] + '"' + cur + ">" + PAGES[i][1] + "</a>";
     }
-    return filterDefs() + tickerHTML() +
-      '<header class="masthead"><div class="shell">' +
-      '<div><a class="brand" href="index.html">doubleplus<sub>.fund</sub></a>' +
-      '<p class="ministry-line">Launch and fund startups as decentralized stocks</p></div>' +
-      '<div class="mast-cell">Robinhood Chain testnet · 46630<br>protocol fee 1% · referrals 20% of it<br><br>' +
-      '<button class="connect" id="connect">Connect wallet</button></div>' +
-      "</div></header>" +
-      '<nav class="tabs"><div class="shell">' + tabs + "</div></nav>";
+    return filterDefs() +
+      '<header class="topbar"><div class="shell">' +
+      '<a class="brand" href="index.html">doubleplus<sub>.fund</sub></a>' +
+      '<nav class="topnav">' + tabs + "</nav>" +
+      '<div class="tb-search"><input placeholder="search tokens\u2026" id="tb-q"></div>' +
+      '<a class="btn-create" href="launch.html">+ Create</a>' +
+      '<button class="btn-connect" id="connect">Connect</button>' +
+      "</div></header>" + feedHTML();
   }
 
   function chromeFoot() {
     return '<footer class="footer"><div class="shell">' +
-      "<span>doubleplus.fund — testnet build</span>" +
+      "<span>doubleplus.fund — Robinhood Chain testnet 46630</span>" +
+      "<span>protocol fee 1% per trade · 20% of it to referrers</span>" +
       '<span><a href="https://explorer.testnet.chain.robinhood.com" target="_blank" rel="noreferrer">explorer ↗</a></span>' +
       '<span><a href="handbook.html">docs</a></span>' +
-      "<span>unregistered instruments · unaudited contracts · back only what you can afford to lose</span>" +
+      "<span>not securities · unaudited contracts · back only what you can afford to lose</span>" +
       "</div></footer>";
   }
 
@@ -211,6 +233,9 @@
     spark: spark,
     candles: candles,
     walk: walk,
+    mc: mc,
+    age: age,
+    thread: thread,
     page: function (opts) {
       document.body.insertAdjacentHTML("afterbegin", chromeTop(opts.current));
       document.body.insertAdjacentHTML("beforeend", chromeFoot());

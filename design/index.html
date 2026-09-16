@@ -3,59 +3,51 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>doubleplus.fund — Launches</title>
-<meta name="description" content="Back startup ideas at the ground floor. All terms on-chain; failed raises refund in full.">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23fce8ca'/%3E%3Ctext x='4' y='24' font-family='monospace' font-size='20' fill='%234f2b60'%3E%2B%2B%3C/text%3E%3C/svg%3E">
+<title>doubleplus.fund — Board</title>
+<meta name="description" content="Launch and fund startups as decentralized stocks. All terms on-chain; failed raises refund in full.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230b0e0c'/%3E%3Ctext x='4' y='24' font-family='monospace' font-size='20' fill='%238cc9a4'%3E%2B%2B%3C/text%3E%3C/svg%3E">
 <link rel="stylesheet" href="dp.css">
 </head>
 <body>
 <main class="shell">
-  <div class="hero">
-    <div>
-      <h1>Back the next startup at the ground floor.</h1>
-      <p class="sub">Founders raise here by selling a stake in their idea as a token. Terms are on-chain before
-        any money moves, early backers pay less on the curve, and a raise that misses its deadline refunds
-        everyone in full<button class="fn" popovertarget="fn-allornothing">?</button>.</p>
-    </div>
-    <div style="display:grid; gap:10px; justify-items:start">
-      <a class="action" href="launch.html">Launch your idea</a>
-      <a class="mono" style="font-size:12px" href="handbook.html">how it works →</a>
-    </div>
+  <div class="boardhead">
+    <h1>Fund what's next.</h1>
+    <p class="sub">Every launch is a startup raise: terms on-chain before any money moves, full refund if it
+      misses target<button class="fn" popovertarget="fn-aon">?</button>. Founders earn from every trade, forever.</p>
+  </div>
+  <div id="fn-aon" popover class="note">All-or-nothing, enforced by contract: if the deadline passes below target,
+    the founder allocation burns and every backer reclaims their full spend by returning their tokens.</div>
+
+  <a class="king" id="king" href="#" style="position:relative">
+    <span class="monogram lg" id="king-mono">?</span>
+    <span>
+      <span class="mono" style="font-size:9.5px; letter-spacing:.18em; color:var(--violet)">ABOUT TO GRADUATE</span>
+      <h3 id="king-name">—</h3>
+      <span class="meta" id="king-meta">—</span>
+      <div class="curvebar" id="king-bar" style="max-width:420px"><i></i></div>
+    </span>
+    <span class="num" id="king-num">—</span>
+  </a>
+
+  <div class="chips" id="chips">
+    <button data-f="all" class="on">All</button>
+    <button data-f="raising">Raising</button>
+    <button data-f="soon">About to graduate</button>
+    <button data-f="graduated">Trading</button>
+    <button data-f="failed">Failed</button>
+    <span class="sep"></span>
+    <button data-s="new" class="on">Newest</button>
+    <button data-s="mcap">Market cap</button>
+    <button data-s="funded">% funded</button>
   </div>
 
-  <div id="fn-allornothing" popover class="note">All-or-nothing, enforced by the contract: if the deadline passes below
-    target, the founder allocation is burned and every backer reclaims their full spend by returning their tokens.</div>
+  <div class="grid" id="grid"></div>
 
-  <p class="mono" style="font-size:11px; letter-spacing:.14em; color:var(--ink); margin:30px 0 12px">RAISING NOW</p>
-  <div class="cards" id="cards"></div>
-
-  <div class="chit" style="margin:26px 0 6px; display:flex; flex-wrap:wrap; gap:8px 26px; align-items:baseline">
-    <b>WEEKLY REWARDS — EPOCH 3 SETTLED:</b>
-    <span class="mono">41.208 ETH volume · 0.412 ETH distributed · 3 buybacks · 5 trader rebates · 2 LP rewards</span>
-    <a href="flywheel.html">see all epochs →</a>
+  <div class="chit" style="margin-top:22px; display:flex; flex-wrap:wrap; gap:8px 26px; align-items:baseline">
+    <b>WEEKLY REWARDS — EPOCH 3:</b>
+    <span class="mono">41.208 ETH volume · 0.412 ETH distributed — 3 buybacks · 5 trader rebates · 2 LP rewards</span>
+    <a href="flywheel.html">all epochs →</a>
   </div>
-
-  <section style="margin-top:30px">
-    <table class="docket" id="tbl-grad">
-      <caption>Trading — funded startups, live markets</caption>
-      <thead><tr>
-        <th>#</th><th>Startup</th>
-        <th class="num">Price ETH</th><th class="num">24h</th><th class="num">Vol 24h</th>
-        <th>Chart</th><th class="num">Holders</th><th>Status</th>
-      </tr></thead>
-      <tbody></tbody>
-    </table>
-  </section>
-
-  <section style="margin-top:36px">
-    <table class="docket" id="tbl-dead">
-      <caption>Failed — refunds open</caption>
-      <thead><tr>
-        <th>#</th><th>Startup</th><th class="num">Raised of target</th><th style="width:14%">Final progress</th><th>Status</th>
-      </tr></thead>
-      <tbody></tbody>
-    </table>
-  </section>
 </main>
 
 <script src="dp.js"></script>
@@ -63,42 +55,93 @@
 DP.page({ current: "index.html" });
 
 (function () {
-  var cards = [], grad = [], dead = [], i, v;
-  var mono = ["", "m2", "m3", "m4"];
-  function stamp(v, sz) {
-    var s = DP.STAMPS[DP.phaseOf(v)];
-    return '<span class="stamp ' + s.cls + '">' + s.top + "</span>";
+  var monoCls = ["", "m2", "m3", "m4"];
+  var filter = "all", sort = "new";
+
+  function badge(v) {
+    var p = DP.phaseOf(v);
+    if (p === "raising" && DP.pct(v) >= 85) return '<span class="badge soon">graduating soon</span>';
+    if (p === "raising") return '<span class="badge live">live</span>';
+    if (p === "funded") return '<span class="badge soon">funded</span>';
+    if (p === "graduated") return '<span class="badge grad">trading</span>';
+    return '<span class="badge dead">failed</span>';
   }
+
+  function card(v, i) {
+    var p = DP.phaseOf(v), inner;
+    if (p === "graduated") {
+      inner = '<div class="facts"><span class="mc' + (v.change >= 0 ? "" : " dn") + '">mcap ' + DP.mc(v) +
+        " " + (v.change >= 0 ? "+" : "") + v.change.toFixed(1) + "%</span><span>vol " + v.vol24.toFixed(1) + " ETH</span></div>" +
+        '<div style="margin-top:6px">' + DP.spark(v.seed, 250, 26, v.change >= 0) + "</div>";
+    } else if (p === "failed") {
+      inner = '<div class="curvebar dead" style="--pct:' + DP.pct(v) + '%"><i></i></div>' +
+        '<div class="curvelabel"><span>closed at ' + DP.pct(v) + "%</span><span>refunds open</span></div>";
+    } else {
+      inner = '<div class="curvebar' + (p === "funded" ? " done" : "") + '" style="--pct:' + DP.pct(v) + '%"><i></i></div>' +
+        '<div class="curvelabel"><span><b>' + DP.pct(v) + "%</b> to graduation</span><span>" +
+        v.raised.toFixed(2) + " / " + v.target.toFixed(1) + " ETH</span></div>";
+    }
+    return '<a class="tcard" data-no="' + v.no + '" href="venture.html?f=' + v.no + '">' +
+      '<div class="row1"><span class="monogram ' + monoCls[i % 4] + '">' + v.name[0] + "</span>" +
+      "<div><h3>" + DP.esc(v.name) + '</h3><span class="tick">$' + v.sym + " · " + DP.esc(v.cat) + "</span></div>" +
+      '<span style="margin-left:auto; align-self:flex-start">' + badge(v) + "</span></div>" +
+      '<p class="pitch">' + DP.esc(v.pitch) + "</p>" + inner +
+      '<div class="prov"><span>by <b>' + DP.esc(v.by) + "</b> · " + DP.age(v) + " ago</span><span>" +
+      v.holders + " holders · " + DP.thread(v).length + (DP.thread(v).length === 1 ? " reply" : " replies") + "</span></div></a>";
+  }
+
+  function mcNum(v) { return parseFloat(DP.mc(v).replace(/[$K]/g, "")) * (DP.mc(v).indexOf("K") > 0 ? 1 : 0.001); }
+
+  function draw() {
+    var list = DP.VENTURES.slice(), out = "", i, v;
+    if (filter === "raising") list = list.filter(function (v) { return v.phase === "raising"; });
+    if (filter === "soon") list = list.filter(function (v) { return v.phase === "raising" && DP.pct(v) >= 85; });
+    if (filter === "graduated") list = list.filter(function (v) { return v.phase === "graduated"; });
+    if (filter === "failed") list = list.filter(function (v) { return v.phase === "failed"; });
+    if (sort === "mcap") list.sort(function (a, b) { return mcNum(b) - mcNum(a); });
+    if (sort === "funded") list.sort(function (a, b) { return DP.pct(b) - DP.pct(a); });
+    for (i = 0; i < list.length; i++) out += card(list[i], DP.VENTURES.indexOf(list[i]));
+    document.getElementById("grid").innerHTML = out || '<p class="agate">nothing here.</p>';
+  }
+
+  /* featured slot: the raise closest to graduation */
+  var king = null, i, v;
   for (i = 0; i < DP.VENTURES.length; i++) {
     v = DP.VENTURES[i];
-    if (v.phase === "raising") {
-      var done = DP.pct(v) >= 100;
-      cards.push('<a class="card" href="venture.html?f=' + v.no + '">' + stamp(v) +
-        '<div class="top"><span class="monogram ' + mono[i % 4] + '">' + v.name[0] + "</span>" +
-        '<div><h3>' + DP.esc(v.name) + '</h3><span class="tick">$' + v.sym + ' · #' + v.no + '</span><br><span class="cat">' + DP.esc(v.cat) + "</span></div></div>" +
-        '<p class="pitch">' + DP.esc(v.pitch) + "</p>" +
-        '<div class="meter' + (done ? " done" : "") + '" style="--pct:' + DP.pct(v) + '%"><i></i></div>' +
-        '<div class="facts"><span>' + v.raised.toFixed(2) + " / " + v.target.toFixed(1) + " ETH</span><span>" + v.holders + " backers</span><span>" + v.deadline + " left</span></div>" +
-        '<div class="facts" style="color:color-mix(in srgb, var(--black) 55%, var(--paper))"><span>' + DP.pct(v) + "% funded</span><span>founder takes " + v.founder + "%</span></div></a>");
-    } else if (v.phase === "graduated") {
-      grad.push('<tr><td><span class="file-no">' + v.no + "</span></td>" +
-        '<td><a class="row-link" href="venture.html?f=' + v.no + '"><b>' + DP.esc(v.name) + '</b> <span class="mono" style="font-size:10.5px">$' + v.sym + '</span><br><span class="agate">' + DP.esc(v.pitch) + "</span></a></td>" +
-        '<td class="num">' + v.price.toFixed(8) + "</td>" +
-        '<td class="num" style="color:' + (v.change >= 0 ? "var(--engrave)" : "var(--red)") + '">' + (v.change >= 0 ? "+" : "") + v.change.toFixed(1) + "%</td>" +
-        '<td class="num">' + v.vol24.toFixed(2) + "</td>" +
-        '<td style="background:var(--crt); padding:4px 6px">' + DP.spark(v.seed, 110, 26, v.change >= 0) + "</td>" +
-        '<td class="num">' + v.holders + '</td><td><span class="stamp" style="font-size:9px; padding:2px 6px">TRADING</span></td></tr>');
-    } else {
-      dead.push('<tr style="opacity:.72"><td><span class="file-no">' + v.no + "</span></td>" +
-        '<td><a class="row-link" href="venture.html?f=' + v.no + '"><b>' + DP.esc(v.name) + '</b> <span class="mono" style="font-size:10.5px">$' + v.sym + "</span></a></td>" +
-        '<td class="num">' + v.raised.toFixed(2) + " of " + v.target.toFixed(1) + " ETH</td>" +
-        '<td><div class="meter dead" style="--pct:' + DP.pct(v) + '%"><i></i></div></td>' +
-        '<td><span class="stamp red" style="font-size:9px; padding:2px 6px">FAILED</span></td></tr>');
-    }
+    if (v.phase === "raising" && (!king || DP.pct(v) > DP.pct(king))) king = v;
   }
-  document.getElementById("cards").innerHTML = cards.join("");
-  document.querySelector("#tbl-grad tbody").innerHTML = grad.join("");
-  document.querySelector("#tbl-dead tbody").innerHTML = dead.join("");
+  if (king) {
+    var K = document.getElementById("king");
+    K.href = "venture.html?f=" + king.no;
+    document.getElementById("king-mono").textContent = king.name[0];
+    document.getElementById("king-name").textContent = king.name + "  ·  $" + king.sym;
+    document.getElementById("king-meta").textContent = king.pitch + "  —  by " + king.by + " · " + king.holders + " backers · " + king.deadline + " left";
+    document.getElementById("king-bar").style.setProperty("--pct", DP.pct(king) + "%");
+    document.getElementById("king-num").innerHTML = '<b style="font-size:20px; color:var(--up)">' + DP.pct(king) + "%</b><br><span style=\"color:var(--faint); font-size:10.5px\">" + king.raised.toFixed(2) + " / " + king.target.toFixed(1) + " ETH</span>";
+  }
+
+  /* chips */
+  var chips = document.querySelectorAll("#chips button");
+  for (i = 0; i < chips.length; i++) chips[i].addEventListener("click", function () {
+    var kind = this.dataset.f ? "f" : "s";
+    var group = document.querySelectorAll("#chips button[data-" + kind + "]");
+    for (var j = 0; j < group.length; j++) group[j].classList.remove("on");
+    this.classList.add("on");
+    if (kind === "f") filter = this.dataset.f; else sort = this.dataset.s;
+    draw();
+  });
+
+  draw();
+
+  /* the board never sits still: fake a trade bump every few seconds */
+  if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    setInterval(function () {
+      var cards = document.querySelectorAll(".tcard");
+      if (!cards.length) return;
+      var c = cards[Math.floor(Math.random() * cards.length)];
+      c.classList.remove("bump"); void c.offsetWidth; c.classList.add("bump");
+    }, 4000);
+  }
 })();
 </script>
 </body>

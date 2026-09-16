@@ -3,115 +3,148 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>doubleplus.fund — Startup</title>
-<meta name="description" content="Startup page: the idea, the raise, the market.">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23fce8ca'/%3E%3Ctext x='4' y='24' font-family='monospace' font-size='20' fill='%234f2b60'%3E%2B%2B%3C/text%3E%3C/svg%3E">
+<title>doubleplus.fund — Token</title>
+<meta name="description" content="Token page: chart, trade, curve progress, thread, the startup behind it.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230b0e0c'/%3E%3Ctext x='4' y='24' font-family='monospace' font-size='20' fill='%238cc9a4'%3E%2B%2B%3C/text%3E%3C/svg%3E">
 <link rel="stylesheet" href="dp.css">
 </head>
 <body>
 <main class="shell">
 
-  <div class="dossier-head" style="align-items:center">
-    <div style="display:flex; gap:18px; align-items:flex-start">
-      <span class="monogram lg" id="d-mono">—</span>
-      <div>
-        <h1 class="page-title" id="d-name" style="line-height:1">—</h1>
-        <p style="margin:6px 0 6px; color:var(--ink); max-width:56ch; font-size:16px" id="d-pitch">—</p>
-        <p class="byline"><span id="d-cat">—</span> · by <span id="d-by">—</span> · #<span id="d-no">—</span> · token <span id="d-addr-short">0x—</span></p>
-      </div>
+  <div class="coinhead">
+    <span class="monogram lg" id="d-mono">—</span>
+    <div>
+      <h1><span id="d-name">—</span> <span class="mono" style="font-size:14px; color:var(--dim)">$<span id="d-sym">—</span></span></h1>
+      <p class="oneliner" id="d-pitch">—</p>
+      <p class="prov" style="margin:4px 0 0">created by <b id="d-by">—</b> · <span id="d-age">—</span> ago · <span id="d-cat">—</span> · <span id="d-badge"></span></p>
     </div>
-    <div class="stamps" id="d-stamps"></div>
+    <div class="mcbig">
+      <span class="k">market cap</span><br>
+      <span class="v" id="d-mc">—</span><br>
+      <span class="mono" id="d-chg" style="font-size:12px"></span>
+    </div>
   </div>
 
-  <div class="two-col" style="margin-top:16px; align-items:start">
-    <!-- LEFT: the idea -->
-    <div class="story">
-      <div id="d-about"></div>
-
-      <h2>What the money does</h2>
-      <p id="d-funds" style="font-size:14px"></p>
-      <p class="agate" id="d-funds-note"></p>
-
-      <h2>Milestones</h2>
-      <ul class="milestones" id="d-milestones"></ul>
-
-      <h2>Founder updates <span class="agate" style="font-weight:400">— posted on-chain, uneditable</span></h2>
-      <div class="typescript" id="d-updates"></div>
-
-      <details class="dossier" style="margin-top:26px">
-        <summary>Full terms <span class="agate">set at launch, immutable after</span></summary>
-        <div class="body term-sheet"><dl id="d-terms"></dl>
-          <p class="agate" style="margin:12px 0 0">The fee policy runs on-chain<button class="fn" popovertarget="fn-policy">?</button>.
-          The protocol adds 1.00% per trade; 20% of that goes to the trader's referrer<button class="fn" popovertarget="fn-ref">?</button>.</p>
+  <div class="coingrid">
+    <!-- LEFT: chart + tabs -->
+    <div>
+      <div class="panel chartpanel">
+        <div class="phead"><span id="d-chart-title">$— / WETH</span>
+          <span class="tfchips"><button>5m</button><button class="on">1h</button><button>4h</button><button>1d</button></span>
         </div>
-      </details>
+        <div class="pbody" id="d-chart"></div>
+      </div>
+
+      <div class="tabbar" id="tabs">
+        <button data-t="thread" class="on">Thread <span class="cnt" id="cnt-thread"></span></button>
+        <button data-t="about">The startup</button>
+        <button data-t="trades" id="tab-trades" hidden>Trades</button>
+        <button data-t="holders">Holders</button>
+        <button data-t="terms">Terms</button>
+      </div>
+
+      <div class="tabpane" id="pane-thread">
+        <div id="d-thread"></div>
+        <div class="msg-form"><input placeholder="post a reply…" id="reply-in"><button id="reply-go">Post</button></div>
+      </div>
+
+      <div class="tabpane" id="pane-about" hidden>
+        <div class="story">
+          <div id="d-about"></div>
+          <h2>What the money does</h2>
+          <p id="d-funds"></p>
+          <p class="agate" id="d-funds-note"></p>
+          <h2>Milestones</h2>
+          <ul class="milestones" id="d-milestones"></ul>
+          <h2>Founder updates <span class="agate" style="font-weight:400">— on-chain, uneditable</span></h2>
+          <div class="typescript" id="d-updates"></div>
+        </div>
+      </div>
+
+      <div class="tabpane" id="pane-trades" hidden>
+        <div class="blotter" style="max-height:none"><table id="d-blotter"></table></div>
+      </div>
+
+      <div class="tabpane" id="pane-holders" hidden>
+        <table class="holders" style="width:100%; border-collapse:collapse" id="d-holders"></table>
+        <p class="agate" style="margin-top:10px">Top holders by share of supply. The locked liquidity position and the
+        market-making walls belong to the pool's own hook, publicly.</p>
+      </div>
+
+      <div class="tabpane" id="pane-terms" hidden>
+        <div class="sheet">
+          <p class="sec">Terms <span class="agate">set at launch · immutable after</span></p>
+          <dl id="d-terms"></dl>
+          <div style="display:flex; justify-content:flex-end; margin-top:14px"><span class="stamp" id="d-terms-stamp">LOCKED</span></div>
+        </div>
+        <p class="agate" style="margin-top:10px">The fee policy runs on-chain<button class="fn" popovertarget="fn-policy">?</button>.
+        The protocol adds 1.00% per trade; 20% of that goes to the trader's referrer.</p>
+      </div>
     </div>
 
-    <!-- RIGHT: act -->
+    <!-- RIGHT: trade box -->
     <div>
-      <div class="back-panel" id="d-action-raise" hidden>
-        <p class="sec" style="border-bottom:2px solid var(--black); font-family:var(--mono); font-size:12px; letter-spacing:.14em; text-transform:uppercase; padding-bottom:4px; margin:0 0 12px; display:flex; justify-content:space-between"><span>Back this startup</span><span id="d-left" style="color:var(--red)"></span></p>
-        <span class="big"><span id="d-raised">—</span> <small style="font-size:13px">of <span id="d-target">—</span> ETH</small></span>
-        <div class="meter" id="d-meter" style="margin-top:8px"><i></i></div>
-        <div class="facts"><span id="d-pct">—% funded</span><span id="d-backers">— backers</span></div>
-        <div class="field" style="margin-top:14px"><label for="amt">Your amount (ETH)</label>
-          <input type="number" id="amt" value="0.25" step="0.01" min="0">
-          <span class="hint">you receive about <b class="mono" id="d-est">—</b> tokens · price rises with each buy<button class="fn" popovertarget="fn-curve2">?</button></span>
+      <div class="panel tradebox" id="tb" hidden>
+        <div class="tb-tabs">
+          <button class="buy on" id="tb-buy">Buy</button>
+          <button class="sell" id="tb-sell">Sell</button>
         </div>
-        <button class="action buy" style="width:100%">Back this startup</button>
-        <p class="agate" style="margin:10px 0 0">All-or-nothing: if the raise misses its deadline, you get every wei back.</p>
-      </div>
-
-      <div class="telescreen" id="d-market" hidden>
-        <span class="label">LIVE MARKET</span>
-        <h3 id="d-chart-title">$— / WETH</h3>
-        <div id="d-chart"></div>
-        <div class="readout" id="d-readout"></div>
-      </div>
-
-      <div class="form-sheet" id="d-action-trade" hidden style="margin-top:18px">
-        <p class="sec">Trade</p>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px">
-          <div class="field"><label>Buy with ETH</label><input type="number" value="0.1" step="0.01"><button class="action buy" style="margin-top:8px">Buy $<span class="d-sym2">—</span></button></div>
-          <div class="field"><label>Sell tokens</label><input type="number" value="1000" step="1"><button class="action ghost" style="margin-top:8px">Sell</button></div>
+        <div class="tb-body">
+          <div class="tb-amt"><input type="number" id="amt" value="0.25" step="0.01" min="0"><span id="amt-unit">ETH</span></div>
+          <div class="quicks" id="quicks">
+            <button data-v="0.05">0.05</button><button data-v="0.1">0.1</button><button data-v="0.5">0.5</button><button data-v="1">1</button>
+          </div>
+          <p class="tb-est" id="d-est"></p>
+          <button class="tb-go buy" id="tb-go">Buy $<span class="d-sym2">—</span></button>
+          <div class="tb-slip"><span>slippage 1%</span><span id="d-fees">fees: —</span></div>
+          <p class="tb-note" id="tb-note"></p>
+        </div>
+        <div class="gradblock" id="gradblock" hidden>
+          <div class="lbl"><span>bonding curve progress</span><b id="g-pct">—%</b></div>
+          <div class="curvebar" id="g-bar" style="margin-top:6px"><i></i></div>
+          <p id="g-copy">—</p>
         </div>
       </div>
 
-      <div class="telescreen" id="d-blotter-wrap" hidden style="margin-top:18px">
-        <h3>Recent trades</h3>
-        <div class="blotter"><table id="d-blotter"></table></div>
+      <div class="panel" id="refundbox" hidden>
+        <div class="phead"><span>Refund — raise failed</span></div>
+        <div class="pbody">
+          <p style="margin:0 0 12px; font-size:13px; color:var(--dim)">Return your tokens, get your full ETH back.
+          No deduction, no deadline. The founder allocation is already burned.</p>
+          <button class="tb-go buy" style="background:var(--up-dim)">Claim refund</button>
+        </div>
       </div>
 
-      <div class="form-sheet" id="d-action-refund" hidden>
-        <p class="sec">Refund <span class="agate">this raise failed</span></p>
-        <p style="margin:0 0 12px">Return your tokens and get your full ETH back. No deduction, no deadline.
-        The founder allocation has already been burned.</p>
-        <button class="action">Claim refund</button>
+      <div class="panel" id="raisebox" hidden style="margin-top:12px">
+        <div class="phead"><span>The raise</span><span id="r-left" style="color:var(--down)"></span></div>
+        <div class="pbody" style="font-family:var(--mono); font-size:12px; color:var(--dim)">
+          <div style="display:flex; justify-content:space-between"><span>raised</span><b style="color:var(--text)" id="r-raised">—</b></div>
+          <div style="display:flex; justify-content:space-between; margin-top:4px"><span>backers</span><b style="color:var(--text)" id="r-backers">—</b></div>
+          <div style="display:flex; justify-content:space-between; margin-top:4px"><span>founder takes</span><b style="color:var(--text)" id="r-cut">—</b></div>
+          <div style="display:flex; justify-content:space-between; margin-top:4px"><span>per-wallet cap</span><b style="color:var(--text)">1.5 ETH</b></div>
+          <p class="agate" style="margin:10px 0 0">All-or-nothing: misses the deadline, everyone refunded in full.</p>
+        </div>
       </div>
 
-      <div class="telescreen" id="d-curve-wrap" hidden style="margin-top:18px">
-        <span class="label">CURVE</span>
-        <h3 id="d-curve-title">$— raise progress</h3>
-        <div id="d-curve"></div>
-        <div class="readout"><span>PRICE RISES WITH EVERY BUY — EARLY BACKERS PAY LESS</span></div>
+      <div class="panel" id="feebox" style="margin-top:12px">
+        <div class="phead"><span>Who earns here</span></div>
+        <div class="pbody" style="font-family:var(--mono); font-size:11.5px; color:var(--dim); display:grid; gap:5px">
+          <span>founder: <b style="color:var(--up)" id="f-share">—</b> of every trade, forever</span>
+          <span>holders: ETH dividends, pushed every 15 min</span>
+          <span>you, as referrer: 20% of the protocol fee</span>
+        </div>
       </div>
 
-      <div class="chit" style="margin-top:18px">
-        <b>REFERRAL LINK.</b> Anyone who trades through your link pays you 20% of the protocol fee on every
-        trade they make, paid out in the same transaction:<br>
-        <span class="mono" id="d-reflink">https://doubleplus.fund/venture/…?ref=0x1B97…Acce</span>
+      <div class="chit" style="margin-top:12px">
+        <b>REFERRAL LINK</b> — earns on every trade your link brings, paid in the same transaction:<br>
+        <span class="mono" id="d-reflink" style="font-size:10.5px">—</span>
       </div>
     </div>
   </div>
 
   <div id="fn-policy" popover class="note">Buy and sell taxes split across four destinations in the proportions set at
-    launch: dev wallet, ETH dividends to holders, locked auto-liquidity, and a market-making engine that quotes a bid
-    wall under the price and an ask band above it, re-centered automatically when price moves.</div>
-  <div id="fn-ref" popover class="note">A referral binds once, on the first trade routed with your link, and cannot be
-    changed. Your share is paid in the same transaction as each trade — nothing to claim.</div>
-  <div id="fn-curve2" popover class="note">Pricing is the exact integral of a linear curve: path-independent, so
-    splitting your buy into many small ones costs exactly the same. A per-wallet cap keeps any single backer from
-    cornering the round.</div>
+    launch: dev wallet, ETH dividends to holders, locked auto-liquidity, and market-making walls quoted on both sides
+    of the price, re-centered automatically when the market moves.</div>
 
 </main>
 
@@ -125,47 +158,87 @@ DP.page({ current: "" });
   for (i = 0; i < DP.VENTURES.length; i++) if (DP.VENTURES[i].no === no) v = DP.VENTURES[i];
   if (!v) v = DP.VENTURES[0];
   var phase = DP.phaseOf(v);
-  document.title = "doubleplus.fund — " + v.name;
+  document.title = "doubleplus.fund — $" + v.sym;
 
   function put(id, s) { document.getElementById(id).innerHTML = s; }
   function show(id) { document.getElementById(id).hidden = false; }
   put("d-mono", v.name[0]);
-  put("d-no", v.no);
   put("d-name", DP.esc(v.name));
+  put("d-sym", v.sym);
   put("d-pitch", DP.esc(v.pitch));
-  put("d-cat", DP.esc(v.cat));
   put("d-by", DP.esc(v.by));
-  put("d-addr-short", v.addr.slice(0, 8) + "…" + v.addr.slice(-4));
-  put("d-reflink", "https://doubleplus.fund/venture/" + v.addr.slice(0, 10) + "…?ref=0x1B97…Acce");
+  put("d-age", DP.age(v));
+  put("d-cat", DP.esc(v.cat));
+  put("d-mc", DP.mc(v));
+  put("d-chart-title", "$" + v.sym + " / WETH");
+  put("d-reflink", "doubleplus.fund/venture/" + v.addr.slice(0, 10) + "…?ref=0x1B97…Acce");
+  put("f-share", (((v.buy + v.sell) / 2) * 0.25).toFixed(2) + "%");
+  var s2 = document.querySelectorAll(".d-sym2"); for (i = 0; i < s2.length; i++) s2[i].textContent = v.sym;
 
-  /* stamps */
-  var stamps = [];
-  if (phase === "raising") stamps.push('<span class="stamp blue big">LIVE<small>RAISE OPEN</small></span>');
-  if (phase === "funded" || phase === "graduated") stamps.push('<span class="stamp big">FUNDED<small>TARGET REACHED</small></span>');
-  if (phase === "graduated") stamps.push('<span class="stamp">TRADING<small>POOL LIVE</small></span>');
-  if (phase === "failed") stamps.push('<span class="stamp red big">FAILED<small>REFUNDS OPEN</small></span>');
-  put("d-stamps", stamps.join(""));
+  var badges = { raising: '<span class="badge live">live raise</span>', funded: '<span class="badge soon">funded</span>',
+    graduated: '<span class="badge grad">trading</span>', failed: '<span class="badge dead">failed — refunds open</span>' };
+  put("d-badge", badges[phase]);
+  if (phase === "graduated") put("d-chg", '<span class="' + (v.change >= 0 ? "up" : "dn") + '">' + (v.change >= 0 ? "+" : "") + v.change.toFixed(1) + "% 24h</span>");
 
-  /* the idea */
+  /* chart: candles when trading, curve bars while raising */
+  if (phase === "graduated") {
+    put("d-chart", DP.candles(v.seed, 560, 240));
+    document.getElementById("tab-trades").hidden = false;
+  } else {
+    var pts = DP.walk(v.seed, 36, 0.09), bars = "", j;
+    for (j = 0; j < pts.length; j++) {
+      var h = (pts[j] / 100) * 210;
+      bars += '<rect x="' + (j * 15.5) + '" y="' + (232 - h) + '" width="11" height="' + h + '" fill="var(--up)" opacity="' + (0.3 + (j / pts.length) * 0.7).toFixed(2) + '"/>';
+    }
+    put("d-chart", '<svg class="px" width="100%" viewBox="0 0 560 240" preserveAspectRatio="none" style="height:240px">' + bars + "</svg>");
+  }
+
+  /* thread */
+  var t = DP.thread(v), th = "";
+  for (i = 0; i < t.length; i++) {
+    th += '<div class="msg"><span class="who' + (t[i][1] ? " dev" : "") + '">' + DP.esc(t[i][0]) + "</span>" +
+      "<div><time>" + t[i][2] + " ago</time><p>" + DP.esc(t[i][3]) + "</p></div></div>";
+  }
+  put("d-thread", th);
+  put("cnt-thread", "(" + t.length + ")");
+
+  /* about */
   var about = "";
   for (i = 0; i < v.about.length; i++) about += "<p>" + DP.esc(v.about[i]) + "</p>";
   put("d-about", about);
   put("d-funds", DP.esc(v.funds));
-  put("d-funds-note", "The founder cut (" + v.founder + "% of the raise) pays for the above, released only on graduation. Everything else becomes locked market liquidity.");
+  put("d-funds-note", "The founder cut (" + v.founder + "% of the raise) pays for this, released only on graduation. Everything else becomes locked market liquidity.");
   var ms = "";
   for (i = 0; i < v.milestones.length; i++) ms += '<li class="' + (v.milestones[i][1] ? "done" : "") + '">' + DP.esc(v.milestones[i][0]) + "</li>";
   put("d-milestones", ms);
+  var ups = {
+    graduated: [["12 SEP 2026", "The MM walls re-centered twice this week on their own. Next product release in the works."], ["04 SEP 2026", "Dividend push #61 went out to every holder automatically."], ["28 AUG 2026", "Graduated. Founder cut drawn, remaining raise locked as liquidity."]],
+    raising: [["14 SEP 2026", "Terms are locked and can't be changed — read them before backing."], ["11 SEP 2026", "The raise is live. Milestones are the plan of record."]],
+    failed: [["02 SEP 2026", "The raise closed below target. Our allocation is burned; refunds are open with no deadline."]]
+  };
+  var list = ups[phase === "funded" ? "raising" : phase] || ups.raising, u = "";
+  for (i = 0; i < list.length; i++) u += '<div class="entry"><time>' + list[i][0] + "</time>" + DP.esc(list[i][1]) + "</div>";
+  put("d-updates", u);
 
-  /* terms */
+  /* holders */
+  var hshare = [14.2, 9.8, 6.1, 4.4, 3.7], hh = "";
+  hh += '<tr><td class="mono">pool + MM walls (hook)</td><td style="width:40%"><div class="bar"><i style="--pct:38%"></i></div></td><td class="mono" style="text-align:right">38.0%</td></tr>';
+  hh += '<tr><td class="mono">' + DP.esc(v.by) + ' (vesting)</td><td><div class="bar"><i style="--pct:10%"></i></div></td><td class="mono" style="text-align:right">10.0%</td></tr>';
+  for (i = 0; i < hshare.length; i++) {
+    hh += '<tr><td class="mono">0x' + ((v.seed * 7919 * (i + 3)) % 0xffff).toString(16).padStart(4, "0") + "…" + ((v.seed * 104729 * (i + 1)) % 0xffff).toString(16).padStart(4, "0") + '</td><td><div class="bar"><i style="--pct:' + hshare[i] + '%"></i></div></td><td class="mono" style="text-align:right">' + hshare[i].toFixed(1) + "%</td></tr>";
+  }
+  put("d-holders", hh);
+
+  /* terms sheet */
   var terms = [
     ["Funding target", v.target.toFixed(2) + " ETH"],
     ["Raised", v.raised.toFixed(2) + " ETH (" + DP.pct(v) + "%)"],
-    ["Founder cut of raise", v.founder + "% — paid only on graduation"],
-    ["Founder supply", "10% — vests linearly over 180 days"],
-    ["Buy tax / sell tax", v.buy.toFixed(1) + "% / " + v.sell.toFixed(1) + "%"],
-    ["Tax split", "dev 25 · dividends 35 · liquidity 20 · market-making 20"],
-    ["Protocol fee", "1.00% per trade, 20% of it to referrers"],
-    ["Deadline", v.phase === "raising" ? v.deadline + " remaining" : "closed"],
+    ["Founder cut of raise", v.founder + "% — on graduation only"],
+    ["Founder supply", "10% — vests 180 days, burns on failure"],
+    ["Buy / sell tax", v.buy.toFixed(1) + "% / " + v.sell.toFixed(1) + "%"],
+    ["Tax split", "dev 25 · dividends 35 · liquidity 20 · MM 20"],
+    ["Protocol fee", "1.00% per trade, 20% to referrers"],
+    ["Per-wallet cap", "1.50 ETH during the raise"],
     ["Token", v.addr]
   ];
   var dl = "";
@@ -173,59 +246,96 @@ DP.page({ current: "" });
   put("d-terms", dl);
 
   /* right column by phase */
-  if (phase === "raising" || phase === "funded") {
-    show("d-action-raise"); show("d-curve-wrap");
-    put("d-left", v.phase === "raising" ? v.deadline + " left" : "");
-    put("d-raised", v.raised.toFixed(2));
-    put("d-target", v.target.toFixed(1));
-    put("d-pct", DP.pct(v) + "% funded");
-    put("d-backers", v.holders + " backers");
-    document.getElementById("d-meter").style.setProperty("--pct", DP.pct(v) + "%");
-    put("d-curve-title", "$" + v.sym + " curve");
-    var pts = DP.walk(v.seed, 30, 0.09), bars = "", j;
-    for (j = 0; j < pts.length; j++) {
-      var h = (pts[j] / 100) * 130;
-      bars += '<rect x="' + (j * 14) + '" y="' + (150 - h) + '" width="10" height="' + h + '" fill="var(--phosphor)" opacity="' + (0.35 + (j / pts.length) * 0.65).toFixed(2) + '"/>';
+  var buyMode = true;
+  function refreshTrade() {
+    var amt = parseFloat(document.getElementById("amt").value || 0);
+    var est = document.getElementById("d-est");
+    if (buyMode) {
+      est.innerHTML = "you receive ≈ <b>" + (amt * 20481022).toLocaleString("en-US", { maximumFractionDigits: 0 }) + " $" + v.sym + "</b>";
+      document.getElementById("amt-unit").textContent = "ETH";
+    } else {
+      est.innerHTML = "you receive ≈ <b>" + (amt / 20481022).toFixed(6) + " ETH</b>";
+      document.getElementById("amt-unit").textContent = "$" + v.sym;
     }
-    put("d-curve", '<svg class="px" width="100%" viewBox="0 0 420 158" preserveAspectRatio="none" style="height:158px">' + bars + "</svg>");
+    document.getElementById("d-fees").textContent = "fees: " + (buyMode ? v.buy.toFixed(1) : v.sell.toFixed(1)) + "% + 1% protocol";
   }
+  if (phase === "failed") {
+    show("refundbox");
+  } else {
+    show("tb");
+    var go = document.getElementById("tb-go");
+    var bb = document.getElementById("tb-buy"), sb = document.getElementById("tb-sell");
+    function setMode(buy) {
+      buyMode = buy;
+      bb.classList.toggle("on", buy); sb.classList.toggle("on", !buy);
+      go.className = "tb-go " + (buy ? "buy" : "sell");
+      go.innerHTML = (buy ? (phase === "graduated" ? "Buy" : "Back") + " $" : "Sell $") + v.sym;
+      document.getElementById("amt").value = buy ? "0.25" : "10000";
+      refreshTrade();
+    }
+    bb.addEventListener("click", function () { setMode(true); });
+    sb.addEventListener("click", function () { setMode(false); });
+    if (phase !== "graduated") { sb.disabled = true; sb.style.opacity = .35; document.getElementById("tb-note").textContent = "Selling opens when the token graduates. Until then this is a raise: back it, or wait."; }
+    document.getElementById("amt").addEventListener("input", refreshTrade);
+    var qs = document.querySelectorAll("#quicks button");
+    for (i = 0; i < qs.length; i++) qs[i].addEventListener("click", function () { document.getElementById("amt").value = this.dataset.v; refreshTrade(); });
+    go.addEventListener("click", function () {
+      document.body.classList.add("busy");
+      setTimeout(function () { document.body.classList.remove("busy"); }, 800);
+    });
+    setMode(true);
+
+    if (phase !== "failed") {
+      show("gradblock");
+      var p = phase === "graduated" ? 100 : DP.pct(v);
+      put("g-pct", p + "%");
+      document.getElementById("g-bar").style.setProperty("--pct", p + "%");
+      document.getElementById("g-bar").className = "curvebar" + (p >= 100 ? " done" : "");
+      put("g-copy", phase === "graduated"
+        ? "Graduated. Liquidity is locked in the Uniswap V4 pool; the curve is closed forever."
+        : "At 100% the raise graduates: the founder cut pays out and everything else locks as pool liquidity. Automatic and irreversible.");
+    }
+    if (phase === "raising" || phase === "funded") {
+      show("raisebox");
+      put("r-left", v.phase === "raising" ? v.deadline + " left" : "");
+      put("r-raised", v.raised.toFixed(2) + " / " + v.target.toFixed(1) + " ETH");
+      put("r-backers", String(v.holders));
+      put("r-cut", v.founder + "% on graduation");
+    }
+  }
+
+  /* trades tab */
   if (phase === "graduated") {
-    show("d-market"); show("d-action-trade"); show("d-blotter-wrap");
-    put("d-chart-title", "$" + v.sym + " / WETH");
-    put("d-chart", DP.candles(v.seed, 420, 190));
-    put("d-readout",
-      "<span>LAST <b>" + v.price.toFixed(8) + "</b></span>" +
-      '<span class="' + (v.change >= 0 ? "" : "dn") + '">24H <b>' + (v.change >= 0 ? "+" : "") + v.change.toFixed(1) + "%</b></span>" +
-      "<span>VOL <b>" + v.vol24.toFixed(2) + " ETH</b></span>" +
-      "<span>WALLS <b>BID −0.6% / ASK +0.7%</b></span>");
-    var s2 = document.querySelectorAll(".d-sym2"); for (i = 0; i < s2.length; i++) s2[i].textContent = v.sym;
     var rows = "", k;
-    for (k = 0; k < 14; k++) {
-      var buy = (v.seed * (k + 3)) % 3 !== 0;
+    for (k = 0; k < 20; k++) {
+      var buy2 = (v.seed * (k + 3)) % 3 !== 0;
       var qty = ((v.seed * 7919 * (k + 1)) % 90000 + 4000);
-      rows += "<tr><td>" + String(14 - k).padStart(2, "0") + ":0" + (k % 6) + "</td>" +
-        '<td class="' + (buy ? "b" : "s") + '">' + (buy ? "BUY " : "SELL") + "</td>" +
+      rows += "<tr><td>" + String(20 - k).padStart(2, "0") + ":0" + (k % 6) + "</td>" +
+        '<td class="' + (buy2 ? "b" : "s") + '">' + (buy2 ? "BUY " : "SELL") + "</td>" +
         "<td>" + qty.toLocaleString("en-US") + "</td>" +
         "<td>" + (v.price * (1 + ((k % 5) - 2) / 100)).toFixed(8) + "</td>" +
         "<td>0x" + ((v.seed * 2654435761 * (k + 2)) % 0xffff).toString(16).padStart(4, "0") + "…</td></tr>";
     }
     put("d-blotter", rows);
   }
-  if (phase === "failed") show("d-action-refund");
 
-  var amt = document.getElementById("amt");
-  function est() { var e = document.getElementById("d-est"); if (e && amt) e.textContent = (parseFloat(amt.value || 0) * 20481022).toLocaleString("en-US", { maximumFractionDigits: 0 }); }
-  if (amt) { amt.addEventListener("input", est); est(); }
+  /* tabs */
+  var tabs = document.querySelectorAll("#tabs button");
+  for (i = 0; i < tabs.length; i++) tabs[i].addEventListener("click", function () {
+    for (var j = 0; j < tabs.length; j++) tabs[j].classList.remove("on");
+    this.classList.add("on");
+    var panes = ["thread", "about", "trades", "holders", "terms"];
+    for (j = 0; j < panes.length; j++) document.getElementById("pane-" + panes[j]).hidden = panes[j] !== this.dataset.t;
+  });
 
-  /* founder updates */
-  var ups = {
-    graduated: [["12 SEP 2026", "The MM walls re-centered twice this week on their own. Working on the next product release."], ["04 SEP 2026", "Dividend push #61 went out to every holder automatically."], ["28 AUG 2026", "Graduated. Founder cut drawn, remaining raise locked as liquidity. Building."]],
-    raising: [["14 SEP 2026", "Terms are locked and can't be changed — read them before backing."], ["11 SEP 2026", "The raise is live. Milestones above are the plan of record."]],
-    failed: [["02 SEP 2026", "The raise closed below target. Our allocation is burned; refunds are open with no deadline."]]
-  };
-  var list = ups[phase === "funded" ? "raising" : phase] || ups.raising, u = "";
-  for (i = 0; i < list.length; i++) u += '<div class="entry"><time>' + list[i][0] + "</time>" + DP.esc(list[i][1]) + "</div>";
-  put("d-updates", u);
+  /* reply box (prototype: appends locally) */
+  document.getElementById("reply-go").addEventListener("click", function () {
+    var inp = document.getElementById("reply-in");
+    if (!inp.value.trim()) return;
+    document.getElementById("d-thread").insertAdjacentHTML("beforeend",
+      '<div class="msg"><span class="who">0x1B97…Acce</span><div><time>now</time><p>' + DP.esc(inp.value) + "</p></div></div>");
+    inp.value = "";
+  });
 
   DP.notes();
 })();
