@@ -27,10 +27,12 @@ Three separate complaints resolve to one missing mechanism:
 All-or-nothing, target, deadline, full refund on failure. The wedge: this is
 the mode that supports "100% refunded" and the startup/research positioning.
 
-- Curve buys: **no protocol fee** (a held position stays fully refundable).
+- Curve buys: **0.5% entry fee** to `platformTreasury`, charged on the way in
+  and not refundable.
 - Curve sells: allowed at any time, **proceeds capped at the seller's
   pro-rata cost basis**, protocol fee charged on the proceeds.
-- Refund on failure: unchanged, full cost basis of tokens still held.
+- Refund on failure: full cost basis of the tokens still held — that is, every
+  wei that actually entered the curve. The entry fee is already spent.
 
 The cap is not a UX preference, it is a solvency requirement — see below.
 Consequence worth stating plainly: during a Guaranteed raise the curve is an
@@ -42,13 +44,41 @@ than you put in until the token actually graduates into the pool.
 No target, no deadline, no refund, no all-or-nothing. Graduates on a fixed
 threshold (`soldWhole >= CURVE_SUPPLY_WHOLE`, or an FDV threshold).
 
-- Curve buys **and** sells both charged.
+- Curve buys **and** sells both charged (same 0.5% entry fee, or higher — the
+  cap is 3%).
 - Sell proceeds **uncapped** — real speculation, real profit and loss.
 - No founder cut of a raise; the creator earns a share of curve fees instead.
 
 Escrow solvency is trivial here: there is no refund liability, and buys pay
 `curveCost + 1` while sells receive at most `curveCost`, so the escrow is
 monotonically non-negative by construction.
+
+## Buy fee mechanics
+
+The fee is taken off the incoming value *first*; the remainder buys on the
+curve. This keeps `raisedWei` equal to ETH actually escrowed and leaves the
+existing rounding and excess-return logic untouched.
+
+```
+fee      = msg.value * curveBuyFeeBps / BPS
+netValue = msg.value - fee
+q        = tokensForValue(token, netValue)
+spend    = curveCost(token, q, c.soldWhole) + 1
+if (spend > netValue) spend = netValue
+
+spentWei[t][u] += spend          // net of fee: what is really in escrow
+c.raisedWei    += spend
+pay fee to platformTreasury, less the referrer share
+return netValue - spend to the buyer, as buy() already does
+```
+
+`spentWei` therefore records **net** contribution, not gross spend. That is
+what keeps `sum(spentWei) == raisedWei` true and the escrow solvent: had it
+recorded gross, refund liability would exceed escrow by exactly the fee take
+and the last backers to claim would find the contract short.
+
+Effect on a backer of a failed raise: they get back everything that entered
+the curve and lose the 0.5% entry fee. On a 1 ETH buy that is 0.005 ETH.
 
 ## The solvency constraint (why Mode A caps sells)
 
@@ -150,7 +180,7 @@ below target in the final block. Mode B has no target, so no lock applies.
 | Name | Scope | Suggested | Bound |
 |---|---|---|---|
 | `curveSellFeeBps` | both modes | 100 (1%) | ≤ 300, immutable at factory deploy |
-| `curveBuyFeeBps` | **Mode B only** | 100 (1%) | ≤ 300, immutable |
+| `curveBuyFeeBps` | both modes | **50 (0.5%)** | ≤ 300, immutable |
 | `creationFeeWei` | both | small flat | admin-settable, capped |
 | `creatorCurveShareBps` | Mode B | 500–2000 of the fee | ≤ 5000 |
 | `refShareBps` | both | 2000 of the fee | existing hook value |
@@ -169,35 +199,54 @@ profitable by design.
 | Event | Mode A | Mode B |
 |---|---|---|
 | `launch()` | creation fee | creation fee |
-| curve buy | — | `curveBuyFeeBps` |
+| curve buy | 0.5% | 0.5% |
 | curve sell | `curveSellFeeBps` | `curveSellFeeBps` |
-| raise fails | — (sweep after 365d) | n/a |
+| raise fails | entry fees already taken (+ sweep after 365d) | n/a |
 | graduation | — | — |
 | pool trades | 1% platform fee | 1% platform fee |
 
-Mode A monetises exits and graduated volume while keeping the refund promise
-literally true. Mode B monetises everything and is where the churn revenue is.
+Both modes now earn on every buy, every sell and every pool trade, so a
+listing that never graduates is no longer a zero-revenue listing. Mode B still
+carries the larger share because its churn is profitable and therefore
+repeated.
 
-## Two places where maximum extraction backfires
+## Copy that must change in the same release
 
-Stated as business risk, not objection:
+The 0.5% entry fee is a decision taken deliberately for revenue. Its one
+consequence is that "refunded in full" stops being literally true: a backer on
+a failed raise recovers everything that entered the curve and loses the entry
+fee. Six user-visible strings assert the stronger claim today and must ship
+their correction in the same release as the contract, not before — changing
+them earlier would advertise a fee that is not yet charged:
 
-1. **`sweepUnclaimed` on a short window** converts a trust product into a
-   liability and hands critics the headline. The revenue is small relative to
-   curve fees; the reputational cost lands on the Guaranteed mode, which is
-   the whole wedge. 365 days plus a visible claim page keeps the line item
-   without the exposure.
-2. **Charging buy-side fees in Mode A** breaks "100% refunded", which is the
-   only structural claim separating this from a memecoin launchpad. The
-   revenue it adds is a fraction of what Mode B produces from the same users.
-   Keep Mode A's buy side free and let Mode B carry the extraction.
+| File | Line | Current |
+|---|---|---|
+| `web/src/venture/Board.tsx` | 117 | "Full refund if it misses" |
+| `web/src/venture/Board.tsx` | 149 | "100% / refunded when a raise misses target" |
+| `web/src/venture/Docs.tsx` | 96 | "Raise misses target, everyone is refunded in full" |
+| `web/src/venture/Docs.tsx` | 161 | "misses target → everyone refunded" |
+| `web/src/venture/Venture.tsx` | 289 | "every backer is refunded in full, automatically" |
+| `web/src/lib/brand.ts` | 76 | "refunds in full if it misses target" (also the OG meta) |
+
+The replacement claim is still materially stronger than any memecoin
+launchpad, which refunds nothing at all: **every wei you put into the curve
+comes back; the 0.5% entry fee does not.** Phrase it as an entry fee rather
+than a deduction from the refund — it is charged at the door, so a backer's
+recorded position is already net and their refund really is 100% of it.
+
+## One remaining extraction caveat
+
+`sweepUnclaimed` on a short window converts a trust product into a liability
+and hands critics a headline, for revenue that is small next to curve fees.
+365 days plus a visible claim page keeps the line item without the exposure.
 
 ## Work items
 
 1. `RaiseMode` in `LaunchParams`; mode-aware guards in `buy`/`finalize`/`abort`.
 2. `sell()` with pro-rata cost-basis accounting and the Mode A cap.
 3. Curve fee plumbing to `platformTreasury` with the referrer split.
-4. `creationFeeWei` on `launch()`.
+4. `curveBuyFeeBps` at 50 on both modes, taken off incoming value before the
+   curve quote; `creationFeeWei` on `launch()`.
 5. High-water lock on target crossing.
 6. `sweepUnclaimed()` behind `sweepDelaySecs`.
 7. Tests: escrow solvency under randomised buy/sell sequences; cap enforcement;
@@ -205,3 +254,5 @@ Stated as business risk, not objection:
    uncapped profit path; fee accrual to treasury and referrer.
 8. Web: sell panel on the raise phase, mode badge on cards, wizard mode choice,
    claim page for aborted raises.
+9. Web: the six refund strings above, shipped with the contract, plus an entry
+   fee line in the trade panel so the 0.5% is quoted before signing.
