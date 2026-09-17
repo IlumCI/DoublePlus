@@ -1,12 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useWalletClient } from "wagmi";
-import { formatEther, type Address } from "viem";
 
 import {
   ercAbi, loadReferralEarnings, loadVentures, updatesAbi, VENTURE, venturePc, vestingAbi, type Venture,
 } from "./client";
-import { Flag, fmtEth, fmtTok, pct, short } from "./ui";
+import { fmtEth, fmtTok, pct, short } from "./ui";
 import { refLink } from "./referral";
 import { errorText, useWallet } from "../lib/useWallet";
 import { useUi } from "../store";
@@ -65,11 +64,10 @@ export function Desk() {
 
   if (!isConnected) {
     return (
-      <div className="vn-shell vn-rise grid h-72 place-items-center text-center">
-        <div>
-          <p className="vn-title" style={{ fontSize: 22 }}>Your desk is waiting.</p>
-          <button className="vn-cta mt-4" style={{ width: "auto", padding: "11px 22px" }} onClick={connectFirst}>Connect wallet</button>
-        </div>
+      <div className="dp-shell" style={{ padding: "70px 18px", textAlign: "center" }}>
+        <h1 className="dp-page-title">Your portfolio.</h1>
+        <p className="dp-agate" style={{ margin: "8px 0 18px" }}>Connect to see what this wallet is owed.</p>
+        <button className="dp-action" onClick={connectFirst}>Connect wallet</button>
       </div>
     );
   }
@@ -118,88 +116,130 @@ export function Desk() {
   const totalPending = (rows ?? []).reduce((a, r) => a + r.pending, 0n);
   const wethEarned = refEarned.get(VENTURE.weth.toLowerCase()) ?? 0n;
   const otherEarned = [...refEarned.entries()].filter(([c]) => c !== VENTURE.weth.toLowerCase());
+  const totalBacked = (rows ?? []).reduce((a, r) => a + r.spent, 0n);
+  const founderRows = (rows ?? []).filter((r) => r.v.creator.toLowerCase() === me!.toLowerCase());
 
   return (
-    <div className="vn-shell vn-rise" style={{ paddingBottom: 90 }}>
-      <p className="vn-eyebrow mt-10">my desk</p>
-      <h1 className="vn-title mt-1">Everything you're owed, in one place.</h1>
+    <div className="dp-shell" style={{ paddingBottom: 70 }}>
+      <div className="dp-page-head">
+        <p className="dp-form-no">CONNECTED: {short(me!)}</p>
+        <h1 className="dp-page-title">Portfolio</h1>
+        <p style={{ maxWidth: "58ch", color: "var(--dim)", fontSize: 13 }}>
+          Everything this wallet is owed across the launchpad. Dividends are pushed automatically every 15
+          minutes — claiming by hand just gets them a few minutes sooner.
+        </p>
+      </div>
 
-      <div className="mt-6 grid gap-4 sm:grid-cols-3">
-        <div className="vn-card p-5">
-          <p className="vn-eyebrow">unclaimed dividends</p>
-          <p className="vn-num vn-num-big mt-1">{fmtEth(totalPending, 6)} <span style={{ fontSize: "0.45em", color: "var(--v-ink-2)" }}>ETH*</span></p>
-          <button className="vn-cta mt-3" disabled={busy || totalPending === 0n} onClick={claimAll}>
-            {busy ? "Confirm in wallet…" : "Claim all"}
-          </button>
-          <p className="vn-hint mt-2">*stock-paired ventures pay in their stock; auto-delivery also pushes these every 15 min.</p>
+      <div className="dp-three-col">
+        <div className="dp-record">
+          <span className="dp-k">Dividends claimable</span>
+          <span className="dp-val">{fmtEth(totalPending, 6)} <small style={{ fontSize: 13 }}>ETH</small></span>
+          <p className="dp-foot dp-agate">across {(rows ?? []).filter((r) => r.pending > 0n).length} holdings</p>
         </div>
-        <div className="vn-card p-5">
-          <p className="vn-eyebrow">referral earnings · lifetime</p>
-          <p className="vn-num vn-num-big mt-1">{fmtEth(wethEarned, 6)} <span style={{ fontSize: "0.45em", color: "var(--v-ink-2)" }}>WETH</span></p>
-          {otherEarned.length > 0 && (
-            <p className="vn-hint mt-1">+ {otherEarned.length} other token{otherEarned.length === 1 ? "" : "s"} (paid per trade)</p>
-          )}
-          <button className="vn-cta ghost mt-3" onClick={() => {
-            navigator.clipboard?.writeText(refLink(me as Address)).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); });
-          }}>
-            {copied ? "Copied ✓" : "Copy my refer & earn link"}
-          </button>
-          <p className="vn-hint mt-2">Anyone who binds your link pays you {VENTURE.refShareBps / 100}% of the protocol fee on every trade, forever.</p>
+        <div className="dp-record">
+          <span className="dp-k">Referral earnings</span>
+          <span className="dp-val">{fmtEth(wethEarned, 6)} <small style={{ fontSize: 13 }}>ETH</small></span>
+          <p className="dp-foot dp-agate">
+            {otherEarned.length > 0 ? `plus ${otherEarned.length} other pair currenc${otherEarned.length === 1 ? "y" : "ies"}` : "paid inline on every referred trade"}
+          </p>
         </div>
-        <div className="vn-card p-5">
-          <p className="vn-eyebrow">this wallet</p>
-          <p className="vn-num mt-1 text-[15px]">{short(me ?? "")}</p>
-          <p className="vn-hint mt-2">{(rows ?? []).length} venture position{(rows ?? []).length === 1 ? "" : "s"} tracked from chain state — nothing here relies on a backend.</p>
+        <div className="dp-record">
+          <span className="dp-k">Backed on curves</span>
+          <span className="dp-val">{fmtEth(totalBacked, 4)} <small style={{ fontSize: 13 }}>ETH</small></span>
+          <p className="dp-foot dp-agate">{(rows ?? []).filter((r) => r.spent > 0n).length} raises backed</p>
         </div>
       </div>
 
-      <p className="vn-eyebrow mt-8 mb-3">positions</p>
-      {rows === null ? (
-        <div className="grid h-40 place-items-center" style={{ color: "var(--v-ink-3)" }}>Reading your positions…</div>
-      ) : rows.length === 0 ? (
-        <div className="vn-card grid place-items-center p-10 text-center">
-          <Flag size={30} />
-          <p className="mt-2 text-[14px]" style={{ color: "var(--v-ink-2)" }}>Nothing yet. <Link to="/" style={{ color: "var(--v-green-2)" }}>Back a raise</Link> or <Link to="/launch" style={{ color: "var(--v-green-2)" }}>found your own</Link>.</p>
+      <div className="dp-two-col" style={{ marginTop: 16, alignItems: "start" }}>
+        <div className="dp-form-sheet">
+          <p className="dp-sec">Holdings <span className="dp-agate">as the chain tells it</span></p>
+          {rows === null ? (
+            <p className="dp-agate">Reading your positions…</p>
+          ) : rows.length === 0 ? (
+            <p className="dp-agate">Nothing yet. Back a raise and it shows up here.</p>
+          ) : (
+            <table className="dp-docket">
+              <thead><tr><th>Token</th><th className="dp-num">Balance</th><th className="dp-num">Backed</th><th className="dp-num">Dividends</th><th>Status</th></tr></thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.v.address}>
+                    <td>
+                      <Link className="dp-row-link" to={`/venture/${r.v.address}`} viewTransition>
+                        <b>{r.v.name}</b> <span className="dp-mono" style={{ fontSize: 10.5 }}>${r.v.symbol}</span>
+                      </Link>
+                    </td>
+                    <td className="dp-num">{r.balance > 0n ? fmtTok(r.balance) : "—"}</td>
+                    <td className="dp-num">{r.spent > 0n ? `${fmtEth(r.spent, 4)} ETH` : "—"}</td>
+                    <td className="dp-num" style={{ color: r.pending > 0n ? "var(--up)" : undefined }}>
+                      {r.pending > 0n ? fmtEth(r.pending, 6) : "—"}
+                    </td>
+                    <td><span className={`dp-badge ${r.v.phase === "graduated" ? "dp-grad" : r.v.phase === "failed" ? "dp-dead" : "dp-live"}`}>
+                      {r.v.phase === "graduated" ? "trading" : r.v.phase === "failed" ? "refund" : r.v.phase === "expired" ? "funded" : "live"}
+                    </span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          {totalPending > 0n && (
+            <button className="dp-action" style={{ marginTop: 14 }} disabled={busy} onClick={claimAll}>
+              {busy ? "Confirm in wallet…" : `Claim all dividends (${fmtEth(totalPending, 6)} ETH)`}
+            </button>
+          )}
         </div>
-      ) : (
-        <div className="grid gap-3">
-          {rows.map((r) => (
-            <div key={r.v.address} className="vn-card flex flex-wrap items-center gap-4 p-4">
-              <Link to={`/venture/${r.v.address}`} className="flex min-w-0 flex-1 items-center gap-3">
-                <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-lg border" style={{ borderColor: "var(--v-edge-2)", background: "var(--v-panel-2)" }}>
-                  {r.v.meta.logo ? <img src={r.v.meta.logo} alt="" className="h-full w-full object-cover" /> : <Flag size={18} />}
-                </span>
-                <span className="min-w-0">
-                  <span className="block truncate font-bold">{r.v.name} <span className="vn-num" style={{ color: "var(--v-ink-3)" }}>${r.v.symbol}</span></span>
-                  <span className="vn-hint">
-                    {r.v.phase === "raising" && <>raising · {pct(r.v.raisedWei, r.v.targetRaiseWei).toFixed(0)}% funded</>}
-                    {r.v.phase === "expired" && <>funded · awaiting graduation</>}
-                    {r.v.phase === "graduated" && <>trading</>}
-                    {r.v.phase === "failed" && <span style={{ color: "var(--v-red)" }}>failed · {r.spent > 0n ? "refund available" : "closed"}</span>}
-                  </span>
-                </span>
-              </Link>
-              <span className="vn-num text-[13px]">{fmtTok(r.balance)} held</span>
-              {r.pending > 0n && <span className="vn-num text-[13px]" style={{ color: "var(--v-green-2)" }}>{fmtEth(r.pending, 6)} pending</span>}
-              {r.vestingClaimable > 0n && (
-                <button className="vn-cta ghost" style={{ width: "auto", padding: "8px 14px", fontSize: 12.5 }} disabled={busy} onClick={() => claimVest(r)}>
-                  Claim {fmtTok(r.vestingClaimable)} vested
-                </button>
-              )}
-              {r.v.creator.toLowerCase() === (me ?? "").toLowerCase() && r.v.phase === "graduated" && VENTURE.updates !== "0x0000000000000000000000000000000000000000" && (
-                <button className="vn-cta ghost" style={{ width: "auto", padding: "8px 14px", fontSize: 12.5 }} disabled={busy} onClick={() => postUpdate(r)}>
-                  Post update
-                </button>
-              )}
-              {r.v.phase === "failed" && r.spent > 0n && (
-                <Link to={`/venture/${r.v.address}`} className="vn-cta danger" style={{ width: "auto", padding: "8px 14px", fontSize: 12.5 }}>
-                  Reclaim {formatEther(r.spent).slice(0, 8)} ETH
-                </Link>
-              )}
+
+        <div>
+          <div className="dp-form-sheet">
+            <p className="dp-sec">Your referral link <span className="dp-agate">{VENTURE.refShareBps / 100}% of the protocol fee</span></p>
+            <p className="dp-agate" style={{ marginBottom: 8 }}>
+              A wallet binds to your link on its first routed trade and stays bound. Your share settles in the
+              same transaction as their trade — nothing to claim.
+            </p>
+            <div className="dp-chit">
+              <button className="dp-mono" style={{ background: "none", border: "none", padding: 0, color: "var(--up)", fontSize: 11, textAlign: "left", wordBreak: "break-all" }}
+                onClick={() => navigator.clipboard?.writeText(refLink(me!)).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); })}>
+                {copied ? "copied ✓" : refLink(me!)}
+              </button>
             </div>
-          ))}
+            {otherEarned.length > 0 && (
+              <table className="dp-docket" style={{ marginTop: 12 }}>
+                <thead><tr><th>Pair currency</th><th className="dp-num">Earned</th></tr></thead>
+                <tbody>{otherEarned.map(([c, amt]) => (
+                  <tr key={c}><td className="dp-mono">{short(c)}</td><td className="dp-num">{fmtEth(amt, 6)}</td></tr>
+                ))}</tbody>
+              </table>
+            )}
+          </div>
+
+          {founderRows.length > 0 && (
+            <div className="dp-form-sheet" style={{ marginTop: 14 }}>
+              <p className="dp-sec">Founder tools <span className="dp-agate">raises you opened</span></p>
+              {founderRows.map((r) => (
+                <div key={r.v.address} style={{ borderTop: "1px solid var(--line)", padding: "10px 0" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10 }}>
+                    <Link className="dp-row-link" to={`/venture/${r.v.address}`} viewTransition style={{ display: "inline" }}>
+                      <b>{r.v.name}</b> <span className="dp-mono" style={{ fontSize: 10.5 }}>${r.v.symbol}</span>
+                    </Link>
+                    <span className="dp-mono" style={{ fontSize: 11, color: "var(--dim)" }}>
+                      {pct(r.v.raisedWei, r.v.targetRaiseWei).toFixed(0)}% funded
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                    <button className="dp-action dp-ghost" style={{ padding: "8px 14px", fontSize: 11 }} disabled={busy} onClick={() => postUpdate(r)}>
+                      Post update
+                    </button>
+                    {r.vestingClaimable > 0n && (
+                      <button className="dp-action" style={{ padding: "8px 14px", fontSize: 11 }} disabled={busy} onClick={() => claimVest(r)}>
+                        Claim {fmtTok(r.vestingClaimable)} vested
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

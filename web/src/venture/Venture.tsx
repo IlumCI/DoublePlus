@@ -7,17 +7,20 @@ import {
   ercAbi, factoryAbi, hookAbi, loadFills, loadUpdates, loadVenture, quoteTokens, routerAbi, VENTURE, venturePc,
   vestingAbi, type Fill, type Venture as VentureT,
 } from "./client";
-import { MarketPanel } from "./Chart";
+import { PriceChart, TradeTape, usePoolTrades } from "./Chart";
 import { refLink, storedRef } from "./referral";
-import { Countdown, Flag, fmtEth, fmtTok, pct, short, useTick } from "./ui";
+import { ago, Countdown, CurveBar, fmtEth, fmtMcap, fmtTok, Monogram, pct, short, StatusBadge, useEthUsd, useTick } from "./ui";
 import { useWallet, errorText } from "../lib/useWallet";
 import { useUi } from "../store";
 import { env } from "../lib/env";
+
+type Tab = "project" | "updates" | "trades" | "backers" | "terms";
 
 export function VenturePage() {
   const { address } = useParams<{ address: string }>();
   const [v, setV] = useState<VentureT | null>(null);
   const [fills, setFills] = useState<Fill[]>([]);
+  const ethUsd = useEthUsd();
 
   useEffect(() => {
     if (!address) return;
@@ -32,113 +35,245 @@ export function VenturePage() {
   }, [address]);
 
   if (!v) {
-    return <div className="vn-shell grid h-72 place-items-center" style={{ color: "var(--v-ink-3)" }}>Pulling the term sheet…</div>;
+    return <div className="dp-shell" style={{ padding: "80px 18px", textAlign: "center", color: "var(--faint)" }}>Pulling the term sheet…</div>;
   }
+  return <VentureBody v={v} fills={fills} ethUsd={ethUsd} />;
+}
+
+function VentureBody({ v, fills, ethUsd }: { v: VentureT; fills: Fill[]; ethUsd: number }) {
+  const trades = usePoolTrades(v);
+  const [tab, setTab] = useState<Tab>(v.phase === "graduated" ? "trades" : "project");
+
+  const TABS: [Tab, string][] = [
+    ["project", "The project"],
+    ["updates", "Updates"],
+    ...(v.phase === "graduated" ? ([["trades", "Trades"]] as [Tab, string][]) : []),
+    ["backers", "Backers"],
+    ["terms", "Terms"],
+  ];
 
   return (
-    <div className="vn-shell vn-rise" style={{ paddingBottom: 90 }}>
-      <Link to="/" className="vn-eyebrow mt-6 inline-block" style={{ color: "var(--v-ink-3)" }}>← all raises</Link>
+    <div className="dp-shell" style={{ paddingBottom: 70 }}>
+      <Link to="/" viewTransition className="dp-mono" style={{ display: "inline-block", marginTop: 14, fontSize: 11, color: "var(--faint)" }}>← all raises</Link>
 
-      <div className="mt-3 grid gap-5 lg:grid-cols-[1.1fr_1fr]">
-        {/* Left: identity + term sheet + fills */}
+      <div className="dp-coinhead">
+        <Monogram v={v} size="lg" />
+        <div style={{ minWidth: 0 }}>
+          <h1>{v.name} <span className="dp-mono" style={{ fontSize: 14, color: "var(--dim)" }}>${v.symbol}</span></h1>
+          {(v.meta.pitch || v.meta.description) && <p className="dp-oneliner">{v.meta.pitch || v.meta.description}</p>}
+          <p className="dp-prov" style={{ margin: "4px 0 0" }}>
+            created by <b>{short(v.creator)}</b> · {ago(v.createdAt)} ago
+            {v.meta.sector ? <> · {v.meta.sector}</> : null} · <StatusBadge v={v} />
+          </p>
+        </div>
+        <div className="dp-mcbig">
+          <span className="dp-k">market cap</span><br />
+          <span className="dp-v">{fmtMcap(v, ethUsd)}</span><br />
+          <span className="dp-mono" style={{ fontSize: 12, color: "var(--faint)" }}>{fmtEth(v.priceWei, 9)} ETH / token</span>
+        </div>
+      </div>
+
+      <div className="dp-coingrid">
+        {/* LEFT: the market, then everything that justifies it */}
         <div>
-          <div className="flex items-start gap-4">
-            <span className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-2xl border" style={{ borderColor: "var(--v-edge-2)", background: "var(--v-panel)" }}>
-              {v.meta.logo ? <img src={v.meta.logo} alt="" className="h-full w-full object-cover" /> : <Flag size={30} />}
-            </span>
-            <div className="min-w-0">
-              {v.phase === "raising" && <span className="vn-badge raising"><i />Raising · <Countdown deadline={v.deadline} /></span>}
-              {v.phase === "expired" && <span className="vn-badge funded">Fully funded · awaiting graduation</span>}
-              {v.phase === "graduated" && <span className="vn-badge graduated">Graduated · trading live</span>}
-              {v.phase === "failed" && <span className="vn-badge failed">Round failed · refunds open</span>}
-              <h1 className="vn-title mt-1.5">{v.name} <span className="vn-num" style={{ fontSize: "0.55em", color: "var(--v-green-2)" }}>${v.symbol}</span></h1>
-              <p className="mt-1 text-[12px]" style={{ color: "var(--v-ink-3)" }}>
-                founded by {short(v.creator)}{v.meta.sector ? <> · {v.meta.sector}</> : null} · {(v.policy.buyTaxBps / 100).toFixed(1)}% buy / {(v.policy.sellTaxBps / 100).toFixed(1)}% sell tax
-              </p>
-            </div>
-          </div>
+          {v.phase === "graduated" ? <PriceChart v={v} trades={trades} /> : <CurvePanel v={v} />}
 
-          {(v.meta.pitch || v.meta.description) && (
-            <p className="mt-4 max-w-xl text-[14px] leading-relaxed" style={{ color: "var(--v-ink-2)" }}>
-              {v.meta.pitch || v.meta.description}
-            </p>
-          )}
-          <div className="mt-3 flex flex-wrap gap-2">
-            {v.meta.website && <a className="vn-chip" href={v.meta.website} target="_blank" rel="noreferrer">website</a>}
-            {v.meta.twitter && <a className="vn-chip" href={v.meta.twitter} target="_blank" rel="noreferrer">x / twitter</a>}
-            {env.explorerUrl && <a className="vn-chip" href={`${env.explorerUrl}/token/${v.address}`} target="_blank" rel="noreferrer">contract ↗</a>}
-            <ShareChip />
-          </div>
-
-          <TermSheet v={v} />
-
-          {v.phase === "graduated" && <MarketPanel v={v} />}
-          <UpdatesFeed v={v} />
-
-          <p className="vn-eyebrow mt-8 mb-2">backers</p>
-          <div className="vn-rows vn-card px-4 py-1">
-            {fills.length === 0 ? (
-              <p className="py-4 text-center text-[13px]" style={{ color: "var(--v-ink-3)" }}>No backers yet. The curve starts at its lowest price.</p>
-            ) : fills.map((f) => (
-              <div className="r" key={f.txHash + f.buyer}>
-                <span style={{ color: "var(--v-ink-2)" }}>{short(f.buyer)}</span>
-                <span className="vn-num">{fmtTok(f.tokensOut)} ${v.symbol}</span>
-                <span className="vn-num" style={{ color: "var(--v-green-2)" }}>{fmtEth(f.ethIn)} ETH</span>
-              </div>
+          <div className="dp-tabbar">
+            {TABS.map(([k, label]) => (
+              <button key={k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>
+                {label}
+                {k === "backers" && fills.length > 0 && <span className="dp-cnt"> ({fills.length})</span>}
+              </button>
             ))}
           </div>
+
+          <div className="dp-tabpane" hidden={tab !== "project"}><ProjectPane v={v} /></div>
+          <div className="dp-tabpane" hidden={tab !== "updates"}><UpdatesPane v={v} /></div>
+          {v.phase === "graduated" && <div className="dp-tabpane" hidden={tab !== "trades"}><TradeTape v={v} trades={trades} /></div>}
+          <div className="dp-tabpane" hidden={tab !== "backers"}><BackersPane v={v} fills={fills} /></div>
+          <div className="dp-tabpane" hidden={tab !== "terms"}><TermsPane v={v} /></div>
         </div>
 
-        {/* Right: the action panel for the current phase */}
+        {/* RIGHT: the money box, always above the fold */}
         <div>
           {v.phase === "raising" && <RaisePanel v={v} />}
           {v.phase === "expired" && <GraduatePanel v={v} />}
           {v.phase === "failed" && <FailPanel v={v} />}
-          {v.phase === "graduated" && (
-            <>
-              <TradePanel v={v} />
-              <VestingCard v={v} />
-            </>
-          )}
+          {v.phase === "graduated" && <TradePanel v={v} />}
+
+          {v.phase === "graduated" && <VestingCard v={v} />}
+          <WhoEarns v={v} />
+          <ReferralChit />
         </div>
       </div>
     </div>
   );
 }
 
-function ShareChip() {
+/** Pre-graduation: the curve itself is the chart. */
+function CurvePanel({ v }: { v: VentureT }) {
+  const funded = pct(v.raisedWei, v.targetRaiseWei);
+  const bars = 36;
+  return (
+    <div className="dp-panel dp-chartpanel">
+      <div className="dp-phead"><span>${v.symbol} bonding curve</span><span>{funded.toFixed(1)}% funded</span></div>
+      <div className="dp-pbody">
+        <svg className="dp-px" width="100%" viewBox="0 0 560 240" preserveAspectRatio="none" style={{ height: 240 }} aria-hidden>
+          {Array.from({ length: bars }, (_, i) => {
+            const h = 30 + (i / (bars - 1)) * 190;
+            const filled = (i / bars) * 100 <= funded;
+            return <rect key={i} x={i * 15.5 + 2} y={232 - h} width={11} height={h}
+              fill="var(--up)" opacity={filled ? 0.35 + (i / bars) * 0.65 : 0.1} />;
+          })}
+        </svg>
+        <p className="dp-agate" style={{ padding: "4px 6px 2px" }}>
+          Price rises with every buy — early backers pay less. Pricing is the exact integral of the curve, so
+          splitting an order into many small ones costs exactly the same.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function ProjectPane({ v }: { v: VentureT }) {
+  const days = Math.max(1, Math.round((v.deadline - v.createdAt) / 86_400));
+  return (
+    <div className="dp-story">
+      {v.meta.description || v.meta.pitch
+        ? <p>{v.meta.description || v.meta.pitch}</p>
+        : <p className="dp-agate">This raise filed no description on-chain.</p>}
+
+      <h2>What the money does</h2>
+      <p>
+        The founder takes <b>{(v.founderRaiseBps / 100).toFixed(1)}%</b> of the raise as funding, released only if
+        the round succeeds. Everything else — the rest of the raise and the remaining supply — becomes locked
+        pool liquidity at graduation.
+      </p>
+
+      <h2>The shape of the raise</h2>
+      <ul className="dp-milestones">
+        <li className={v.raisedWei > 0n ? "dp-done" : ""}>Raise opened on a rising price curve</li>
+        <li className={pct(v.raisedWei, v.targetRaiseWei) >= 50 ? "dp-done" : ""}>Half the target committed</li>
+        <li className={v.phase === "expired" || v.phase === "graduated" ? "dp-done" : ""}>Target reached — {fmtEth(v.targetRaiseWei, 3)} ETH in {days} days</li>
+        <li className={v.phase === "graduated" ? "dp-done" : ""}>Graduated into a locked Uniswap V4 pool</li>
+      </ul>
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 16 }}>
+        {v.meta.website && <a className="dp-chit" href={v.meta.website} target="_blank" rel="noreferrer">website ↗</a>}
+        {v.meta.twitter && <a className="dp-chit" href={v.meta.twitter} target="_blank" rel="noreferrer">x / twitter ↗</a>}
+        {env.explorerUrl && <a className="dp-chit" href={`${env.explorerUrl}/token/${v.address}`} target="_blank" rel="noreferrer">contract ↗</a>}
+      </div>
+    </div>
+  );
+}
+
+function UpdatesPane({ v }: { v: VentureT }) {
+  const [updates, setUpdates] = useState<{ author: string; text: string; txHash: string }[] | null>(null);
+  useEffect(() => {
+    let live = true;
+    loadUpdates(v.address).then((u) => live && setUpdates(u)).catch(() => live && setUpdates([]));
+    return () => { live = false; };
+  }, [v.address]);
+
+  if (updates === null) return <p className="dp-agate">Reading the update log…</p>;
+  if (updates.length === 0) {
+    return <p className="dp-agate">No founder updates posted yet. Updates are written on-chain and cannot be edited or deleted afterwards.</p>;
+  }
+  return (
+    <div className="dp-typescript">
+      {updates.slice().reverse().map((u) => (
+        <div className="dp-entry" key={u.txHash}>
+          <time>{short(u.author)}</time>
+          <span style={{ whiteSpace: "pre-wrap" }}>{u.text}</span>
+          {env.explorerUrl && <> <a className="dp-mono" style={{ fontSize: 10.5 }} href={`${env.explorerUrl}/tx/${u.txHash}`} target="_blank" rel="noreferrer">proof ↗</a></>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function BackersPane({ v, fills }: { v: VentureT; fills: Fill[] }) {
+  if (fills.length === 0) return <p className="dp-agate">No backers yet — the curve starts at its lowest price.</p>;
+  const total = fills.reduce((s, f) => s + f.ethIn, 0n);
+  return (
+    <table className="dp-holders" style={{ width: "100%", borderCollapse: "collapse" }}>
+      <tbody>
+        {fills.slice().reverse().map((f) => {
+          const share = total > 0n ? pct(f.ethIn, total) : 0;
+          return (
+            <tr key={f.txHash + f.buyer}>
+              <td className="dp-mono">{short(f.buyer)}</td>
+              <td style={{ width: "34%" }}><div className="dp-bar"><i style={{ ["--pct" as string]: `${share}%` }} /></div></td>
+              <td className="dp-mono">{fmtTok(f.tokensOut)} ${v.symbol}</td>
+              <td className="dp-mono" style={{ textAlign: "right", color: "var(--up)" }}>{fmtEth(f.ethIn, 4)} ETH</td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}
+
+function TermsPane({ v }: { v: VentureT }) {
+  const days = Math.max(1, Math.round((v.deadline - v.createdAt) / 86_400));
+  const rows: [string, string][] = [
+    ["Funding target", `${fmtEth(v.targetRaiseWei, 4)} ETH`],
+    ["Raised", `${fmtEth(v.raisedWei, 4)} ETH (${pct(v.raisedWei, v.targetRaiseWei).toFixed(1)}%)`],
+    ["Founder cut of raise", `${(v.founderRaiseBps / 100).toFixed(1)}% — at graduation only`],
+    ["Founder stake", v.vesting === "0x0000000000000000000000000000000000000000" ? "none" : "vested linearly from graduation"],
+    ["Round deadline", `${days} day${days === 1 ? "" : "s"} · all-or-nothing refunds`],
+    ["Per-wallet cap", `${fmtEth(v.maxBuyWei, 4)} ETH`],
+    ["Buy / sell tax", `${(v.policy.buyTaxBps / 100).toFixed(2)}% / ${(v.policy.sellTaxBps / 100).toFixed(2)}%`],
+    ["Tax split", `dev ${v.policy.devBps / 100} · dividends ${v.policy.dividendBps / 100} · liquidity ${v.policy.liquidityBps / 100} · MM ${v.policy.mmBps / 100}`],
+    ["Protocol fee", `${(VENTURE.platformFeeBps / 100).toFixed(2)}% per trade, ${VENTURE.refShareBps / 100}% of it to referrers`],
+    ["Anti-snipe", "15% premium for 5s, 5% to 15s → into the quote walls"],
+    ["Token", v.address],
+  ];
+  return (
+    <>
+      <div className="dp-sheet">
+        <p className="dp-sec">Term sheet <span className="dp-agate">sworn at launch · immutable after</span></p>
+        <dl>{rows.map(([k, val]) => <span key={k} style={{ display: "contents" }}><dt>{k}</dt><dd>{val}</dd></span>)}</dl>
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
+          <span className="dp-stamp">LOCKED</span>
+        </div>
+      </div>
+      <p className="dp-agate" style={{ marginTop: 10 }}>
+        Every number above was written into the factory at launch. Nobody — the founder, the protocol, this
+        website — can change them afterwards.
+      </p>
+    </>
+  );
+}
+
+function WhoEarns({ v }: { v: VentureT }) {
+  const avgTax = (v.policy.buyTaxBps + v.policy.sellTaxBps) / 2 / 100;
+  return (
+    <div className="dp-panel" style={{ marginTop: 12 }}>
+      <div className="dp-phead"><span>Who earns here</span></div>
+      <div className="dp-pbody" style={{ fontFamily: "var(--mono)", fontSize: 11.5, color: "var(--dim)", display: "grid", gap: 5 }}>
+        <span>founder: <b style={{ color: "var(--up)" }}>{(avgTax * v.policy.devBps / 10_000).toFixed(2)}%</b> of every trade, forever</span>
+        <span>holders: <b style={{ color: "var(--up)" }}>{(avgTax * v.policy.dividendBps / 10_000).toFixed(2)}%</b> back as ETH dividends</span>
+        <span>the pool: <b style={{ color: "var(--up)" }}>{(avgTax * (v.policy.liquidityBps + v.policy.mmBps) / 10_000).toFixed(2)}%</b> into liquidity + quote walls</span>
+        <span>you, as referrer: {VENTURE.refShareBps / 100}% of the protocol fee</span>
+      </div>
+    </div>
+  );
+}
+
+function ReferralChit() {
   const { address: me } = useWallet();
   const [copied, setCopied] = useState(false);
   if (!me) return null;
   return (
-    <button className="vn-chip" style={{ color: "var(--v-green-2)" }} onClick={() => {
-      navigator.clipboard?.writeText(refLink(me)).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); });
-    }}>
-      {copied ? "link copied ✓" : `refer & earn ${VENTURE.refShareBps / 100}% of fees`}
-    </button>
-  );
-}
-
-function UpdatesFeed({ v }: { v: VentureT }) {
-  const [updates, setUpdates] = useState<{ author: string; text: string; txHash: string }[]>([]);
-  useEffect(() => {
-    let live = true;
-    loadUpdates(v.address).then((u) => live && setUpdates(u)).catch(() => undefined);
-    return () => { live = false; };
-  }, [v.address]);
-  if (updates.length === 0) return null;
-  return (
-    <>
-      <p className="vn-eyebrow mt-8 mb-2">founder updates · on-chain</p>
-      <div className="vn-rows vn-card px-4 py-1">
-        {updates.slice().reverse().map((u) => (
-          <div className="r" key={u.txHash} style={{ alignItems: "flex-start" }}>
-            <span className="min-w-0 flex-1 text-[13px]" style={{ color: "var(--v-ink-2)", whiteSpace: "pre-wrap" }}>{u.text}</span>
-            {env.explorerUrl && <a className="vn-num shrink-0 text-[11px]" style={{ color: "var(--v-ink-3)" }} href={`${env.explorerUrl}/tx/${u.txHash}`} target="_blank" rel="noreferrer">proof ↗</a>}
-          </div>
-        ))}
-      </div>
-    </>
+    <div className="dp-chit" style={{ marginTop: 12 }}>
+      <b>REFERRAL LINK</b> — earns {VENTURE.refShareBps / 100}% of the protocol fee on every trade your link
+      brings, paid in the same transaction:<br />
+      <button className="dp-mono" style={{ fontSize: 10.5, background: "none", border: "none", padding: 0, color: "var(--up)", textAlign: "left", wordBreak: "break-all" }}
+        onClick={() => navigator.clipboard?.writeText(refLink(me)).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); })}>
+        {copied ? "copied ✓" : refLink(me)}
+      </button>
+    </div>
   );
 }
 
@@ -174,39 +309,16 @@ function ReferralBanner() {
   };
 
   return (
-    <div className="mb-3 flex items-center justify-between rounded-xl border px-4 py-3" style={{ borderColor: "#2fd57544", background: "#2fd5750a" }}>
-      <p className="text-[12px]" style={{ color: "var(--v-ink-2)" }}>
-        You arrived through {short(ref)}'s link. Activating costs one tiny transaction and changes none of your fees.
-      </p>
-      <button className="vn-cta" style={{ width: "auto", padding: "8px 14px", fontSize: 12.5 }} disabled={busy} onClick={activate}>
-        {busy ? "Confirm…" : "Activate"}
+    <div className="dp-chit" style={{ margin: "0 14px 12px", borderColor: "var(--up-dim)" }}>
+      You arrived through {short(ref)}'s link. Activating costs one tiny transaction and changes none of your fees.{" "}
+      <button className="dp-mono" style={{ background: "none", border: "none", color: "var(--up)", padding: 0 }} disabled={busy} onClick={activate}>
+        {busy ? "confirm…" : "activate →"}
       </button>
     </div>
   );
 }
 
-function TermSheet({ v }: { v: VentureT }) {
-  const days = Math.round((v.deadline - v.createdAt) / 86_400);
-  return (
-    <>
-      <p className="vn-eyebrow mt-8 mb-2">term sheet · on-chain</p>
-      <div className="vn-sheet">
-        <div className="tr"><span>term</span><span>value</span></div>
-        <div className="tr"><span>Funding target</span><span className="vn-num">{fmtEth(v.targetRaiseWei, 4)} ETH</span></div>
-        <div className="tr"><span>Founder's cut of the raise</span><span>{(v.founderRaiseBps / 100).toFixed(1)}% at graduation</span></div>
-        <div className="tr"><span>Rest of the raise</span><span>locked pool liquidity</span></div>
-        <div className="tr"><span>Founder stake</span><span>{v.vesting === "0x0000000000000000000000000000000000000000" ? "none" : "vested linearly after graduation"}</span></div>
-        <div className="tr"><span>Round deadline</span><span>{days} day{days === 1 ? "" : "s"} · all-or-nothing refunds</span></div>
-        <div className="tr"><span>Per-wallet cap</span><span className="vn-num">{fmtEth(v.maxBuyWei, 4)} ETH</span></div>
-        <div className="tr"><span>Trade taxes after graduation</span><span className="vn-num">{(v.policy.buyTaxBps / 100).toFixed(2)}% buy / {(v.policy.sellTaxBps / 100).toFixed(2)}% sell</span></div>
-        <div className="tr"><span>Protocol fee</span><span>{(VENTURE.platformFeeBps / 100).toFixed(2)}% per trade, on top</span></div>
-        <div className="tr"><span>Tax allocation</span><span>{v.policy.devBps / 100}% dev · {v.policy.dividendBps / 100}% dividends · {v.policy.liquidityBps / 100}% liquidity · {v.policy.mmBps / 100}% MM walls (two-sided, auto re-centered)</span></div>
-        <div className="tr"><span>Anti-snipe</span><span>15% premium first 5s, 5% to 15s → the quote walls</span></div>
-      </div>
-    </>
-  );
-}
-
+/** The raise box: back this project on the curve. */
 function RaisePanel({ v }: { v: VentureT }) {
   useTick();
   const { address: me, isConnected, connectFirst } = useWallet();
@@ -243,35 +355,34 @@ function RaisePanel({ v }: { v: VentureT }) {
   };
 
   return (
-    <div className="vn-card p-5">
-      <div className="flex items-center justify-between">
-        <p className="vn-eyebrow">funding progress</p>
-        <span className="vn-num text-[12px]" style={{ color: "var(--v-ink-2)" }}>{funded.toFixed(1)}%</span>
+    <div className="dp-panel dp-tradebox">
+      <div className="dp-tb-tabs"><button className="dp-buy on" style={{ gridColumn: "1 / -1" }}>Back this raise</button></div>
+      <div className="dp-tb-body">
+        <ReferralBanner />
+        <div className="dp-tb-amt">
+          <input inputMode="decimal" placeholder="0.0" value={amt} onChange={(e) => setAmt(e.target.value.replace(/[^0-9.]/g, ""))} />
+          <span>ETH</span>
+        </div>
+        <div className="dp-quicks">
+          {["0.05", "0.1", "0.5", "1"].map((q) => <button key={q} onClick={() => setAmt(q)}>{q}</button>)}
+        </div>
+        <p className="dp-tb-est">
+          {tokensOut > 0n ? <>you receive ≈ <b>{fmtTok(tokensOut, true)} ${v.symbol}</b></> : <>price rises with every buy — early backers pay less</>}
+        </p>
+        <button className="dp-tb-go dp-buy" disabled={busy || (isConnected && parsed === 0n)} onClick={buy}>
+          {busy ? "Confirm in wallet…" : isConnected ? `Back ${v.name}` : "Connect wallet"}
+        </button>
+        <div className="dp-tb-slip">
+          <span>{isConnected ? `cap left ${fmtEth(capLeft, 3)} ETH` : `cap ${fmtEth(v.maxBuyWei, 3)} ETH / wallet`}</span>
+          <span><Countdown deadline={v.deadline} /> left</span>
+        </div>
+        <p className="dp-tb-note">All-or-nothing: if the raise misses its target by the deadline, you reclaim every wei.</p>
       </div>
-      <p className="vn-num vn-num-big mt-2">{fmtEth(v.raisedWei, 4)} <span style={{ fontSize: "0.45em", color: "var(--v-ink-2)" }}>/ {fmtEth(v.targetRaiseWei, 4)} ETH</span></p>
-      <div className="vn-track mt-3" style={{ ["--pct" as string]: `${funded}%` }}><i /></div>
-      <div className="mt-1.5 flex justify-between text-[11.5px]" style={{ color: "var(--v-ink-3)" }}>
-        <span className="vn-num">{fmtTok(v.soldWhole, true)} sold</span>
-        <span className="vn-num">price {fmtEth(v.priceWei, 9)} ETH</span>
+      <div className="dp-gradblock">
+        <div className="dp-lbl"><span>bonding curve progress</span><b>{funded.toFixed(1)}%</b></div>
+        <CurveBar v={v} />
+        <p>At 100% the raise graduates: the founder cut pays out, the rest locks as pool liquidity, and trading opens. Automatic and irreversible.</p>
       </div>
-
-      <div className="vn-field mt-5">
-        <input inputMode="decimal" placeholder="0.0" value={amt} onChange={(e) => setAmt(e.target.value.replace(/[^0-9.]/g, ""))} />
-        <span className="vn-chip shrink-0">ETH</span>
-      </div>
-      <p className="vn-num mt-2 h-4 text-[12.5px]" style={{ color: "var(--v-ink-2)" }}>
-        {tokensOut > 0n ? `≈ ${fmtTok(tokensOut, true)} $${v.symbol} along the curve` : ""}
-      </p>
-      {isConnected && (
-        <p className="vn-hint mt-1">your cap: {fmtEth(capLeft, 4)} ETH remaining of {fmtEth(v.maxBuyWei, 4)}</p>
-      )}
-      <button className="vn-cta mt-3" disabled={busy || (isConnected && parsed === 0n)} onClick={buy}>
-        {busy ? "Confirm in wallet…" : isConnected ? `Back ${v.name}` : "Connect wallet"}
-      </button>
-      <p className="mt-3 text-center text-[11.5px]" style={{ color: "var(--v-ink-3)" }}>
-        Early backers pay less — the price rises along the curve as the round fills.
-        Miss the target by the deadline and everyone is refunded in full.
-      </p>
     </div>
   );
 }
@@ -298,17 +409,18 @@ function GraduatePanel({ v }: { v: VentureT }) {
 
   const founderCut = (v.raisedWei * BigInt(v.founderRaiseBps)) / 10_000n;
   return (
-    <div className="vn-card p-6 text-center">
-      <Flag size={36} />
-      <p className="vn-title mt-3" style={{ fontSize: 22 }}>Doubleplusgood — round fully funded.</p>
-      <p className="mx-auto mt-1 max-w-xs text-[13px]" style={{ color: "var(--v-ink-2)" }}>
-        {fmtEth(v.raisedWei, 4)} ETH raised. Anyone can trigger graduation: the founder is paid their
-        {" "}{(v.founderRaiseBps / 100).toFixed(1)}% cut ({fmtEth(founderCut, 4)} ETH), the rest becomes locked
-        liquidity, and trading opens.
-      </p>
-      <button className="vn-cta mt-4" disabled={busy} onClick={graduate}>
-        {busy ? "Graduating…" : "Trigger graduation"}
-      </button>
+    <div className="dp-panel dp-tradebox">
+      <div className="dp-phead"><span>Fully funded</span><span className="dp-badge dp-soon">target reached</span></div>
+      <div className="dp-pbody">
+        <p style={{ fontSize: 13, color: "var(--dim)", margin: "0 0 12px" }}>
+          {fmtEth(v.raisedWei, 4)} ETH raised. Anyone can trigger graduation: the founder is paid their{" "}
+          {(v.founderRaiseBps / 100).toFixed(1)}% cut ({fmtEth(founderCut, 4)} ETH), the rest becomes locked
+          liquidity, and trading opens.
+        </p>
+        <button className="dp-tb-go dp-buy" disabled={busy} onClick={graduate}>
+          {busy ? "Graduating…" : "Trigger graduation"}
+        </button>
+      </div>
     </div>
   );
 }
@@ -351,31 +463,31 @@ function FailPanel({ v }: { v: VentureT }) {
   };
 
   return (
-    <div className="vn-card p-6 text-center">
-      <p className="vn-title mt-1" style={{ fontSize: 22 }}>Doubleplusungood — this round didn't make it.</p>
-      <p className="mx-auto mt-1 max-w-xs text-[13px]" style={{ color: "var(--v-ink-2)" }}>
-        The deadline passed below target. All-or-nothing means nobody is left holding the bag: return your
-        ${v.symbol} and reclaim your full spend.
-      </p>
-      {!v.aborted ? (
-        <button className="vn-cta ghost mt-4" disabled={busy} onClick={() => act("abort")}>
-          {busy ? "Confirm in wallet…" : "Close the round (opens refunds)"}
-        </button>
-      ) : spent > 0n ? (
-        <button className="vn-cta danger mt-4" disabled={busy} onClick={() => act("refund")}>
-          {busy ? "Confirm in wallet…" : `Reclaim ${fmtEth(spent, 5)} ETH`}
-        </button>
-      ) : (
-        <p className="vn-hint mt-4">Nothing to reclaim from this wallet.</p>
-      )}
-      {v.aborted && spent > 0n && (
-        <p className="vn-hint mt-2">Requires returning your full {fmtTok(bought)} ${v.symbol}.</p>
-      )}
+    <div className="dp-panel dp-tradebox">
+      <div className="dp-phead"><span>Refund</span><span className="dp-badge dp-dead">raise failed</span></div>
+      <div className="dp-pbody">
+        <p style={{ fontSize: 13, color: "var(--dim)", margin: "0 0 12px" }}>
+          The deadline passed below target. All-or-nothing means nobody is left holding the bag: return your
+          ${v.symbol} and reclaim your full spend. The founder allocation is burned.
+        </p>
+        {!v.aborted ? (
+          <button className="dp-tb-go dp-buy" style={{ background: "var(--up-dim)" }} disabled={busy} onClick={() => act("abort")}>
+            {busy ? "Confirm in wallet…" : "Close the round (opens refunds)"}
+          </button>
+        ) : spent > 0n ? (
+          <button className="dp-tb-go dp-buy" disabled={busy} onClick={() => act("refund")}>
+            {busy ? "Confirm in wallet…" : `Reclaim ${fmtEth(spent, 5)} ETH`}
+          </button>
+        ) : (
+          <p className="dp-agate">Nothing to reclaim from this wallet.</p>
+        )}
+        {v.aborted && spent > 0n && <p className="dp-tb-note">Requires returning your full {fmtTok(bought)} ${v.symbol}.</p>}
+      </div>
     </div>
   );
 }
 
-/** Post-graduation: ETH buy/sell through the RhRouter + dividend claim. */
+/** Post-graduation: ETH buy/sell through the router + dividend claim. */
 function TradePanel({ v }: { v: VentureT }) {
   const { address: me, isConnected, connectFirst } = useWallet();
   const { data: wc } = useWalletClient();
@@ -438,44 +550,47 @@ function TradePanel({ v }: { v: VentureT }) {
     } finally { setBusy(false); }
   };
 
+  const tax = side === "buy" ? v.policy.buyTaxBps : v.policy.sellTaxBps;
   return (
-    <div className="vn-card p-5">
-      <ReferralBanner />
-      <div className="vn-seg">
-        {(["buy", "sell"] as const).map((s) => (
-          <button key={s} className={side === s ? "on" : ""} onClick={() => { setSide(s); setAmt(""); }}>
-            {s === "buy" ? "Buy" : "Sell"}
-          </button>
-        ))}
+    <div className="dp-panel dp-tradebox">
+      <div className="dp-tb-tabs">
+        <button className={`dp-buy ${side === "buy" ? "on" : ""}`} onClick={() => { setSide("buy"); setAmt(""); }}>Buy</button>
+        <button className={`dp-sell ${side === "sell" ? "on" : ""}`} onClick={() => { setSide("sell"); setAmt(""); }}>Sell</button>
       </div>
-
-      <div className="vn-field mt-4">
-        <input inputMode="decimal" placeholder="0.0" value={amt} onChange={(e) => setAmt(e.target.value.replace(/[^0-9.]/g, ""))} />
-        <span className="vn-chip shrink-0">{side === "buy" ? "ETH" : `$${v.symbol}`}</span>
-      </div>
-      {side === "sell" && bal > 0n && (
-        <p className="vn-hint mt-1.5">
-          balance {fmtTok(bal)} · <button style={{ color: "var(--v-green-2)" }} onClick={() => setAmt(formatEther(bal))}>max</button>
-        </p>
-      )}
-      <button className="vn-cta mt-3" disabled={busy || (isConnected && parsed === 0n)} onClick={go}>
-        {busy ? "Confirm in wallet…" : isConnected ? (side === "buy" ? `Buy $${v.symbol}` : `Sell $${v.symbol}`) : "Connect wallet"}
-      </button>
-
-      {isConnected && pending > 0n && (
-        <div className="mt-4 flex items-center justify-between rounded-xl border px-4 py-3" style={{ borderColor: "#2fd57555", background: "#2fd5750d" }}>
-          <div>
-            <p className="vn-eyebrow" style={{ fontSize: 10.5 }}>your dividends</p>
-            <p className="vn-num text-[15px]" style={{ color: "var(--v-green-2)" }}>{fmtEth(pending, 6)} ETH</p>
-          </div>
-          <button className="vn-cta" style={{ width: "auto", padding: "9px 18px", fontSize: 13 }} disabled={busy} onClick={claim}>Claim</button>
+      <div className="dp-tb-body">
+        <ReferralBanner />
+        <div className="dp-tb-amt">
+          <input inputMode="decimal" placeholder="0.0" value={amt} onChange={(e) => setAmt(e.target.value.replace(/[^0-9.]/g, ""))} />
+          <span>{side === "buy" ? "ETH" : `$${v.symbol}`}</span>
         </div>
-      )}
-      <p className="mt-3 text-center text-[11.5px]" style={{ color: "var(--v-ink-3)" }}>
-        {v.policy.dividendBps > 0
-          ? `${v.policy.dividendBps / 100}% of the trade tax pays holders as ETH dividends — a yield for holding the stock.`
-          : "This venture routes its trade tax to its dev, liquidity and market-making engines."}
-      </p>
+        <div className="dp-quicks">
+          {side === "buy"
+            ? ["0.05", "0.1", "0.5", "1"].map((q) => <button key={q} onClick={() => setAmt(q)}>{q}</button>)
+            : ["25%", "50%", "75%", "max"].map((q, i) => (
+              <button key={q} onClick={() => setAmt(formatEther(bal * BigInt([25, 50, 75, 100][i]) / 100n))}>{q}</button>
+            ))}
+        </div>
+        {side === "sell" && bal > 0n && <p className="dp-tb-est">balance <b>{fmtTok(bal)} ${v.symbol}</b></p>}
+        <button className={`dp-tb-go ${side === "buy" ? "dp-buy" : "dp-sell"}`} disabled={busy || (isConnected && parsed === 0n)} onClick={go}>
+          {busy ? "Confirm in wallet…" : isConnected ? `${side === "buy" ? "Buy" : "Sell"} $${v.symbol}` : "Connect wallet"}
+        </button>
+        <div className="dp-tb-slip">
+          <span>slippage 1%</span>
+          <span>fees: {(tax / 100).toFixed(1)}% + {(VENTURE.platformFeeBps / 100).toFixed(1)}% protocol</span>
+        </div>
+
+        {isConnected && pending > 0n && (
+          <div className="dp-chit" style={{ marginTop: 12, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+            <span>your dividends<br /><b style={{ color: "var(--up)", fontFamily: "var(--mono)" }}>{fmtEth(pending, 6)} ETH</b></span>
+            <button className="dp-action" style={{ padding: "8px 14px", fontSize: 11 }} disabled={busy} onClick={claim}>Claim</button>
+          </div>
+        )}
+      </div>
+      <div className="dp-gradblock">
+        <div className="dp-lbl"><span>bonding curve progress</span><b>100%</b></div>
+        <CurveBar v={v} />
+        <p>Graduated. Liquidity is locked in the Uniswap V4 pool and the curve is closed forever.</p>
+      </div>
     </div>
   );
 }
@@ -523,21 +638,21 @@ function VestingCard({ v }: { v: VentureT }) {
   };
 
   return (
-    <div className="vn-card mt-4 p-5">
-      <p className="vn-eyebrow">founder stake · vesting</p>
-      <div className="vn-track mt-3" style={{ ["--pct" as string]: `${vestedPct}%` }}><i /></div>
-      <div className="mt-1.5 flex justify-between text-[11.5px]" style={{ color: "var(--v-ink-3)" }}>
-        <span className="vn-num">{fmtTok(state.released)} claimed</span>
-        <span className="vn-num">{fmtTok(state.total)} total · {Math.round(state.duration / 86_400)}d linear</span>
+    <div className="dp-panel" style={{ marginTop: 12 }}>
+      <div className="dp-phead"><span>Founder stake · vesting</span><span>{vestedPct.toFixed(0)}%</span></div>
+      <div className="dp-pbody">
+        <div className="dp-meter" style={{ ["--pct" as string]: `${vestedPct}%` }}><i /></div>
+        <div className="dp-tb-slip">
+          <span>{fmtTok(state.released)} claimed</span>
+          <span>{fmtTok(state.total)} total · {Math.round(state.duration / 86_400)}d linear</span>
+        </div>
+        {isFounder && state.claimable > 0n && (
+          <button className="dp-action" style={{ width: "100%", marginTop: 10 }} disabled={busy} onClick={claim}>
+            {busy ? "Confirm in wallet…" : `Claim ${fmtTok(state.claimable)} vested`}
+          </button>
+        )}
+        <p className="dp-tb-note">Unlocked nothing until the raise succeeded; unlocks linearly from graduation.</p>
       </div>
-      {isFounder && state.claimable > 0n && (
-        <button className="vn-cta ghost mt-3" disabled={busy} onClick={claim}>
-          {busy ? "Confirm in wallet…" : `Claim ${fmtTok(state.claimable)} vested $${v.symbol}`}
-        </button>
-      )}
-      <p className="vn-hint mt-2">
-        The founder's stake unlocked nothing until the raise succeeded, and unlocks linearly from graduation.
-      </p>
     </div>
   );
 }

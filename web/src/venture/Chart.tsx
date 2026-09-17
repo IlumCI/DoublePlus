@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ColorType, CrosshairMode, createChart, type UTCTimestamp } from "lightweight-charts";
+import { ColorType, CrosshairMode, PriceScaleMode, createChart, type UTCTimestamp } from "lightweight-charts";
 
 import { loadPoolTrades, toCandles, type PoolTrade, type Venture } from "./client";
 import { fmtEth, fmtTok, short } from "./ui";
@@ -11,38 +11,56 @@ const INTERVALS = [
   { label: "1d", secs: 86_400 },
 ] as const;
 
-/** Post-graduation market panel: candles from the pool's own swap log plus
- *  the raw trade tape. No indexer, no backend — the chain is the chart. */
-export function MarketPanel({ v }: { v: Venture }) {
-  const box = useRef<HTMLDivElement>(null);
-  const [trades, setTrades] = useState<PoolTrade[]>([]);
-  const [interval_, setInterval_] = useState<(typeof INTERVALS)[number]>(INTERVALS[0]);
+const UP = "#a5dbb2";
+const DOWN = "#ee8a80";
 
+/** Pool swap log → candles. No indexer, no backend: the chain is the chart. */
+export function usePoolTrades(v: Venture): PoolTrade[] {
+  const [trades, setTrades] = useState<PoolTrade[]>([]);
   useEffect(() => {
+    if (v.phase !== "graduated") return;
     let live = true;
     const refresh = () => loadPoolTrades(v).then((t) => live && setTrades(t)).catch(() => undefined);
     refresh();
     const id = setInterval(refresh, 15_000);
     return () => { live = false; clearInterval(id); };
-  }, [v.address]);
+  }, [v.address, v.phase]);
+  return trades;
+}
+
+/** The chart panel that owns the top-left of a graduated token page. */
+export function PriceChart({ v, trades }: { v: Venture; trades: PoolTrade[] }) {
+  const box = useRef<HTMLDivElement>(null);
+  const [interval_, setInterval_] = useState<(typeof INTERVALS)[number]>(INTERVALS[0]);
 
   useEffect(() => {
     if (!box.current) return;
     const candles = toCandles(trades, interval_.secs);
     if (candles.length === 0) return;
+
+    // Curve tokens price in the 1e-12 range and can move orders of magnitude in
+    // a day, so the scale has to be derived from the data, not assumed: enough
+    // decimals to render the smallest tick, and a log scale once the range is
+    // wide enough that a linear one would draw a single block.
+    const lows = candles.map((c) => c.low).filter((x) => x > 0);
+    const highs = candles.map((c) => c.high).filter((x) => x > 0);
+    const minLow = lows.length > 0 ? Math.min(...lows) : 1;
+    const maxHigh = highs.length > 0 ? Math.max(...highs) : 1;
+    const precision = Math.min(16, Math.max(2, Math.ceil(-Math.log10(minLow)) + 2));
+    const wideRange = maxHigh / minLow > 50;
     const chart = createChart(box.current, {
       height: 260,
-      layout: { background: { type: ColorType.Solid, color: "transparent" }, textColor: "#6b7a90", fontSize: 11 },
-      grid: { vertLines: { color: "#1f2c4733" }, horzLines: { color: "#1f2c4733" } },
-      rightPriceScale: { borderColor: "#1f2c47" },
-      timeScale: { borderColor: "#1f2c47", timeVisible: true, secondsVisible: false },
+      layout: { background: { type: ColorType.Solid, color: "transparent" }, textColor: "#6f6c80", fontSize: 11 },
+      grid: { vertLines: { color: "#30304455" }, horzLines: { color: "#30304455" } },
+      rightPriceScale: { borderColor: "#303044", mode: wideRange ? PriceScaleMode.Logarithmic : PriceScaleMode.Normal },
+      timeScale: { borderColor: "#303044", timeVisible: true, secondsVisible: false },
       crosshair: { mode: CrosshairMode.Magnet },
       autoSize: true,
     });
     const series = chart.addCandlestickSeries({
-      upColor: "#2fd575", downColor: "#ff6b6b", borderUpColor: "#2fd575", borderDownColor: "#ff6b6b",
-      wickUpColor: "#2fd575", wickDownColor: "#ff6b6b",
-      priceFormat: { type: "price", precision: 10, minMove: 1e-10 },
+      upColor: UP, downColor: DOWN, borderUpColor: UP, borderDownColor: DOWN,
+      wickUpColor: UP, wickDownColor: DOWN,
+      priceFormat: { type: "price", precision, minMove: 10 ** -precision },
     });
     series.setData(candles.map((c) => ({ ...c, time: c.time as UTCTimestamp })));
     chart.timeScale().fitContent();
@@ -50,44 +68,47 @@ export function MarketPanel({ v }: { v: Venture }) {
   }, [trades, interval_]);
 
   return (
-    <div className="vn-card mt-5 p-5">
-      <div className="flex items-center justify-between">
-        <p className="vn-eyebrow">price · ETH per ${v.symbol}</p>
-        <div className="vn-seg" style={{ width: 150 }}>
+    <div className="dp-panel dp-chartpanel">
+      <div className="dp-phead">
+        <span>${v.symbol} / ETH</span>
+        <span className="dp-tfchips">
           {INTERVALS.map((iv) => (
             <button key={iv.label} className={interval_.label === iv.label ? "on" : ""} onClick={() => setInterval_(iv)}>
               {iv.label}
             </button>
           ))}
-        </div>
+        </span>
       </div>
-      {trades.length === 0 ? (
-        <p className="py-10 text-center text-[13px]" style={{ color: "var(--v-ink-3)" }}>
-          No trades yet — the chart draws itself from the pool's swap log.
-        </p>
-      ) : (
-        <div ref={box} className="mt-3" style={{ height: 260 }} />
-      )}
+      <div className="dp-pbody">
+        {trades.length === 0
+          ? <p className="dp-agate" style={{ padding: "90px 0", textAlign: "center" }}>No trades yet — the chart draws itself from the pool's swap log.</p>
+          : <div ref={box} style={{ height: 260 }} />}
+      </div>
+    </div>
+  );
+}
 
-      {trades.length > 0 && (
-        <>
-          <p className="vn-eyebrow mt-5 mb-1">trade tape</p>
-          <div className="vn-rows">
-            {trades.slice(-12).reverse().map((t) => (
-              <div className="r" key={t.txHash + t.blockNumber}>
-                <span style={{ color: t.isBuy ? "var(--v-green-2)" : "var(--v-red)", fontWeight: 700 }}>
-                  {t.isBuy ? "BUY" : "SELL"}
-                </span>
-                <span className="vn-num">{fmtTok(t.coinAmount)} ${v.symbol}</span>
-                <span className="vn-num" style={{ color: "var(--v-ink-2)" }}>{fmtEth(t.pairAmount, 6)} ETH</span>
+/** The raw tape, for the Trades tab. */
+export function TradeTape({ v, trades }: { v: Venture; trades: PoolTrade[] }) {
+  if (trades.length === 0) return <p className="dp-agate">No trades yet.</p>;
+  return (
+    <div className="dp-blotter" style={{ maxHeight: "none" }}>
+      <table>
+        <tbody>
+          {trades.slice(-40).reverse().map((t) => (
+            <tr key={t.txHash + t.blockNumber}>
+              <td className={t.isBuy ? "dp-b" : "dp-s"}>{t.isBuy ? "BUY" : "SELL"}</td>
+              <td>{fmtTok(t.coinAmount)} ${v.symbol}</td>
+              <td>{fmtEth(t.pairAmount, 6)} ETH</td>
+              <td style={{ textAlign: "right" }}>
                 {env.explorerUrl
-                  ? <a className="vn-num" style={{ color: "var(--v-ink-3)" }} href={`${env.explorerUrl}/tx/${t.txHash}`} target="_blank" rel="noreferrer">{short(t.txHash)}</a>
-                  : <span className="vn-num" style={{ color: "var(--v-ink-3)" }}>{short(t.txHash)}</span>}
-              </div>
-            ))}
-          </div>
-        </>
-      )}
+                  ? <a href={`${env.explorerUrl}/tx/${t.txHash}`} target="_blank" rel="noreferrer">{short(t.txHash)}</a>
+                  : short(t.txHash)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
