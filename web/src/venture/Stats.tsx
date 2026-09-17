@@ -3,12 +3,14 @@ import { Link } from "react-router-dom";
 
 import { type Venture } from "./client";
 import { ago, fmtEth, fmtMcap, pct, short, StatusBadge, useEthUsd } from "./ui";
+import { usePageMeta } from "./seo";
 import { useVentures } from "./useVentures";
 import { env } from "../lib/env";
 
 /** Platform aggregates plus the full index of every raise ever filed. */
 export function Stats() {
-  const ventures = useVentures();
+  usePageMeta("Stats");
+  const { ventures } = useVentures();
   const ethUsd = useEthUsd();
   const [q, setQ] = useState("");
   const [state, setState] = useState("");
@@ -54,10 +56,10 @@ export function Stats() {
       </div>
 
       <div className="dp-three-col">
-        <Stat k="Total raised on curves" v={`${fmtEth(totals.raised, 4)} ETH`} foot={`across ${totals.count} raises filed`} />
-        <Stat k="Graduation rate" v={`${totals.gradRate.toFixed(1)}%`} foot={`${totals.graduated} of ${totals.count} reached target`} />
-        <Stat k="Refunded to backers" v={`${fmtEth(totals.refunded, 4)} ETH`} foot="100% of failed-raise deposits" />
+        <Stat k="Committed to projects" v={`${fmtEth(totals.raised, 4)} ETH`} foot={`across ${totals.count} raise${totals.count === 1 ? "" : "s"}`} />
+        <Stat k="Trading with locked liquidity" v={String(totals.graduated)} foot="graduated into Uniswap V4 pools" />
         <Stat k="Raising right now" v={String(totals.liveNow)} foot="open curves accepting backers" />
+        <Stat k="Refund guarantee" v="100%" foot="returned when a raise misses its target" />
         <Stat k="Average trade tax" v={`${totals.avgTax.toFixed(2)}%`} foot="founder-set, 0–4% each side" />
         <Stat k="Protocol fee" v={`${(Number(import.meta.env.VITE_PLATFORM_FEE_BPS ?? 100) / 100).toFixed(2)}%`} foot="per trade; 20% of it to referrers" />
       </div>

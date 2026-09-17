@@ -153,3 +153,64 @@ export function Countdown({ deadline }: { deadline: number }) {
     </span>
   );
 }
+
+/** ETH with its dollar value beside it — nobody thinks in 0.000002 ETH. */
+export function EthUsd({ wei, digits = 4, usd }: { wei: bigint; digits?: number; usd: number }) {
+  const eth = Number(wei) / 1e18;
+  return (
+    <>
+      <span className="dp-mono">{fmtEth(wei, digits)} ETH</span>
+      {usd > 0 && eth > 0 && <span className="dp-mono" style={{ color: "var(--faint)" }}> · {fmtUsdV(eth * usd)}</span>}
+    </>
+  );
+}
+
+/** Copy-to-clipboard for addresses and links; confirms in place. */
+export function CopyButton({ value, label, className }: { value: string; label?: string; className?: string }) {
+  const [done, setDone] = useState(false);
+  return (
+    <button
+      type="button"
+      className={className ?? "dp-mono"}
+      style={{ background: "none", border: "none", padding: 0, color: done ? "var(--up)" : "inherit", cursor: "pointer" }}
+      onClick={() => navigator.clipboard?.writeText(value).then(() => { setDone(true); setTimeout(() => setDone(false), 1400); })}
+      title="Copy"
+    >
+      {done ? "copied ✓" : (label ?? short(value))} ⧉
+    </button>
+  );
+}
+
+/** Percent change between the first and last close in a window. */
+export function changePct(points: { close: number }[]): number | null {
+  if (points.length < 2) return null;
+  const first = points[0].close;
+  const last = points[points.length - 1].close;
+  if (!(first > 0)) return null;
+  return ((last - first) / first) * 100;
+}
+
+export function Change({ pct: p }: { pct: number | null }) {
+  if (p === null) return <span className="dp-mono" style={{ color: "var(--faint)" }}>—</span>;
+  return (
+    <span className="dp-mono" style={{ color: p >= 0 ? "var(--up)" : "var(--down)" }}>
+      {p >= 0 ? "+" : ""}{p.toFixed(1)}%
+    </span>
+  );
+}
+
+export function CardSkeletons({ n = 8 }: { n?: number }) {
+  return <div className="dp-grid">{Array.from({ length: n }, (_, i) => <div key={i} className="dp-skel dp-skel-card" />)}</div>;
+}
+
+
+/** Readable amounts for micro-cap tokens: ETH down to a point, then gwei.
+ *  Scientific notation in a trade tape is how you lose a reader. */
+export const fmtValue = (wei: bigint): string => {
+  const eth = Number(wei) / 1e18;
+  if (eth === 0) return "0";
+  if (eth >= 0.0001) return `${eth.toLocaleString("en-US", { maximumFractionDigits: 5 })} ETH`;
+  const gwei = Number(wei) / 1e9;
+  if (gwei >= 0.01) return `${gwei.toLocaleString("en-US", { maximumFractionDigits: 2 })} gwei`;
+  return `${Number(wei).toLocaleString("en-US", { maximumFractionDigits: 0 })} wei`;
+};

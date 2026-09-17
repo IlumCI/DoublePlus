@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ColorType, CrosshairMode, PriceScaleMode, createChart, type UTCTimestamp } from "lightweight-charts";
 
 import { loadPoolTrades, toCandles, type PoolTrade, type Venture } from "./client";
-import { fmtEth, fmtTok, short } from "./ui";
+import { fmtTok, fmtValue, short } from "./ui";
 import { env } from "../lib/env";
 
 const INTERVALS = [
@@ -57,12 +57,23 @@ export function PriceChart({ v, trades }: { v: Venture; trades: PoolTrade[] }) {
       crosshair: { mode: CrosshairMode.Magnet },
       autoSize: true,
     });
-    const series = chart.addCandlestickSeries({
-      upColor: UP, downColor: DOWN, borderUpColor: UP, borderDownColor: DOWN,
-      wickUpColor: UP, wickDownColor: DOWN,
-      priceFormat: { type: "price", precision, minMove: 10 ** -precision },
-    });
-    series.setData(candles.map((c) => ({ ...c, time: c.time as UTCTimestamp })));
+    // Candles need bodies to be readable. With only a handful of them — and a
+    // token whose price can move three orders of magnitude in a session — a
+    // single candle swallows the panel, so draw the line instead.
+    const priceFormat = { type: "price" as const, precision, minMove: 10 ** -precision };
+    if (candles.length >= 12) {
+      const series = chart.addCandlestickSeries({
+        upColor: UP, downColor: DOWN, borderUpColor: UP, borderDownColor: DOWN,
+        wickUpColor: UP, wickDownColor: DOWN, priceFormat,
+      });
+      series.setData(candles.map((c) => ({ ...c, time: c.time as UTCTimestamp })));
+    } else {
+      const series = chart.addAreaSeries({
+        lineColor: UP, topColor: "rgba(165, 219, 178, 0.22)", bottomColor: "rgba(165, 219, 178, 0.02)",
+        lineWidth: 2, priceFormat,
+      });
+      series.setData(candles.map((c) => ({ time: c.time as UTCTimestamp, value: c.close })));
+    }
     chart.timeScale().fitContent();
     return () => chart.remove();
   }, [trades, interval_]);
@@ -99,7 +110,7 @@ export function TradeTape({ v, trades }: { v: Venture; trades: PoolTrade[] }) {
             <tr key={t.txHash + t.blockNumber}>
               <td className={t.isBuy ? "dp-b" : "dp-s"}>{t.isBuy ? "BUY" : "SELL"}</td>
               <td>{fmtTok(t.coinAmount)} ${v.symbol}</td>
-              <td>{fmtEth(t.pairAmount, 6)} ETH</td>
+              <td>{fmtValue(t.pairAmount)}</td>
               <td style={{ textAlign: "right" }}>
                 {env.explorerUrl
                   ? <a href={`${env.explorerUrl}/tx/${t.txHash}`} target="_blank" rel="noreferrer">{short(t.txHash)}</a>

@@ -6,6 +6,7 @@ import {
   ercAbi, loadReferralEarnings, loadVentures, updatesAbi, VENTURE, venturePc, vestingAbi, type Venture,
 } from "./client";
 import { fmtEth, fmtTok, pct, short } from "./ui";
+import { usePageMeta } from "./seo";
 import { refLink } from "./referral";
 import { errorText, useWallet } from "../lib/useWallet";
 import { useUi } from "../store";
@@ -21,6 +22,7 @@ interface Holding {
 /** My desk: everything this wallet is owed across the launchpad — backed
  *  raises, holdings and dividends, referral earnings, founder tooling. */
 export function Desk() {
+  usePageMeta("Portfolio");
   const { address: me, isConnected, connectFirst } = useWallet();
   const { data: wc } = useWalletClient();
   const pushToast = useUi((s) => s.pushToast);
@@ -64,10 +66,23 @@ export function Desk() {
 
   if (!isConnected) {
     return (
-      <div className="dp-shell" style={{ padding: "70px 18px", textAlign: "center" }}>
-        <h1 className="dp-page-title">Your portfolio.</h1>
-        <p className="dp-agate" style={{ margin: "8px 0 18px" }}>Connect to see what this wallet is owed.</p>
-        <button className="dp-action" onClick={connectFirst}>Connect wallet</button>
+      <div className="dp-shell" style={{ paddingBottom: 60 }}>
+        <div className="dp-page-head">
+          <h1 className="dp-page-title">Your portfolio</h1>
+          <p style={{ maxWidth: "56ch", color: "var(--dim)", fontSize: 13.5 }}>
+            Connect to see your holdings, the ETH you have earned from every trade, your referral income and any
+            vesting you can claim. Fee income lands automatically — this is where you watch it arrive.
+          </p>
+          <button className="dp-action" style={{ marginTop: 14 }} onClick={connectFirst}>Connect wallet</button>
+        </div>
+        <div className="dp-three-col" style={{ marginTop: 6 }}>
+          <div className="dp-record"><span className="dp-k">Fee income</span><span className="dp-val">— <small style={{ fontSize: 13 }}>ETH</small></span><p className="dp-foot dp-agate">paid to holders every 15 minutes</p></div>
+          <div className="dp-record"><span className="dp-k">Referral earnings</span><span className="dp-val">— <small style={{ fontSize: 13 }}>ETH</small></span><p className="dp-foot dp-agate">20% of the protocol fee on trades your link brings</p></div>
+          <div className="dp-record"><span className="dp-k">Backed on curves</span><span className="dp-val">— <small style={{ fontSize: 13 }}>ETH</small></span><p className="dp-foot dp-agate">refunded in full if a raise misses target</p></div>
+        </div>
+        <p className="dp-agate" style={{ marginTop: 14 }}>
+          Nothing here is custodial: every figure is read from your wallet's position on-chain.
+        </p>
       </div>
     );
   }
@@ -125,14 +140,14 @@ export function Desk() {
         <p className="dp-form-no">CONNECTED: {short(me!)}</p>
         <h1 className="dp-page-title">Portfolio</h1>
         <p style={{ maxWidth: "58ch", color: "var(--dim)", fontSize: 13 }}>
-          Everything this wallet is owed across the launchpad. Dividends are pushed automatically every 15
-          minutes — claiming by hand just gets them a few minutes sooner.
+          Everything this wallet is owed across the launchpad. Fee income is pushed to you automatically every 15 minutes —
+          claiming by hand just gets it a few minutes sooner.
         </p>
       </div>
 
       <div className="dp-three-col">
         <div className="dp-record">
-          <span className="dp-k">Dividends claimable</span>
+          <span className="dp-k">Fee income claimable</span>
           <span className="dp-val">{fmtEth(totalPending, 6)} <small style={{ fontSize: 13 }}>ETH</small></span>
           <p className="dp-foot dp-agate">across {(rows ?? []).filter((r) => r.pending > 0n).length} holdings</p>
         </div>
@@ -159,7 +174,7 @@ export function Desk() {
             <p className="dp-agate">Nothing yet. Back a raise and it shows up here.</p>
           ) : (
             <table className="dp-docket">
-              <thead><tr><th>Token</th><th className="dp-num">Balance</th><th className="dp-num">Backed</th><th className="dp-num">Dividends</th><th>Status</th></tr></thead>
+              <thead><tr><th>Token</th><th className="dp-num">Balance</th><th className="dp-num">Backed</th><th className="dp-num">Fee income</th><th>Status</th></tr></thead>
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.v.address}>
@@ -183,7 +198,7 @@ export function Desk() {
           )}
           {totalPending > 0n && (
             <button className="dp-action" style={{ marginTop: 14 }} disabled={busy} onClick={claimAll}>
-              {busy ? "Confirm in wallet…" : `Claim all dividends (${fmtEth(totalPending, 6)} ETH)`}
+              {busy ? "Confirm in wallet…" : `Claim all fee income (${fmtEth(totalPending, 6)} ETH)`}
             </button>
           )}
         </div>

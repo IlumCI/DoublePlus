@@ -2,33 +2,43 @@ import { useEffect, useState } from "react";
 
 import { loadVentures, type Venture } from "./client";
 
-/** One shared, polled copy of the board so the chrome, the ticker and every
- *  page read the same list instead of each hitting the RPC on its own. */
+/** One shared, polled copy of the board so the chrome, the activity strip and
+ *  every page read the same list instead of each hitting the RPC on its own.
+ *  Failures surface: a dead RPC must say so, not spin forever. */
 let cache: Venture[] | null = null;
+let lastError: string | null = null;
 let inflight: Promise<void> | null = null;
 let timer: ReturnType<typeof setInterval> | null = null;
-const subs = new Set<(v: Venture[] | null) => void>();
+const subs = new Set<() => void>();
 
-function refresh() {
+function emit() { subs.forEach((f) => f()); }
+
+export function refreshVentures(): Promise<void> {
   if (inflight) return inflight;
   inflight = loadVentures()
-    .then((v) => { cache = v; subs.forEach((f) => f(v)); })
-    .catch(() => undefined)
-    .finally(() => { inflight = null; });
+    .then((v) => { cache = v; lastError = null; })
+    .catch((e: unknown) => { lastError = e instanceof Error ? e.message : String(e); })
+    .finally(() => { inflight = null; emit(); });
   return inflight;
 }
 
-export function useVentures(): Venture[] | null {
-  const [list, setList] = useState<Venture[] | null>(cache);
+export interface BoardState {
+  ventures: Venture[] | null;
+  error: string | null;
+  retry: () => void;
+}
+
+export function useVentures(): BoardState {
+  const [, bump] = useState(0);
   useEffect(() => {
-    subs.add(setList);
-    if (cache) setList(cache);
-    refresh();
-    if (!timer) timer = setInterval(refresh, 15_000);
+    const fn = () => bump((n) => n + 1);
+    subs.add(fn);
+    refreshVentures();
+    if (!timer) timer = setInterval(refreshVentures, 15_000);
     return () => {
-      subs.delete(setList);
+      subs.delete(fn);
       if (subs.size === 0 && timer) { clearInterval(timer); timer = null; }
     };
   }, []);
-  return list;
+  return { ventures: cache, error: cache === null ? lastError : null, retry: () => { refreshVentures(); } };
 }

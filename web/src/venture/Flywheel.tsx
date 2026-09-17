@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { short } from "./ui";
+import { usePageMeta } from "./seo";
 import { env } from "../lib/env";
 
 interface Epoch {
@@ -29,6 +30,7 @@ const tokens = (s: string) => {
 
 /** Weekly rewards: the keeper's published manifests, rendered verbatim. */
 export function Flywheel() {
+  usePageMeta("Weekly rewards");
   const [epochs, setEpochs] = useState<Epoch[] | null>(null);
 
   useEffect(() => {
@@ -135,7 +137,8 @@ export function Flywheel() {
       })}
 
       <p className="dp-agate" style={{ marginTop: 20 }}>
-        The reward split is treasury policy v1 — fully transparent in the manifests, not yet enforced by contract.
+        Distribution is run by the protocol treasury and published in full each week; the split itself is policy,
+        not yet contract-enforced. Every transaction above is on the explorer.
       </p>
     </div>
   );

@@ -5,6 +5,8 @@ import { concatHex, encodeAbiParameters, getContractAddress, keccak256, parseEth
 
 import { factoryAbi, VENTURE, venturePc } from "./client";
 import { fmtUsdV } from "./ui";
+import { Donut, Legend, type Slice } from "./charts";
+import { usePageMeta } from "./seo";
 import { QUIVER_TOKEN_BYTECODE } from "../lib/rh/tokenBytecode";
 import { pairUsd, resolvePairRoute } from "../lib/rh/routes";
 import { STOCKS } from "../lib/v4/stocks";
@@ -22,6 +24,7 @@ const START_FDV_USD = 3_000;
 
 /** Found a startup: identity + the on-chain term sheet, in one transaction. */
 export function LaunchVenture() {
+  usePageMeta("Launch your idea");
   const { isConnected, connectFirst, address: me } = useWallet();
   const { data: wc } = useWalletClient();
   const pushToast = useUi((s) => s.pushToast);
@@ -48,6 +51,7 @@ export function LaunchVenture() {
   const [logoData, setLogoData] = useState("");
   const [busy, setBusy] = useState(false);
   const [mining, setMining] = useState(false);
+  const [confirmed, setConfirmed] = useState(false);
   const [ethUsd, setEthUsd] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -181,155 +185,275 @@ export function LaunchVenture() {
     }
   };
 
-  const stockPick = STOCKS.find((s) => s.address === stock);
+  // --- wizard state (simple by default, expert depth on demand) -----------
+  const [step, setStep] = useState(0);
+  const [expertRaise, setExpertRaise] = useState(false);
+  const [expertFees, setExpertFees] = useState(false);
+  const [preset, setPreset] = useState<"community" | "balanced" | "builder">("balanced");
+
+  const applyPreset = (k: "community" | "balanced" | "builder") => {
+    setPreset(k);
+    if (k === "community") { setBuyTaxPct(1); setSellTaxPct(2); setAlloc({ dev: 20, dividends: 50, liquidity: 15, mm: 15 }); }
+    if (k === "balanced") { setBuyTaxPct(2); setSellTaxPct(3); setAlloc({ dev: 40, dividends: 30, liquidity: 15, mm: 15 }); }
+    if (k === "builder") { setBuyTaxPct(3); setSellTaxPct(4); setAlloc({ dev: 60, dividends: 15, liquidity: 15, mm: 10 }); }
+  };
+
   const cutEth = Number(founderCutEth) / 1e18;
+  const avgTax = (buyTaxPct + sellTaxPct) / 2;
+  const stockPick = STOCKS.find((s) => s.address === stock);
+
+  const feeSlices: Slice[] = [
+    { label: "You", value: alloc.dev, note: "paid on every trade, forever" },
+    { label: "Holders", value: alloc.dividends, note: "a reason to hold, not flip" },
+    { label: "Liquidity", value: alloc.liquidity, note: "calmer chart, deeper book" },
+    { label: "Market-making", value: alloc.mm, note: "always a buyer on the bid" },
+  ];
+
+  const STEPS = ["Your project", "Your raise", "How trading works", "Review"];
+  const canAdvance =
+    step === 0 ? form.name.trim().length > 0 && form.symbol.trim().length > 0 && form.pitch.trim().length > 0
+    : step === 1 ? parsedTarget > 0n && (minTargetEth === 0 || Number(target) >= minTargetEth * 0.999)
+    : step === 2 ? allocTotal === 100
+    : true;
 
   return (
-    <div className="dp-shell" style={{ paddingBottom: 70, maxWidth: 1080 }}>
+    <div className="dp-shell" style={{ paddingBottom: 70, maxWidth: 1120 }}>
       <div className="dp-page-head">
-        <h1 className="dp-page-title">Raise day-zero funding.</h1>
-        <p style={{ maxWidth: "62ch", color: "var(--dim)", fontSize: 13 }}>
-          For a startup or a research project: one transaction issues your security-style stock and opens an
-          all-or-nothing raise on a rising price curve. Everything you set below is written on-chain where your
-          backers read it — and locked there forever. You earn <b className="dp-up">a share of every trade, forever</b>.
+        <h1 className="dp-page-title">Launch your idea.</h1>
+        <p style={{ maxWidth: "64ch", color: "var(--dim)", fontSize: 13.5 }}>
+          Four steps, one transaction. The defaults work — change nothing and you get a sensible raise.
         </p>
       </div>
 
-      <form onSubmit={submit} className="dp-create-grid">
+      <ol className="dp-steps">
+        {STEPS.map((label, i) => (
+          <li key={label} className={i === step ? "on" : i < step ? "done" : ""}>
+            <button type="button" onClick={() => i < step && setStep(i)} disabled={i > step}>
+              <span className="dp-n">{i < step ? "✓" : i + 1}</span>{label}
+            </button>
+          </li>
+        ))}
+      </ol>
+
+      <form onSubmit={submit} className="dp-wizard">
         <div>
-          {/* 1 · the idea */}
-          <div className="dp-form-sheet">
-            <p className="dp-sec">The idea <span className="dp-agate">this is what backers see first</span></p>
-            <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
-              <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }}
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) onLogo(f); }} />
-              <button type="button" onClick={() => fileRef.current?.click()} aria-label="Upload logo"
-                className="dp-monogram dp-lg" style={{ border: "1px dashed var(--line-2)", overflow: "hidden", padding: 0 }}>
-                {logoData
-                  ? <img src={logoData} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                  : <span style={{ fontSize: 11, fontFamily: "var(--mono)", color: "var(--bg)" }}>logo</span>}
-              </button>
-              <div style={{ flex: 1, minWidth: 0, display: "grid", gridTemplateColumns: "2fr 1fr", gap: "0 16px" }}>
-                <div className="dp-field"><label htmlFor="v-name">Name</label>
-                  <input id="v-name" value={form.name} onChange={set("name")} placeholder="Openkernel" maxLength={32} required /></div>
-                <div className="dp-field"><label htmlFor="v-sym">Ticker</label>
-                  <input id="v-sym" value={form.symbol} onChange={set("symbol")} placeholder="KERN" maxLength={8}
-                    style={{ textTransform: "uppercase" }} required /></div>
+          {/* ---------------------------------------------------- step 1 */}
+          {step === 0 && (
+            <div className="dp-form-sheet">
+              <p className="dp-sec">Your project</p>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 16 }}>
+                <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }}
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) onLogo(f); }} />
+                <button type="button" onClick={() => fileRef.current?.click()} className="dp-logodrop" aria-label="Upload a logo">
+                  {logoData
+                    ? <img src={logoData} alt="" />
+                    : <span>Add<br />logo</span>}
+                </button>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "0 16px" }}>
+                    <div className="dp-field"><label htmlFor="v-name">Project name</label>
+                      <input id="v-name" value={form.name} onChange={set("name")} placeholder="Openkernel" maxLength={32} required /></div>
+                    <div className="dp-field"><label htmlFor="v-sym">Ticker</label>
+                      <input id="v-sym" value={form.symbol} onChange={set("symbol")} placeholder="KERN" maxLength={8}
+                        style={{ textTransform: "uppercase" }} required /></div>
+                  </div>
+                  <p className="dp-hint">Your logo is what makes the card recognisable at a glance — projects
+                    without one are much easier to scroll past.</p>
+                </div>
+              </div>
+
+              <div className="dp-field" style={{ marginTop: 16 }}>
+                <label htmlFor="v-pitch">One-liner <span className="dp-count">{form.pitch.length}/140</span></label>
+                <textarea id="v-pitch" value={form.pitch} onChange={set("pitch")} rows={2} maxLength={140}
+                  placeholder="Memory-safety fuzzing lab for the mainline kernel. All findings published open." required />
+                <span className="dp-hint">This is the whole pitch on the board. Say what it is and who it is for — skip the adjectives.</span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0 16px" }}>
+                <div className="dp-field"><label htmlFor="v-sector">Sector</label>
+                  <input id="v-sector" value={form.sector} onChange={set("sector")} placeholder="research · open source" />
+                  <span className="dp-hint">Include “research” to file under Research.</span></div>
+                <div className="dp-field"><label htmlFor="v-site">Website</label>
+                  <input id="v-site" value={form.website} onChange={set("website")} placeholder="https://" /></div>
+                <div className="dp-field"><label htmlFor="v-x">X / Twitter</label>
+                  <input id="v-x" value={form.twitter} onChange={set("twitter")} placeholder="https://x.com/…" /></div>
               </div>
             </div>
-            <div className="dp-field" style={{ marginTop: 14 }}><label htmlFor="v-pitch">One-liner</label>
-              <textarea id="v-pitch" value={form.pitch} onChange={set("pitch")} rows={2}
-                placeholder="Memory-safety fuzzing lab for the mainline kernel. All findings published open." required /></div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0 16px" }}>
-              <div className="dp-field"><label htmlFor="v-sector">Sector</label>
-                <input id="v-sector" value={form.sector} onChange={set("sector")} placeholder="research · open source" /></div>
-              <div className="dp-field"><label htmlFor="v-site">Website</label>
-                <input id="v-site" value={form.website} onChange={set("website")} placeholder="https://" /></div>
-              <div className="dp-field"><label htmlFor="v-x">X / Twitter</label>
-                <input id="v-x" value={form.twitter} onChange={set("twitter")} placeholder="https://x.com/…" /></div>
-            </div>
-            <p className="dp-agate">Write “research” in the sector and your raise files under the Research filter on the board.</p>
-          </div>
+          )}
 
-          {/* 2 · the raise */}
-          <details className="dp-adv" open style={{ marginTop: 12 }}>
-            <summary>Raise — target {target || "—"} ETH · {days} days · you take {founderCut}%</summary>
-            <div className="dp-body">
+          {/* ---------------------------------------------------- step 2 */}
+          {step === 1 && (
+            <div className="dp-form-sheet">
+              <p className="dp-sec">Your raise <button type="button" className="dp-linkbtn" onClick={() => setExpertRaise(!expertRaise)}>
+                {expertRaise ? "hide expert settings" : "expert settings"}</button></p>
+
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 22px" }}>
-                <div className="dp-field"><label htmlFor="v-target">Funding target (ETH)</label>
+                <div className="dp-field"><label htmlFor="v-target">How much do you want to raise?</label>
                   <input id="v-target" inputMode="decimal" value={target}
                     onChange={(e) => setTarget(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="5.0" required />
                   <span className="dp-hint">
-                    {targetUsd > 0 ? `≈ ${fmtUsdV(targetUsd)}` : ""}{minTargetEth > 0 ? ` · minimum ${minTargetEth.toFixed(4)} ETH` : ""}
+                    In ETH{targetUsd > 0 ? ` — about ${fmtUsdV(targetUsd)} today` : ""}.
+                    {minTargetEth > 0 ? ` Minimum ${minTargetEth.toFixed(4)} ETH.` : ""}
+                    {" "}Ask for what the next milestone costs: backers fund plans, not round numbers.
                   </span>
                 </div>
-                <div className="dp-field"><label htmlFor="v-days">Deadline: {days} days</label>
+                <div className="dp-field"><label htmlFor="v-days">How long to raise it? — {days} days</label>
                   <input id="v-days" type="range" min={1} max={60} value={days} onChange={(e) => setDays(Number(e.target.value))} />
-                  <span className="dp-hint">all-or-nothing — miss it and every backer is refunded in full</span></div>
-                <div className="dp-field"><label htmlFor="v-cut">Your funding: {founderCut}% of the raise</label>
-                  <input id="v-cut" type="range" min={0} max={30} value={founderCut} onChange={(e) => setFounderCut(Number(e.target.value))} />
-                  <span className="dp-hint">{cutEth > 0 ? `${cutEth.toFixed(4)} ETH at this target` : "paid only on graduation"}</span></div>
-                <div className="dp-field"><label htmlFor="v-stake">Your stake: {founderStake}% of supply</label>
-                  <input id="v-stake" type="range" min={0} max={15} value={founderStake} onChange={(e) => setFounderStake(Number(e.target.value))} />
-                  <span className="dp-hint">burns if the raise fails</span></div>
-                <div className="dp-field"><label htmlFor="v-vest">Vesting: {vestDays} days</label>
-                  <input id="v-vest" type="range" min={0} max={730} step={30} value={vestDays}
-                    onChange={(e) => setVestDays(Number(e.target.value))} disabled={founderStake === 0} />
-                  <span className="dp-hint">linear, starting at graduation</span></div>
-                <div className="dp-field"><label htmlFor="v-cap">Per-wallet cap: {capPct}% of target</label>
-                  <input id="v-cap" type="range" min={1} max={100} value={capPct} onChange={(e) => setCapPct(Number(e.target.value))} />
-                  <span className="dp-hint">keeps one wallet from cornering the round</span></div>
+                  <span className="dp-hint">Miss the deadline and every backer is refunded in full, automatically.
+                    Short windows create urgency; long ones give word of mouth time to work.</span></div>
               </div>
-            </div>
-          </details>
 
-          {/* 3 · economics */}
-          <details className="dp-adv">
-            <summary>Fees — {buyTaxPct}% buy / {sellTaxPct}% sell · split {alloc.dev}/{alloc.dividends}/{alloc.liquidity}/{alloc.mm}</summary>
-            <div className="dp-body">
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 22px" }}>
-                <div className="dp-field"><label htmlFor="v-buytax">Buy tax: {buyTaxPct.toFixed(2)}%</label>
-                  <input id="v-buytax" type="range" min={0} max={4} step={0.25} value={buyTaxPct}
-                    onChange={(e) => setBuyTaxPct(Number(e.target.value))} /></div>
-                <div className="dp-field"><label htmlFor="v-selltax">Sell tax: {sellTaxPct.toFixed(2)}%</label>
-                  <input id="v-selltax" type="range" min={0} max={4} step={0.25} value={sellTaxPct}
-                    onChange={(e) => setSellTaxPct(Number(e.target.value))} /></div>
+              <div className="dp-field"><label htmlFor="v-cut">How much of the raise do you take? — {founderCut}%</label>
+                <input id="v-cut" type="range" min={0} max={30} value={founderCut} onChange={(e) => setFounderCut(Number(e.target.value))} />
+                <span className="dp-hint">
+                  {cutEth > 0 ? `${cutEth.toFixed(4)} ETH at this target. ` : ""}
+                  Paid only if the raise succeeds; the rest becomes locked liquidity for your market.
+                  Backers read this number as how much you need versus how much you want — under 20% reads as confident.
+                </span>
               </div>
-              <div className="dp-ration">
-                {([["dev", "Dev wallet"], ["dividends", "Dividends"], ["liquidity", "Liquidity"], ["mm", "Market-making"]] as const).map(([k, label]) => (
-                  <div key={k}>
-                    <span className="dp-who">{label}</span>
-                    <input type="range" min={0} max={100} step={5} value={alloc[k]} onChange={setBucket(k)} />
-                    <span className="dp-amt">{alloc[k]}%</span>
+
+              {expertRaise && (
+                <div className="dp-expert">
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 22px" }}>
+                    <div className="dp-field"><label htmlFor="v-stake">Your token stake — {founderStake}%</label>
+                      <input id="v-stake" type="range" min={0} max={15} value={founderStake} onChange={(e) => setFounderStake(Number(e.target.value))} />
+                      <span className="dp-hint">Your upside if the project works. It burns if the raise fails.</span></div>
+                    <div className="dp-field"><label htmlFor="v-vest">Vesting — {vestDays} days</label>
+                      <input id="v-vest" type="range" min={0} max={730} step={30} value={vestDays}
+                        onChange={(e) => setVestDays(Number(e.target.value))} disabled={founderStake === 0} />
+                      <span className="dp-hint">Unlocks linearly from graduation. Longer vesting is the cheapest
+                        credibility you can buy — it tells the market you cannot dump on it.</span></div>
+                    <div className="dp-field"><label htmlFor="v-cap">Per-wallet cap — {capPct}% of target</label>
+                      <input id="v-cap" type="range" min={1} max={100} value={capPct} onChange={(e) => setCapPct(Number(e.target.value))} />
+                      <span className="dp-hint">Stops one wallet taking the whole round and controlling your market
+                        afterwards. Low caps spread the cap table; high caps fill faster.</span></div>
+                    {STOCK_PAIRS_ENABLED && (
+                      <div className="dp-field"><label htmlFor="v-pair">Quote asset</label>
+                        <select id="v-pair" value={pairMode} onChange={(e) => setPairMode(e.target.value as "eth" | "stock")}>
+                          <option value="eth">ETH — the default market</option>
+                          <option value="stock">A tokenized stock — holders earn it instead</option>
+                        </select>
+                        {pairMode === "stock" && (
+                          <select value={stock} onChange={(e) => setStock(e.target.value)} style={{ marginTop: 8 }}>
+                            {STOCKS.map((s) => <option key={s.address} value={s.address}>{s.symbol} — {s.name}</option>)}
+                          </select>
+                        )}
+                      </div>
+                    )}
                   </div>
-                ))}
-              </div>
-              <p className="dp-mono" style={{ margin: "10px 0 0", fontSize: 12, color: allocTotal === 100 ? "var(--up)" : "var(--down)" }}>
-                {allocTotal === 100 ? "Split totals 100% — OK." : `Split totals ${allocTotal}% — adjust to exactly 100%.`}
-              </p>
-              <p className="dp-agate">
-                Protocol adds {(VENTURE.platformFeeBps / 100).toFixed(2)}% per trade on top;
-                {" "}{VENTURE.refShareBps / 100}% of that goes to referrers. Not adjustable.
-              </p>
+                </div>
+              )}
             </div>
-          </details>
-
-          {/* 4 · pairing, mainnet only */}
-          {STOCK_PAIRS_ENABLED && (
-            <details className="dp-adv">
-              <summary>Pairing — {pairMode === "eth" ? "ETH" : stockPick?.symbol ?? "stock"}</summary>
-              <div className="dp-body">
-                <div className="dp-field"><label>Quote asset</label>
-                  <select value={pairMode} onChange={(e) => setPairMode(e.target.value as "eth" | "stock")}>
-                    <option value="eth">ETH — the default market</option>
-                    <option value="stock">A tokenized stock — dividends pay in it</option>
-                  </select></div>
-                {pairMode === "stock" && (
-                  <div className="dp-field"><label>Stock</label>
-                    <select value={stock} onChange={(e) => setStock(e.target.value)}>
-                      {STOCKS.map((s) => <option key={s.address} value={s.address}>{s.symbol} — {s.name}</option>)}
-                    </select></div>
-                )}
-              </div>
-            </details>
           )}
 
-          <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap", marginTop: 18 }}>
-            <button className="dp-action" type="submit" disabled={busy}>
-              {mining ? "Mining your address…" : busy ? "Confirm in wallet…" : isConnected ? "Launch — one transaction" : "Connect wallet"}
-            </button>
-            <span className="dp-agate" style={{ maxWidth: "32ch" }}>
-              Address ends in <span className="dp-mono">0x…4663</span>, mined in your browser before you sign.
-              Free to launch — gas only.
-            </span>
-          </div>
+          {/* ---------------------------------------------------- step 3 */}
+          {step === 2 && (
+            <div className="dp-form-sheet">
+              <p className="dp-sec">How trading works <button type="button" className="dp-linkbtn" onClick={() => setExpertFees(!expertFees)}>
+                {expertFees ? "hide expert settings" : "expert settings"}</button></p>
+              <p className="dp-hint" style={{ marginBottom: 12 }}>
+                Every trade pays a fee you decide how to spend. Pick a profile, or tune it yourself.
+              </p>
+
+              <div className="dp-presets">
+                {([
+                  ["community", "Community", "1% / 2% fee · half of it back to holders", "Rewards holding. Slower treasury, stickier cap table."],
+                  ["balanced", "Balanced", "2% / 3% fee · split across all four", "The default most projects ship. Funds the team and pays holders."],
+                  ["builder", "Builder", "3% / 4% fee · most of it to your wallet", "Maximum runway. Traders notice high sell taxes, so earn it."],
+                ] as const).map(([k, title, line, why]) => (
+                  <button type="button" key={k} className={preset === k ? "on" : ""} onClick={() => applyPreset(k)}>
+                    <b>{title}</b>
+                    <span className="dp-mono">{line}</span>
+                    <span>{why}</span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="dp-chartrow" style={{ marginTop: 4 }}>
+                <Donut slices={feeSlices} center={`${avgTax.toFixed(1)}%`} sub="avg fee" />
+                <div style={{ flex: 1, minWidth: 210 }}>
+                  <Legend slices={feeSlices} />
+                </div>
+              </div>
+
+              {expertFees && (
+                <div className="dp-expert">
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 22px" }}>
+                    <div className="dp-field"><label htmlFor="v-buytax">Buy fee — {buyTaxPct.toFixed(2)}%</label>
+                      <input id="v-buytax" type="range" min={0} max={4} step={0.25} value={buyTaxPct}
+                        onChange={(e) => setBuyTaxPct(Number(e.target.value))} />
+                      <span className="dp-hint">Charged when someone buys. Low buy fees make entry cheap.</span></div>
+                    <div className="dp-field"><label htmlFor="v-selltax">Sell fee — {sellTaxPct.toFixed(2)}%</label>
+                      <input id="v-selltax" type="range" min={0} max={4} step={0.25} value={sellTaxPct}
+                        onChange={(e) => setSellTaxPct(Number(e.target.value))} />
+                      <span className="dp-hint">Charged when someone sells. Slightly higher than buy is normal; far
+                        higher reads as a trap and scares volume away.</span></div>
+                  </div>
+                  <div className="dp-ration">
+                    {([["dev", "Dev wallet"], ["dividends", "Holders"], ["liquidity", "Liquidity"], ["mm", "Market-making"]] as const).map(([k, label]) => (
+                      <div key={k}>
+                        <span className="dp-who">{label}</span>
+                        <input type="range" min={0} max={100} step={5} value={alloc[k]} onChange={setBucket(k)} aria-label={label} />
+                        <span className="dp-amt">{alloc[k]}%</span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="dp-mono" style={{ margin: "10px 0 0", fontSize: 12, color: allocTotal === 100 ? "var(--up)" : "var(--down)" }}>
+                    {allocTotal === 100 ? "Split totals 100% — good to go." : `Split totals ${allocTotal}% — needs to be exactly 100%.`}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ---------------------------------------------------- step 4 */}
+          {step === 3 && (
+            <div className="dp-form-sheet">
+              <p className="dp-sec">Review <span className="dp-agate">this is what goes on-chain</span></p>
+              <div className="dp-sheet" style={{ maxWidth: "none" }}>
+                <p className="dp-sec">{form.name || "Your project"} (${(form.symbol || "TICK").toUpperCase()})</p>
+                <dl>
+                  <dt>Raising</dt><dd>{target || "—"} ETH in {days} days{targetUsd > 0 ? ` (~${fmtUsdV(targetUsd)})` : ""}</dd>
+                  <dt>You take</dt><dd>{founderCut}% of the raise{cutEth > 0 ? ` — ${cutEth.toFixed(4)} ETH` : ""}, on success only</dd>
+                  <dt>Your stake</dt><dd>{founderStake}% of supply, vesting {vestDays} days from graduation</dd>
+                  <dt>Per-wallet cap</dt><dd>{capPct}% of target</dd>
+                  <dt>Trading fee</dt><dd>{buyTaxPct}% buy / {sellTaxPct}% sell</dd>
+                  <dt>Fee split</dt><dd>dev {alloc.dev} · holders {alloc.dividends} · liquidity {alloc.liquidity} · market-making {alloc.mm}</dd>
+                  <dt>Protocol fee</dt><dd>{(VENTURE.platformFeeBps / 100).toFixed(2)}% per trade, {VENTURE.refShareBps / 100}% of it to referrers</dd>
+                </dl>
+              </div>
+              <div className="dp-notice" style={{ marginTop: 14 }}>
+                <h3>These numbers are permanent.</h3>
+                <p>The factory writes them into your token and the pool hook at graduation. Nobody can change them
+                  afterwards — not you, not the protocol. Your name, pitch, logo and links stay editable.</p>
+              </div>
+              <label className="dp-confirm">
+                <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
+                <span>I have read the terms above and understand they cannot be changed.</span>
+              </label>
+              <button className="dp-action" type="submit" disabled={busy || !confirmed} style={{ width: "100%", marginTop: 12 }}>
+                {mining ? "Mining your address…" : busy ? "Confirm in wallet…" : isConnected ? "Launch — one transaction" : "Connect wallet"}
+              </button>
+              <p className="dp-hint" style={{ textAlign: "center", marginTop: 8 }}>
+                Free to launch, gas only. Your token address is mined in your browser to end in{" "}
+                <span className="dp-mono">0x4663</span>.
+              </p>
+            </div>
+          )}
+
+          {step < 3 && (
+            <div className="dp-wizard-nav">
+              {step > 0 && <button type="button" className="dp-action dp-ghost" onClick={() => setStep(step - 1)}>Back</button>}
+              <span style={{ flex: 1 }} />
+              <button type="button" className="dp-action" disabled={!canAdvance} onClick={() => setStep(step + 1)}>
+                Continue
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* live preview: exactly the card backers will see */}
-        <div style={{ position: "sticky", top: 70 }}>
-          <p className="dp-mono" style={{ fontSize: 10, letterSpacing: ".14em", color: "var(--faint)", margin: "0 0 8px" }}>
-            PREVIEW — YOUR CARD ON THE BOARD
-          </p>
+        {/* live preview + the teaching companion */}
+        <aside className="dp-companion">
+          <p className="dp-mono dp-companion-label">YOUR CARD ON THE BOARD</p>
           <div className="dp-tcard" style={{ pointerEvents: "none" }}>
             <div className="dp-row1">
               <span className="dp-monogram dp-m2" style={{ padding: 0, overflow: "hidden" }}>
@@ -342,29 +466,35 @@ export function LaunchVenture() {
               </div>
               <span style={{ marginLeft: "auto" }}><span className="dp-badge dp-live">live</span></span>
             </div>
-            <p className="dp-pitch">{form.pitch || "Your one-liner lands here — the first thing a backer reads."}</p>
+            {form.pitch && <p className="dp-pitch">{form.pitch}</p>}
             <div className="dp-curvebar" style={{ ["--pct" as string]: "0%" }}><i /></div>
             <div className="dp-curvelabel">
               <span><b>0%</b> to graduation</span>
               <span>0 / {target || "—"} ETH</span>
             </div>
-            <div className="dp-prov"><span>by <b>you</b> · just now</span><span>0 backers</span></div>
+            <div className="dp-prov"><span>by <b>you</b> · just now</span><span>founder takes {founderCut}%</span></div>
           </div>
 
           <div className="dp-panel" style={{ marginTop: 12 }}>
-            <div className="dp-phead"><span>What you'd earn</span></div>
-            <div className="dp-pbody" style={{ fontFamily: "var(--mono)", fontSize: 11.5, color: "var(--dim)", display: "grid", gap: 5 }}>
-              <span><b className="dp-up">{cutEth > 0 ? `${cutEth.toFixed(4)} ETH` : "—"}</b> funding at graduation ({founderCut}% of target)</span>
-              <span><b className="dp-up">{(((buyTaxPct + sellTaxPct) / 2) * alloc.dev / 100).toFixed(2)}%</b> of every trade to your dev wallet, forever</span>
-              <span><b className="dp-up">{founderStake}%</b> of supply, vesting {vestDays} days</span>
+            <div className="dp-phead"><span>What you earn</span></div>
+            <div className="dp-pbody dp-earn">
+              <div><b className="dp-up">{cutEth > 0 ? `${cutEth.toFixed(4)} ETH` : "—"}</b><span>funding when the raise succeeds</span></div>
+              <div><b className="dp-up">{(avgTax * alloc.dev / 100).toFixed(2)}%</b><span>of every trade, forever</span></div>
+              <div><b className="dp-up">{founderStake}%</b><span>of supply, vesting {vestDays} days</span></div>
             </div>
           </div>
 
-          <p className="dp-agate" style={{ marginTop: 10 }}>
-            Tokens are open ERC-20s whose economics resemble equity. They are not registered securities and the
-            contracts are unaudited.
-          </p>
-        </div>
+          <div className="dp-panel" style={{ marginTop: 12 }}>
+            <div className="dp-phead"><span>Why this matters</span></div>
+            <div className="dp-pbody dp-teach">
+              {step === 0 && <p>Backers scan dozens of cards. A real logo, a short name and one concrete sentence
+                are what make yours stop the scroll — the rest of your story lives on the project page.</p>}
+              {step === 1 && <p>Early backers pay less, so momentum builds itself. All-or-nothing: ask for a number you can hit.</p>}
+              {step === 2 && <p>This fee runs forever. More to holders, they hold. More to you, more runway.</p>}
+              {step === 3 && <p>Last look. The contract enforces every number here, and nobody can edit it later.</p>}
+            </div>
+          </div>
+        </aside>
       </form>
     </div>
   );

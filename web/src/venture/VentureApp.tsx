@@ -1,4 +1,6 @@
-import { BrowserRouter, Link, Navigate, NavLink, Route, Routes } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { BrowserRouter, Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { useSwitchChain } from "wagmi";
 
 import { Toasts } from "../components/ui";
 import { BRAND } from "../lib/brand";
@@ -12,28 +14,28 @@ import { LaunchVenture } from "./Launch";
 import { Stats } from "./Stats";
 import { VenturePage } from "./Venture";
 import { captureRef } from "./referral";
-import { FilterDefs, fmtMcap, pct, useEthUsd } from "./ui";
+import { ago, FilterDefs, pct } from "./ui";
 import { useVentures } from "./useVentures";
 import "./venture.css";
 
 captureRef();
 
-const NAV: [string, string][] = [
-  ["/", "Raises"],
-  ["/desk", "Portfolio"],
-  ["/rewards", "Rewards"],
-  ["/stats", "Stats"],
-  ["/docs", "Docs"],
+const NAV: [string, string, string][] = [
+  ["/", "Raises", "Raises"],
+  ["/desk", "Portfolio", "Portfolio"],
+  ["/rewards", "Rewards", "Rewards"],
+  ["/stats", "Stats", "Stats"],
+  ["/docs", "Docs", "Docs"],
 ];
 
-/** doubleplus: day-zero funding for startups and research projects, issued as
- *  decentralized stocks. Its own chrome, routes and design system. */
+/** doubleplus: day-zero funding for startups and research projects. */
 export function VentureApp() {
   return (
     <BrowserRouter>
       <FilterDefs />
       <Topbar />
-      <FeedBar />
+      <ChainBar />
+      <ActivityStrip />
       <main>
         <Routes>
           <Route path="/" element={<Board />} />
@@ -47,6 +49,7 @@ export function VentureApp() {
         </Routes>
       </main>
       <Footer />
+      <MobileNav />
       <Toasts />
     </BrowserRouter>
   );
@@ -54,6 +57,21 @@ export function VentureApp() {
 
 function Topbar() {
   const { address, isConnected, connectFirst, disconnect, isPending } = useWallet();
+  const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const location = useLocation();
+  const [q, setQ] = useState(params.get("q") ?? "");
+
+  // Keep the field in step with the URL when the board clears its own filters.
+  useEffect(() => { setQ(params.get("q") ?? ""); }, [params]);
+
+  const search = (value: string) => {
+    setQ(value);
+    const next = new URLSearchParams(location.pathname === "/" ? params : undefined);
+    if (value) next.set("q", value); else next.delete("q");
+    navigate({ pathname: "/", search: next.toString() }, { replace: location.pathname === "/" });
+  };
+
   return (
     <header className="dp-topbar">
       <div className="dp-shell">
@@ -66,7 +84,9 @@ function Topbar() {
             </NavLink>
           ))}
         </nav>
-        <div className="dp-tb-search" />
+        <div className="dp-tb-search">
+          <input value={q} onChange={(e) => search(e.target.value)} placeholder="Search projects…" aria-label="Search projects" />
+        </div>
         <Link className="dp-btn-create" to="/launch" viewTransition>+ Create</Link>
         {isConnected && address ? (
           <button className="dp-btn-connect" onClick={() => disconnect()} title="Disconnect">
@@ -82,25 +102,62 @@ function Topbar() {
   );
 }
 
-/** The live strip: real board state, scrolling. A launchpad never sits still. */
-function FeedBar() {
-  const ventures = useVentures();
-  const ethUsd = useEthUsd();
-  if (!ventures || ventures.length === 0) return null;
-
-  const items: string[] = [];
-  for (const v of ventures.slice(0, 12)) {
-    if (v.phase === "graduated") items.push(`$${v.symbol} mcap ${fmtMcap(v, ethUsd)} · trading`);
-    else if (v.phase === "raising") items.push(`$${v.symbol} curve ${pct(v.raisedWei, v.targetRaiseWei).toFixed(0)}% funded`);
-    else if (v.phase === "expired") items.push(`$${v.symbol} target reached · awaiting graduation`);
-    else items.push(`$${v.symbol} refunds open`);
-  }
-  items.push(`${ventures.length} raises filed on ${env.chainName}`);
-  const reel = items.join("  ·  ");
-
+/** Mobile gets a bottom tab bar; the top nav has nowhere to go at 390px. */
+function MobileNav() {
   return (
-    <div className="dp-feedbar" aria-label="live board activity">
-      <div className="dp-reel">{reel}  ·  {reel}</div>
+    <nav className="dp-mobilenav" aria-label="Primary">
+      {NAV.map(([to, , short]) => (
+        <NavLink key={to} to={to} end={to === "/"} viewTransition className={({ isActive }) => (isActive ? "on" : "")}>
+          {short}
+        </NavLink>
+      ))}
+    </nav>
+  );
+}
+
+/** Wrong network is the most common reason a trade fails. Say so, and fix it. */
+function ChainBar() {
+  const { isConnected, chainId } = useWallet();
+  const { switchChain } = useSwitchChain();
+  if (!isConnected || !chainId || chainId === env.chainId) return null;
+  return (
+    <div className="dp-chainbar">
+      <div className="dp-shell">
+        <span>Your wallet is on another network. {BRAND.name} runs on {env.chainName}.</span>
+        <button className="dp-btn-connect" onClick={() => switchChain({ chainId: env.chainId })}>
+          Switch to {env.chainName}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Real, clickable, and honest when the board is quiet. No marquee. */
+function ActivityStrip() {
+  const { ventures } = useVentures();
+  if (!ventures) return null;
+  if (ventures.length === 0) {
+    return (
+      <div className="dp-activity">
+        <div className="dp-shell"><span className="dp-quiet">No raises filed yet — the board fills as projects launch.</span></div>
+      </div>
+    );
+  }
+  const recent = [...ventures].sort((a, b) => b.createdAt - a.createdAt).slice(0, 6);
+  return (
+    <div className="dp-activity">
+      <div className="dp-shell">
+        {recent.map((v) => (
+          <Link key={v.address} to={`/venture/${v.address}`} viewTransition>
+            ${v.symbol}{" "}
+            {v.phase === "graduated" ? "trading"
+              : v.phase === "failed" ? "refunds open"
+              : v.phase === "expired" ? "fully funded"
+              : `${pct(v.raisedWei, v.targetRaiseWei).toFixed(0)}% funded`}
+            <span className="dp-when"> · {ago(v.createdAt)} ago</span>
+          </Link>
+        ))}
+      </div>
     </div>
   );
 }
@@ -113,7 +170,7 @@ function Footer() {
         <span>protocol fee 1% per trade · 20% of it to referrers</span>
         {env.explorerUrl && <a href={env.explorerUrl} target="_blank" rel="noreferrer">explorer ↗</a>}
         <Link to="/docs" viewTransition>docs</Link>
-        <span>not registered securities · unaudited contracts · back only what you can afford to lose</span>
+        <span>Project tokens, not registered securities. Contracts are unaudited. Back only what you can afford to lose.</span>
       </div>
     </footer>
   );
