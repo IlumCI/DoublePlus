@@ -5,7 +5,7 @@ import { concatHex, encodeAbiParameters, getContractAddress, keccak256, parseEth
 
 import { factoryAbi, VENTURE, venturePc } from "./client";
 import { fmtUsdV } from "./ui";
-import { Donut, FeeBars, Legend, SPLIT_COLORS, type Slice } from "./charts";
+import { Donut, Legend, SPLIT_COLORS, type Slice } from "./charts";
 import { usePageMeta } from "./seo";
 import { QUIVER_TOKEN_BYTECODE } from "../lib/rh/tokenBytecode";
 import { pairUsd, resolvePairRoute } from "../lib/rh/routes";
@@ -188,13 +188,13 @@ export function LaunchVenture() {
   // --- wizard state (simple by default, expert depth on demand) -----------
   const [step, setStep] = useState(0);
   const [expertRaise, setExpertRaise] = useState(false);
-  const [preset, setPreset] = useState<"community" | "balanced" | "builder" | "custom">("balanced");
+  const [preset, setPreset] = useState<"community" | "balanced" | "profit" | "custom">("balanced");
 
-  const applyPreset = (k: "community" | "balanced" | "builder" | "custom") => {
+  const applyPreset = (k: "community" | "balanced" | "profit" | "custom") => {
     setPreset(k);
     if (k === "community") { setBuyTaxPct(1); setSellTaxPct(2); setAlloc({ dev: 20, dividends: 50, liquidity: 15, mm: 15 }); }
     if (k === "balanced") { setBuyTaxPct(2); setSellTaxPct(3); setAlloc({ dev: 40, dividends: 30, liquidity: 15, mm: 15 }); }
-    if (k === "builder") { setBuyTaxPct(3); setSellTaxPct(4); setAlloc({ dev: 60, dividends: 15, liquidity: 15, mm: 10 }); }
+    if (k === "profit") { setBuyTaxPct(3); setSellTaxPct(4); setAlloc({ dev: 60, dividends: 15, liquidity: 15, mm: 10 }); }
   };
 
   // Moving one slider pushes the difference onto the others in proportion, so
@@ -407,16 +407,15 @@ export function LaunchVenture() {
                   <span className="dp-dial-n">a 1 ETH sell pays {(sellTaxPct / 100).toFixed(4)} ETH</span>
                 </div>
               </div>
-              <FeeBars buy={buyTaxPct} sell={sellTaxPct} />
               <p className="dp-mood">{taxMood((buyTaxPct + sellTaxPct) / 2)}</p>
 
               {/* where that fee lands */}
               <p className="dp-sec" style={{ marginTop: 20 }}>Where the fee goes</p>
               <div className="dp-presets">
                 {([
-                  ["community", "Community", "Half to holders", "Rewards holding. Stickier cap table."],
+                  ["community", "Community-focus", "Half to holders", "Rewards holding. Stickier cap table."],
                   ["balanced", "Balanced", "Spread across four", "What most projects ship."],
-                  ["builder", "Builder", "Most to your wallet", "Maximum runway."],
+                  ["profit", "Profit-focus", "Most to your wallet", "Maximum runway."],
                   ["custom", "Custom", "You decide", "Move a slider, the rest rebalances."],
                 ] as const).map(([k, title, line, why]) => (
                   <button type="button" key={k} className={preset === k ? "on" : ""} onClick={() => applyPreset(k)}>

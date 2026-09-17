@@ -116,15 +116,4 @@ export function SplitBar({ slices, height = 16 }: { slices: Slice[]; height?: nu
   );
 }
 
-/** Buy vs sell fee, side by side — the tax control's mirror. */
-export function FeeBars({ buy, sell }: { buy: number; sell: number }) {
-  const max = 4;
-  return (
-    <div className="dp-feebars">
-      <div><span className="dp-l">buy</span><div className="dp-t"><i style={{ width: `${(buy / max) * 100}%`, background: "#a5dbb2" }} /></div><b>{buy.toFixed(2)}%</b></div>
-      <div><span className="dp-l">sell</span><div className="dp-t"><i style={{ width: `${(sell / max) * 100}%`, background: "#ee8a80" }} /></div><b>{sell.toFixed(2)}%</b></div>
-    </div>
-  );
-}
-
 export { RLegend };

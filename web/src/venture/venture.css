@@ -716,14 +716,7 @@ main { container-type: inline-size; }
 .dp-is-sell input[type="range"]::-webkit-slider-thumb { background: var(--down); }
 .dp-is-sell input[type="range"]::-moz-range-thumb { background: var(--down); }
 
-.dp-feebars { display: grid; gap: 6px; margin: 12px 0 6px; }
-.dp-feebars > div { display: grid; grid-template-columns: 34px 1fr 56px; gap: 10px; align-items: center; }
-.dp-feebars .dp-l { font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
-.dp-feebars .dp-t { height: 8px; border-radius: 99px; background: var(--line); overflow: hidden; }
-.dp-feebars .dp-t i { display: block; height: 100%; border-radius: 99px; transition: width .18s ease; }
-.dp-feebars b { font-family: var(--mono); font-size: 12px; text-align: right; color: var(--text); font-weight: 400; }
-
-.dp-mood { font-size: 12.5px; color: var(--dim); margin: 2px 0 0; }
+.dp-mood { font-size: 12.5px; color: var(--dim); margin: 12px 0 0; }
 
 .dp-mixer { display: grid; gap: 10px; }
 .dp-mixer > div { display: grid; grid-template-columns: 148px 1fr 46px; gap: 12px; align-items: center; }
