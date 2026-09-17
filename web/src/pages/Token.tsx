@@ -17,6 +17,7 @@ import { TokenLogo } from "../components/TokenLogo";
 import { TradePanel } from "../components/TradePanel";
 import { BaseTradePanel } from "../components/BaseTradePanel";
 import { IS_STOCK_BOARD } from "../lib/brand";
+import { useDexPairUrl } from "../lib/dexscreener";
 import { TradesList } from "../components/TradesList";
 import { Button, EmptyState, Skeleton } from "../components/ui";
 import { client, v4Client } from "../lib/client";
@@ -844,22 +845,24 @@ const socialIcons: Record<string, JSX.Element> = {
   ),
 };
 
-/** DexScreener chain slug for this deployment, empty when the chain isn't
- *  indexed there. Address search is NOT a fallback: token addresses repeat
- *  across chains (deterministic deploys), so a search can land on a
- *  same-address token from a different chain. */
-const DEXSCREENER_CHAIN = String(import.meta.env.VITE_DEXSCREENER_CHAIN ?? "");
-
 function InfoTab({ t, meta, extra }: { t: any; meta: any; extra: Extra | null }) {
   const explorer = env.explorerUrl ? env.explorerUrl.replace(/\/$/, "") : "";
+  // The DexScreener link has to come from DexScreener. `t.pool` is the V4
+  // PoolManager — one address shared by every token — so building a URL from
+  // it pointed every token at the same wrong page, and a V4 pool id is not
+  // indexed either. Address search is not a fallback: token addresses repeat
+  // across chains (deterministic deploys), so a search can land on a
+  // same-address token from another chain. Asking for the pair is the only
+  // way to get a link that is right.
+  const dexUrl = useDexPairUrl(t?.address);
   const links: { label: string; url?: string }[] = [
     { label: "Website", url: normalizeSocial(meta.website) },
     { label: "X", url: normalizeSocial(meta.twitter, "x") },
     { label: "Telegram", url: normalizeSocial(meta.telegram, "telegram") },
     ...(meta.links ?? []).map((l: { label: string; url?: string }) => ({ ...l, url: normalizeSocial(l.url) })),
     explorer ? { label: "Scan", url: `${explorer}/token/${t.address}` } : { label: "Scan" },
-    DEXSCREENER_CHAIN && t.pool
-      ? { label: "DexScreener", url: `https://dexscreener.com/${DEXSCREENER_CHAIN}/${t.pool}` }
+    dexUrl
+      ? { label: "DexScreener", url: dexUrl }
       : explorer && t.pool
         ? { label: "Pool", url: `${explorer}/address/${t.pool}` }
         : { label: "Pool" },

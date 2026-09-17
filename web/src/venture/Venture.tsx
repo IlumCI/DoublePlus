@@ -9,7 +9,7 @@ import {
   type Fill, type PoolTrade, type Venture as VentureT,
 } from "./client";
 import { marketStats } from "./stats";
-import { profileLinks, useDexProfile, type DexProfile } from "./dexscreener";
+import { profileLinks, useDexProfile, type DexProfile } from "../lib/dexscreener";
 import { PriceChart, TradeTape, usePoolTrades } from "./Chart";
 import { refLink, storedRef } from "./referral";
 import { Donut, Legend, Ring, SplitBar, type Slice } from "./charts";

@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "gen:env": "node scripts/gen-env.mjs",
     "test": "vitest run --exclude '**/*.live.test.ts' --exclude '**/node_modules/**'",
-    "test:live": "vitest run src/venture/dexscreener.live.test.ts"
+    "test:live": "vitest run src/lib/dexscreener.live.test.ts"
   },
   "dependencies": {
     "@launchpad/sdk": "*",

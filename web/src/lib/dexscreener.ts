@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import type { Address } from "viem";
 
-/** DEX Screener Enhanced Token Info — "is this token's profile paid for".
+/** DEX Screener Enhanced Token Info — "is this token's profile paid for", and
+ *  the canonical link to a token's pair page.
  *
  *  DEX Screener sells a token profile: pay once, and their CMS starts holding
  *  a logo, a banner, a description and social links for that token, which
@@ -31,7 +32,8 @@ const API = "https://api.dexscreener.com";
 
 /** DEX Screener's chain slug. Verified against their live index: Robinhood
  *  Chain is `robinhood`. Blank env means "use the verified default" rather
- *  than "disable", because the venture app only ever serves this chain. */
+ *  than "disable": every flavour this module serves is on that chain, and a
+ *  blank slug is how the env read before the chain was indexed. */
 const configured = String(import.meta.env.VITE_DEXSCREENER_CHAIN ?? "").trim();
 export const DEX_CHAIN = configured || "robinhood";
 
@@ -338,4 +340,14 @@ export function useDexProfiles(tokens: (Address | string)[]): Map<string, DexPro
     return () => { live = false; };
   }, [ids]);
   return map;
+}
+
+/** Just the canonical DEX Screener page for a token, resolved from their own
+ *  pair data. Uses the pairs endpoint only — a link needs no order record,
+ *  and the order feed is the rate-limited one. Null until it resolves, and
+ *  null when the token has no pair, which callers render as a fallback link
+ *  rather than a broken one. */
+export function useDexPairUrl(token: Address | string | undefined): string | null {
+  const profiles = useDexProfiles(token ? [token] : []);
+  return (token ? profiles.get(key(token))?.url : null) ?? null;
 }

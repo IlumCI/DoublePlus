@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { TOTAL_SUPPLY, VENTURE, type Venture } from "./client";
-import type { DexProfile } from "./dexscreener";
+import type { DexProfile } from "../lib/dexscreener";
 
 /** Flag-on-a-block mark: a raised founder flag. */
 export function Flag({ size = 22 }: { size?: number }) {

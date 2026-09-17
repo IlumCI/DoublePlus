@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { type Venture } from "./client";
-import { useDexProfiles, type DexProfile } from "./dexscreener";
+import { useDexProfiles, type DexProfile } from "../lib/dexscreener";
 import { usePageMeta } from "./seo";
 import { ago, CardSkeletons, CurveBar, DexBadge, fmtEth, fmtMcap, fmtUsdV, Monogram, pct, short, StatusBadge, useEthUsd } from "./ui";
 import { useVentures } from "./useVentures";
