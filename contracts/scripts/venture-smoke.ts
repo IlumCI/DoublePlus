@@ -68,7 +68,8 @@ async function main() {
     if ((BigInt(ethers.getCreate2Address(dep.contracts.tokenDeployer, s, hash)) & 0xffffn) === 0x4663n) { salt = s; break; }
   }
   if (!salt) throw new Error("no vanity salt");
-  await (await factory.launch(params, salt)).wait();
+  const creationFee = await factory.creationFeeWei();
+  await (await factory.launch(params, salt, { value: creationFee })).wait();
   const coin = await factory.allTokens((await factory.totalTokens()) - 1n);
   console.log("launched:", coin);
 

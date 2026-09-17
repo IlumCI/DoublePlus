@@ -35,12 +35,17 @@ async function main() {
   const treasury: string = dep.treasury;
   const buyWei = ethers.parseEther(process.env.BUY_ETH ?? "0.0008");
 
+  const creationFee = await factory.creationFeeWei();
+  // Names feed the CREATE2 salt, so a rerun against the same factory with the
+  // same names mines an address that already exists and the deploy reverts.
+  const run = Date.now().toString(36).slice(-4).toUpperCase();
+  if (creationFee > 0n) console.log(`creation fee ${ethers.formatEther(creationFee)} ETH per launch`);
   const buyBps = await factory.curveBuyFeeBps();
   const sellBps = await factory.curveSellFeeBps();
   console.log(`signer ${signer.address}  buyFee ${buyBps}bps  sellFee ${sellBps}bps`);
 
   const params = {
-    name: "Curve Smoke", symbol: "CSMOKE",
+    name: `Curve Smoke ${run}`, symbol: `CS${run}`,
     metadataURI: JSON.stringify({ pitch: "Live check of the curve sell side.", sector: "research" }),
     pair: dep.contracts.weth, buyTaxBps: 200, sellTaxBps: 300,
     devWallet: ethers.ZeroAddress, devBps: 4000, dividendBps: 3000, liquidityBps: 1500, mmBps: 1500,
@@ -53,7 +58,7 @@ async function main() {
     signer.address, dep.contracts.factory, params.buyTaxBps, params.pair,
     BigInt(params.minHoldForDividends) * 10n ** 18n, params.dividendMode,
   ]);
-  await (await factory.launch(params, salt)).wait();
+  await (await factory.launch(params, salt, { value: creationFee })).wait();
   const coin = await factory.allTokens((await factory.totalTokens()) - 1n);
   console.log("launched", coin);
 
@@ -89,13 +94,13 @@ async function main() {
 
   // --- open mode takes the protocol threshold and has no deadline ----------
   const gradWei = await factory.graduationRaiseWei();
-  const openParams = { ...params, name: "Open Smoke", symbol: "OSMOKE", founderRaiseBps: 0, mode: 1 };
+  const openParams = { ...params, name: `Open Smoke ${run}`, symbol: `OS${run}`, founderRaiseBps: 0, mode: 1 };
   const openSalt = await mineSalt(tokenDeployer, [
     openParams.name, openParams.symbol, openParams.metadataURI, 10n ** 27n,
     signer.address, dep.contracts.factory, openParams.buyTaxBps, openParams.pair,
     BigInt(openParams.minHoldForDividends) * 10n ** 18n, openParams.dividendMode,
   ]);
-  await (await factory.launch(openParams, openSalt)).wait();
+  await (await factory.launch(openParams, openSalt, { value: creationFee })).wait();
   const openCoin = await factory.allTokens((await factory.totalTokens()) - 1n);
   const st = await factory.curveState(openCoin);
   if (st.targetRaiseWei !== gradWei) throw new Error(`open target ${st.targetRaiseWei} != ${gradWei}`);
@@ -104,7 +109,7 @@ async function main() {
 
   // --- dividend policy reaches the token, not just the launch call ---------
   const divParams = {
-    ...params, name: "Dividend Smoke", symbol: "DSMOKE",
+    ...params, name: `Dividend Smoke ${run}`, symbol: `DS${run}`,
     minHoldForDividends: 10_000n, dividendMode: 1,
   };
   const divSalt = await mineSalt(tokenDeployer, [
@@ -112,7 +117,7 @@ async function main() {
     signer.address, dep.contracts.factory, divParams.buyTaxBps, divParams.pair,
     BigInt(divParams.minHoldForDividends) * 10n ** 18n, divParams.dividendMode,
   ]);
-  await (await factory.launch(divParams, divSalt)).wait();
+  await (await factory.launch(divParams, divSalt, { value: creationFee })).wait();
   const divCoin = await factory.allTokens((await factory.totalTokens()) - 1n);
   const dt = await ethers.getContractAt("QuiverToken", divCoin);
   const floor = await dt.minHoldForDividends();

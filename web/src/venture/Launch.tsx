@@ -4,7 +4,7 @@ import { useWalletClient } from "wagmi";
 import { concatHex, encodeAbiParameters, getContractAddress, keccak256, parseEther } from "viem";
 
 import { factoryAbi, VENTURE, venturePc } from "./client";
-import { fmtUsdV } from "./ui";
+import { fmtEth, fmtUsdV } from "./ui";
 import { Donut, Legend, SPLIT_COLORS, type Slice } from "./charts";
 import { usePageMeta } from "./seo";
 import { QUIVER_TOKEN_BYTECODE } from "../lib/rh/tokenBytecode";
@@ -609,6 +609,9 @@ export function LaunchVenture() {
                     ["github", !!form.github.trim()], ["docs", !!form.docs.trim()],
                   ].filter(([, on]) => on).map(([k]) => k).join(" · ") || "none attached"}</dd>
                   <dt>Protocol fee</dt><dd>{(VENTURE.platformFeeBps / 100).toFixed(2)}% per trade, {VENTURE.refShareBps / 100}% of it to referrers</dd>
+                  <dt>Costs you today</dt><dd>{chain && chain.creation > 0n
+                    ? `${fmtEth(chain.creation, 4)} ETH to launch, plus gas`
+                    : "gas only"}</dd>
                 </dl>
               </div>
               <div className="dp-notice" style={{ marginTop: 14 }}>
@@ -624,7 +627,10 @@ export function LaunchVenture() {
                 {mining ? "Mining your address…" : busy ? "Confirm in wallet…" : isConnected ? "Launch — one transaction" : "Connect wallet"}
               </button>
               <p className="dp-hint" style={{ textAlign: "center", marginTop: 8 }}>
-                Free to launch, gas only. Your token address is mined in your browser to end in{" "}
+                {chain && chain.creation > 0n
+                  ? <><span className="dp-mono">{fmtEth(chain.creation, 4)} ETH</span> to launch, plus gas. </>
+                  : <>Free to launch, gas only. </>}
+                Your token address is mined in your browser to end in{" "}
                 <span className="dp-mono">0x4663</span>.
               </p>
             </div>

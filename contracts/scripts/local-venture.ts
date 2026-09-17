@@ -66,7 +66,8 @@ async function main() {
     creator.address, await factory.getAddress(), params.buyTaxBps, params.pair,
     BigInt(params.minHoldForDividends) * 10n ** 18n, params.dividendMode,
   ]);
-  await (await factory.connect(creator).launch(params, salt)).wait();
+  const creationFee = await factory.creationFeeWei();
+  await (await factory.connect(creator).launch(params, salt, { value: creationFee })).wait();
   const coin = await factory.allTokens(0n);
 
   await (await factory.connect(buyer).buy(coin, { value: ethers.parseEther("0.6") })).wait();
