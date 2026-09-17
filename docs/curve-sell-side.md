@@ -41,8 +41,8 @@ than you put in until the token actually graduates into the pool.
 
 ### Mode B — `Open` (pump.fun shape)
 
-No target, no deadline, no refund, no all-or-nothing. Graduates on a fixed
-threshold (`soldWhole >= CURVE_SUPPLY_WHOLE`, or an FDV threshold).
+No target, no deadline, no refund, no all-or-nothing. Graduates when
+`raisedWei >= graduationRaiseWei` — see the threshold analysis below.
 
 - Curve buys **and** sells both charged (same 0.5% entry fee, or higher — the
   cap is 3%).
@@ -52,6 +52,70 @@ threshold (`soldWhole >= CURVE_SUPPLY_WHOLE`, or an FDV threshold).
 Escrow solvency is trivial here: there is no refund liability, and buys pay
 `curveCost + 1` while sells receive at most `curveCost`, so the escrow is
 monotonically non-negative by construction.
+
+## Graduation threshold: pick the lowest viable one
+
+The threshold is a revenue decision, and it resolves against one asymmetry:
+
+**The curve is a bounded-revenue venue. The pool is not.**
+
+Curve buy volume is capped by construction — the curve can absorb at most
+`curveCost(0 -> CURVE_SUPPLY_WHOLE)` before it is exhausted, so lifetime curve
+buy revenue is bounded at roughly `0.5% x target`, times whatever churn the
+sell side adds. Pool volume has no such ceiling: a pool can trade many
+multiples of its own liquidity, indefinitely, and every one of those trades
+pays the full 1% platform fee.
+
+The per-trade rate points the same way. A curve round trip pays 0.5% in and
+1% out. A pool round trip pays 1% and 1%. The pool is the higher-rate venue
+*and* the uncapped one.
+
+So the profit-maximising threshold is **the lowest one that still produces a
+pool deep enough to trade.** Every block a token spends on the curve is volume
+earning 0.5% in a venue that will run out, instead of 1% in one that will not.
+
+### Floor on the threshold
+
+Two things stop it going to zero:
+
+1. **Minimum viable depth.** A pool holding 0.2 ETH moves double digits on a
+   0.05 ETH click. No one trades it, so it earns nothing — graduating a token
+   into a pool too thin to use destroys the revenue the move was meant to
+   capture. Depth must comfortably absorb the quick-amount buttons the UI
+   offers (0.05 / 0.1 / 0.5 / 1 ETH).
+2. **Graduation gas.** `finalize()` seeds a Uniswap V4 pool, and a keeper pays
+   for it. Lifetime pool revenue must exceed that cost. On Robinhood Chain
+   (an Orbit L3) gas is cheap enough that depth dominates this bound, but it
+   is not zero and it scales with listing count.
+
+### Denominate it in ETH, not supply or FDV
+
+- `soldWhole >= CURVE_SUPPLY_WHOLE` — rejected. The ETH raised at full curve
+  depends on each token's `p0` and slope, so identical thresholds produce
+  wildly different pool depths. Some tokens would graduate into dust.
+- FDV threshold — rejected. It makes a critical state transition depend on the
+  ETH/USD oracle. A stale or manipulated price then gates graduation, which
+  adds an attack surface to the one function that moves everyone's money.
+- `raisedWei >= graduationRaiseWei` — **take this.** It is denominated in the
+  exact quantity that becomes liquidity, so pool depth is predictable and
+  identical across every listing.
+
+### Make it tunable, not immutable
+
+The optimum is empirical: it depends on the trade-size distribution and the
+churn rate, neither of which is known before launch. Baking a guess in as
+`immutable` is the anti-profit choice — it forecloses ever moving to the
+actual optimum.
+
+`graduationRaiseWei` should be an admin-settable factory parameter with a hard
+bounded range, applied to new launches only so a live raise never has its
+finish line moved. Start it low, instrument graduated-pool revenue against
+time-on-curve, and tune. The ability to re-tune is worth more than any number
+chosen up front.
+
+Instrument these from day one, or the tuning is guesswork:
+per-token curve fee accrued, pool fee accrued, time on curve, pool volume in
+the first 24h post-graduation, and the share of listings that never graduate.
 
 ## Buy fee mechanics
 
@@ -185,6 +249,13 @@ below target in the final block. Mode B has no target, so no lock applies.
 | `creatorCurveShareBps` | Mode B | 500–2000 of the fee | ≤ 5000 |
 | `refShareBps` | both | 2000 of the fee | existing hook value |
 | `sweepDelaySecs` | Mode A | 365 days | ≥ 180 days |
+| `graduationRaiseWei` | Mode B | start low, then tune | admin-settable, bounded |
+
+Sell stays at 1% against the 0.5% buy. The asymmetry is deliberate and points
+the same way as the threshold analysis: exiting on the curve costs twice what
+entering does, so the cheap path is to hold to graduation and trade in the
+pool, which is the venue that pays the protocol more and never runs out of
+inventory.
 
 Curve fees route through the same referrer split the hook already uses, so a
 referred trader pays the referrer on curve volume too, not only pool volume.
@@ -247,7 +318,8 @@ and hands critics a headline, for revenue that is small next to curve fees.
 3. Curve fee plumbing to `platformTreasury` with the referrer split.
 4. `curveBuyFeeBps` at 50 on both modes, taken off incoming value before the
    curve quote; `creationFeeWei` on `launch()`.
-5. High-water lock on target crossing.
+5. High-water lock on target crossing; `graduationRaiseWei` as a bounded
+   admin-settable parameter, read at launch and frozen per listing.
 6. `sweepUnclaimed()` behind `sweepDelaySecs`.
 7. Tests: escrow solvency under randomised buy/sell sequences; cap enforcement;
    `sum(spentWei) == raisedWei` invariant; high-water lock race; Mode B
