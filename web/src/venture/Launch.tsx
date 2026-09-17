@@ -5,7 +5,7 @@ import { concatHex, encodeAbiParameters, getContractAddress, keccak256, parseEth
 
 import { factoryAbi, VENTURE, venturePc } from "./client";
 import { fmtUsdV } from "./ui";
-import { Donut, Legend, type Slice } from "./charts";
+import { Donut, FeeBars, Legend, SPLIT_COLORS, type Slice } from "./charts";
 import { usePageMeta } from "./seo";
 import { QUIVER_TOKEN_BYTECODE } from "../lib/rh/tokenBytecode";
 import { pairUsd, resolvePairRoute } from "../lib/rh/routes";
@@ -188,15 +188,47 @@ export function LaunchVenture() {
   // --- wizard state (simple by default, expert depth on demand) -----------
   const [step, setStep] = useState(0);
   const [expertRaise, setExpertRaise] = useState(false);
-  const [expertFees, setExpertFees] = useState(false);
-  const [preset, setPreset] = useState<"community" | "balanced" | "builder">("balanced");
+  const [preset, setPreset] = useState<"community" | "balanced" | "builder" | "custom">("balanced");
 
-  const applyPreset = (k: "community" | "balanced" | "builder") => {
+  const applyPreset = (k: "community" | "balanced" | "builder" | "custom") => {
     setPreset(k);
     if (k === "community") { setBuyTaxPct(1); setSellTaxPct(2); setAlloc({ dev: 20, dividends: 50, liquidity: 15, mm: 15 }); }
     if (k === "balanced") { setBuyTaxPct(2); setSellTaxPct(3); setAlloc({ dev: 40, dividends: 30, liquidity: 15, mm: 15 }); }
     if (k === "builder") { setBuyTaxPct(3); setSellTaxPct(4); setAlloc({ dev: 60, dividends: 15, liquidity: 15, mm: 10 }); }
   };
+
+  // Moving one slider pushes the difference onto the others in proportion, so
+  // the split is always exactly 100% — there is no such thing as unallocated,
+  // and any single bucket may take the whole thing.
+  const BUCKETS = ["dev", "dividends", "liquidity", "mm"] as const;
+  const setAllocBalanced = (key: (typeof BUCKETS)[number]) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = Math.max(0, Math.min(100, Math.round(Number(e.target.value) || 0)));
+    const others = BUCKETS.filter((b) => b !== key);
+    const rest = 100 - value;
+    const othersTotal = others.reduce((a, b) => a + alloc[b], 0);
+    const next = { ...alloc, [key]: value } as typeof alloc;
+    if (othersTotal === 0) {
+      // everything was on this bucket: spread the remainder evenly
+      others.forEach((b, i) => { next[b] = Math.floor(rest / others.length) + (i < rest % others.length ? 1 : 0); });
+    } else {
+      others.forEach((b) => { next[b] = Math.round((alloc[b] / othersTotal) * rest); });
+    }
+    // absorb rounding drift into the largest of the others
+    const drift = 100 - BUCKETS.reduce((a, b) => a + next[b], 0);
+    if (drift !== 0) {
+      const fat = others.reduce((m, b) => (next[b] > next[m] ? b : m), others[0]);
+      next[fat] = Math.max(0, next[fat] + drift);
+    }
+    setAlloc(next);
+    setPreset("custom");
+  };
+
+  const taxMood = (t: number) =>
+    t === 0 ? "free to trade — pure volume play"
+    : t <= 1.5 ? "barely noticed, volume stays high"
+    : t <= 2.5 ? "standard for a funded project"
+    : t <= 3.5 ? "chunky; your holders will want it back"
+    : "steep — you will need to earn this one";
 
   const cutEth = Number(founderCutEth) / 1e18;
   const avgTax = (buyTaxPct + sellTaxPct) / 2;
@@ -213,7 +245,7 @@ export function LaunchVenture() {
   const canAdvance =
     step === 0 ? form.name.trim().length > 0 && form.symbol.trim().length > 0 && form.pitch.trim().length > 0
     : step === 1 ? parsedTarget > 0n && (minTargetEth === 0 || Number(target) >= minTargetEth * 0.999)
-    : step === 2 ? allocTotal === 100
+    : step === 2 ? true
     : true;
 
   return (
@@ -348,17 +380,44 @@ export function LaunchVenture() {
           {/* ---------------------------------------------------- step 3 */}
           {step === 2 && (
             <div className="dp-form-sheet">
-              <p className="dp-sec">How trading works <button type="button" className="dp-linkbtn" onClick={() => setExpertFees(!expertFees)}>
-                {expertFees ? "hide expert settings" : "expert settings"}</button></p>
-              <p className="dp-hint" style={{ marginBottom: 12 }}>
-                Every trade pays a fee you decide how to spend. Pick a profile, or tune it yourself.
-              </p>
+              <p className="dp-sec">How trading works</p>
 
+              {/* the fee dials — always visible, always yours */}
+              <div className="dp-dials">
+                <div className="dp-dial dp-is-buy">
+                  <span className="dp-dial-k">Buy fee</span>
+                  <div className="dp-dial-row">
+                    <button type="button" onClick={() => setBuyTaxPct(Math.max(0, +(buyTaxPct - 0.25).toFixed(2)))} aria-label="Lower buy fee">−</button>
+                    <b>{buyTaxPct.toFixed(2)}<em>%</em></b>
+                    <button type="button" onClick={() => setBuyTaxPct(Math.min(4, +(buyTaxPct + 0.25).toFixed(2)))} aria-label="Raise buy fee">+</button>
+                  </div>
+                  <input type="range" min={0} max={4} step={0.25} value={buyTaxPct}
+                    onChange={(e) => setBuyTaxPct(Number(e.target.value))} aria-label="Buy fee" />
+                  <span className="dp-dial-n">a 1 ETH buy pays {(buyTaxPct / 100).toFixed(4)} ETH</span>
+                </div>
+                <div className="dp-dial dp-is-sell">
+                  <span className="dp-dial-k">Sell fee</span>
+                  <div className="dp-dial-row">
+                    <button type="button" onClick={() => setSellTaxPct(Math.max(0, +(sellTaxPct - 0.25).toFixed(2)))} aria-label="Lower sell fee">−</button>
+                    <b>{sellTaxPct.toFixed(2)}<em>%</em></b>
+                    <button type="button" onClick={() => setSellTaxPct(Math.min(4, +(sellTaxPct + 0.25).toFixed(2)))} aria-label="Raise sell fee">+</button>
+                  </div>
+                  <input type="range" min={0} max={4} step={0.25} value={sellTaxPct}
+                    onChange={(e) => setSellTaxPct(Number(e.target.value))} aria-label="Sell fee" />
+                  <span className="dp-dial-n">a 1 ETH sell pays {(sellTaxPct / 100).toFixed(4)} ETH</span>
+                </div>
+              </div>
+              <FeeBars buy={buyTaxPct} sell={sellTaxPct} />
+              <p className="dp-mood">{taxMood((buyTaxPct + sellTaxPct) / 2)}</p>
+
+              {/* where that fee lands */}
+              <p className="dp-sec" style={{ marginTop: 20 }}>Where the fee goes</p>
               <div className="dp-presets">
                 {([
-                  ["community", "Community", "1% / 2% fee · half of it back to holders", "Rewards holding. Slower treasury, stickier cap table."],
-                  ["balanced", "Balanced", "2% / 3% fee · split across all four", "The default most projects ship. Funds the team and pays holders."],
-                  ["builder", "Builder", "3% / 4% fee · most of it to your wallet", "Maximum runway. Traders notice high sell taxes, so earn it."],
+                  ["community", "Community", "Half to holders", "Rewards holding. Stickier cap table."],
+                  ["balanced", "Balanced", "Spread across four", "What most projects ship."],
+                  ["builder", "Builder", "Most to your wallet", "Maximum runway."],
+                  ["custom", "Custom", "You decide", "Move a slider, the rest rebalances."],
                 ] as const).map(([k, title, line, why]) => (
                   <button type="button" key={k} className={preset === k ? "on" : ""} onClick={() => applyPreset(k)}>
                     <b>{title}</b>
@@ -369,37 +428,25 @@ export function LaunchVenture() {
               </div>
 
               <div className="dp-chartrow" style={{ marginTop: 4 }}>
-                <Donut slices={feeSlices} center={`${avgTax.toFixed(1)}%`} sub="avg fee" />
-                <div style={{ flex: 1, minWidth: 210 }}>
-                  <Legend slices={feeSlices} />
-                </div>
+                <Donut slices={feeSlices} center={`${avgTax.toFixed(1)}%`} sub="avg fee" animate={false} />
+                <div style={{ flex: 1, minWidth: 220 }}><Legend slices={feeSlices} /></div>
               </div>
 
-              {expertFees && (
+              {preset === "custom" && (
                 <div className="dp-expert">
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 22px" }}>
-                    <div className="dp-field"><label htmlFor="v-buytax">Buy fee — {buyTaxPct.toFixed(2)}%</label>
-                      <input id="v-buytax" type="range" min={0} max={4} step={0.25} value={buyTaxPct}
-                        onChange={(e) => setBuyTaxPct(Number(e.target.value))} />
-                      <span className="dp-hint">Charged when someone buys. Low buy fees make entry cheap.</span></div>
-                    <div className="dp-field"><label htmlFor="v-selltax">Sell fee — {sellTaxPct.toFixed(2)}%</label>
-                      <input id="v-selltax" type="range" min={0} max={4} step={0.25} value={sellTaxPct}
-                        onChange={(e) => setSellTaxPct(Number(e.target.value))} />
-                      <span className="dp-hint">Charged when someone sells. Slightly higher than buy is normal; far
-                        higher reads as a trap and scares volume away.</span></div>
-                  </div>
-                  <div className="dp-ration">
-                    {([["dev", "Dev wallet"], ["dividends", "Holders"], ["liquidity", "Liquidity"], ["mm", "Market-making"]] as const).map(([k, label]) => (
+                  <p className="dp-hint" style={{ marginBottom: 10 }}>
+                    Always adds to 100%. Push one to 100 and it takes everything.
+                  </p>
+                  <div className="dp-mixer">
+                    {([["dev", "You"], ["dividends", "Holders"], ["liquidity", "Liquidity"], ["mm", "Market-making"]] as const).map(([k, label], i) => (
                       <div key={k}>
-                        <span className="dp-who">{label}</span>
-                        <input type="range" min={0} max={100} step={5} value={alloc[k]} onChange={setBucket(k)} aria-label={label} />
+                        <span className="dp-who"><i style={{ background: SPLIT_COLORS[i] }} />{label}</span>
+                        <input type="range" min={0} max={100} step={1} value={alloc[k]}
+                          onChange={setAllocBalanced(k)} aria-label={label} />
                         <span className="dp-amt">{alloc[k]}%</span>
                       </div>
                     ))}
                   </div>
-                  <p className="dp-mono" style={{ margin: "10px 0 0", fontSize: 12, color: allocTotal === 100 ? "var(--up)" : "var(--down)" }}>
-                    {allocTotal === 100 ? "Split totals 100% — good to go." : `Split totals ${allocTotal}% — needs to be exactly 100%.`}
-                  </p>
                 </div>
               )}
             </div>

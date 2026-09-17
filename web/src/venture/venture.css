@@ -626,7 +626,8 @@ main { container-type: inline-size; }
 .dp-logodrop:hover { border-color: var(--up); color: var(--paper); }
 .dp-logodrop img { width: 100%; height: 100%; object-fit: cover; }
 
-.dp-presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
+.dp-presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+@media (max-width: 1100px) { .dp-presets { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 760px) { .dp-presets { grid-template-columns: 1fr; } }
 .dp-presets button { display: grid; gap: 5px; text-align: left; padding: 13px 14px; border-radius: 10px;
   background: var(--panel-2); border: 1px solid var(--line); color: var(--dim); font-size: 11.5px; line-height: 1.45; }
@@ -695,3 +696,41 @@ main { container-type: inline-size; }
 .dp-edge-icon { font-size: 18px; line-height: 1; color: var(--up); margin-top: 1px; }
 .dp-legend li span { display: grid; gap: 1px; }
 .dp-legend em { font-style: normal; font-size: 10.5px; color: var(--faint); }
+
+/* fee dials — the part founders actually enjoy touching ---------------- */
+.dp-dials { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 700px) { .dp-dials { grid-template-columns: 1fr; } }
+.dp-dial { background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px 12px; }
+.dp-dial-k { font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); }
+.dp-dial-row { display: flex; align-items: center; gap: 10px; margin: 4px 0 2px; }
+.dp-dial-row b { font-family: var(--mono); font-size: 34px; line-height: 1; letter-spacing: -.02em; flex: 1; text-align: center; }
+.dp-dial-row b em { font-style: normal; font-size: .45em; color: var(--faint); margin-left: 2px; }
+.dp-dial-row button { width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--line-2);
+  background: var(--bg); color: var(--text); font-size: 17px; line-height: 1; }
+.dp-dial-row button:hover { border-color: var(--up); color: var(--up); }
+.dp-dial-n { font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
+.dp-is-buy .dp-dial-row b { color: var(--up); }
+.dp-is-buy input[type="range"]::-webkit-slider-thumb { background: var(--up); }
+.dp-is-buy input[type="range"]::-moz-range-thumb { background: var(--up); }
+.dp-is-sell .dp-dial-row b { color: var(--down); }
+.dp-is-sell input[type="range"]::-webkit-slider-thumb { background: var(--down); }
+.dp-is-sell input[type="range"]::-moz-range-thumb { background: var(--down); }
+
+.dp-feebars { display: grid; gap: 6px; margin: 12px 0 6px; }
+.dp-feebars > div { display: grid; grid-template-columns: 34px 1fr 56px; gap: 10px; align-items: center; }
+.dp-feebars .dp-l { font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
+.dp-feebars .dp-t { height: 8px; border-radius: 99px; background: var(--line); overflow: hidden; }
+.dp-feebars .dp-t i { display: block; height: 100%; border-radius: 99px; transition: width .18s ease; }
+.dp-feebars b { font-family: var(--mono); font-size: 12px; text-align: right; color: var(--text); font-weight: 400; }
+
+.dp-mood { font-size: 12.5px; color: var(--dim); margin: 2px 0 0; }
+
+.dp-mixer { display: grid; gap: 10px; }
+.dp-mixer > div { display: grid; grid-template-columns: 148px 1fr 46px; gap: 12px; align-items: center; }
+.dp-mixer .dp-who { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 11.5px; color: var(--dim); }
+.dp-mixer .dp-who i { width: 10px; height: 10px; border-radius: 3px; }
+.dp-mixer .dp-amt { font-family: var(--mono); font-size: 13px; text-align: right; }
+@media (max-width: 700px) { .dp-mixer > div { grid-template-columns: 110px 1fr 40px; } }
+
+/* klinecharts sits flush inside the panel */
+.dp-chartpanel .klinecharts-pro, .dp-chartpanel canvas { border-radius: 0 0 12px 12px; }
