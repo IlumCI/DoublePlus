@@ -150,14 +150,11 @@ function ChainBar() {
 /** Real, clickable, and honest when the board is quiet. No marquee. */
 function ActivityStrip() {
   const { ventures } = useVentures();
-  if (!ventures) return null;
-  if (ventures.length === 0) {
-    return (
-      <div className="dp-activity">
-        <div className="dp-shell"><span className="dp-quiet">No raises filed yet — the board fills as projects launch.</span></div>
-      </div>
-    );
-  }
+  // The board renders every one of these as a card immediately below, so the
+  // ticker is duplication there and orientation everywhere else.
+  const onBoard = useLocation().pathname === "/";
+  if (!ventures || onBoard) return null;
+  if (ventures.length === 0) return null;
   const recent = [...ventures].sort((a, b) => b.createdAt - a.createdAt).slice(0, 6);
   return (
     <div className="dp-activity">

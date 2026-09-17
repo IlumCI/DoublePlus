@@ -129,7 +129,8 @@ function Edge() {
   );
 }
 
-/** Strength, not confession: live totals plus the guarantee that always holds. */
+/** Live totals only. The guarantee itself is the Edge band's second row;
+ *  stating it again here was the same sentence twice, 100px apart. */
 function Proof({ ventures, ethUsd }: { ventures: Venture[] | null; ethUsd: number }) {
   if (!ventures || ventures.length === 0) return null;
   const raised = ventures.reduce((a, v) => a + v.raisedWei, 0n);
@@ -143,11 +144,7 @@ function Proof({ ventures, ethUsd }: { ventures: Venture[] | null; ethUsd: numbe
       </span>
       <span className="dp-item">
         <span className="dp-n">{trading}</span>
-        <span className="dp-l">{trading === 1 ? "project trading with locked liquidity" : "projects trading with locked liquidity"}</span>
-      </span>
-      <span className="dp-item">
-        <span className="dp-n">100%</span>
-        <span className="dp-l">of what you put in the curve, back if a raise misses</span>
+        <span className="dp-l">{trading === 1 ? "project trading" : "projects trading"}</span>
       </span>
     </div>
   );
@@ -210,9 +207,9 @@ function EmptyBoard({ any, onClear }: { any: boolean; onClear: () => void }) {
     <div className="dp-notice" style={{ padding: "36px 22px", textAlign: "center" }}>
       <h3>{any ? "Nothing matches those filters." : "The board is open."}</h3>
       <p>{any ? "Clear them to see every project." : "Be the first project on it — a raise takes one transaction and about two minutes."}</p>
-      {any
-        ? <button className="dp-action" style={{ marginTop: 14 }} onClick={onClear}>Clear filters</button>
-        : <Link className="dp-action" style={{ marginTop: 14 }} to="/launch" viewTransition>Launch your idea</Link>}
+      {/* No second Launch button here: the hero's is a few hundred pixels up
+          and the topbar carries a third. Only the filter reset is new. */}
+      {any && <button className="dp-action" style={{ marginTop: 14 }} onClick={onClear}>Clear filters</button>}
     </div>
   );
 }

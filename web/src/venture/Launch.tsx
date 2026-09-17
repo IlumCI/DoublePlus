@@ -467,7 +467,10 @@ export function LaunchVenture() {
 
               <div className="dp-chartrow" style={{ marginTop: 4 }}>
                 <Donut slices={feeSlices} center={`${avgTax.toFixed(1)}%`} sub="avg fee" animate={false} />
-                <div style={{ flex: 1, minWidth: 220 }}><Legend slices={feeSlices} /></div>
+                {/* The mixer below lists the same four buckets with the same
+                    colours and the same numbers, so the legend only earns its
+                    place when the mixer is closed. */}
+                {preset !== "custom" && <div style={{ flex: 1, minWidth: 220 }}><Legend slices={feeSlices} /></div>}
               </div>
 
               {preset === "custom" && (

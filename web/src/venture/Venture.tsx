@@ -77,7 +77,6 @@ function VentureBody({ v, fills, ethUsd }: { v: VentureT; fills: Fill[]; ethUsd:
           <p className="dp-prov" style={{ margin: "4px 0 0" }}>
             created by <b>{short(v.creator)}</b> · {ago(v.createdAt)} ago
             {v.meta.sector ? <> · {v.meta.sector}</> : null} · <StatusBadge v={v} />
-            {" · "}<CopyButton value={v.address} label={short(v.address)} />
           </p>
         </div>
         <div className="dp-mcbig">
@@ -85,7 +84,7 @@ function VentureBody({ v, fills, ethUsd }: { v: VentureT; fills: Fill[]; ethUsd:
           <span className="dp-v">{fmtMcap(v, ethUsd)}</span><br />
           {v.phase === "graduated"
             ? <span className="dp-mono" style={{ fontSize: 12 }}><Change pct={change24} /> <span style={{ color: "var(--faint)" }}>24h</span></span>
-            : <span className="dp-mono" style={{ fontSize: 12, color: "var(--faint)" }}>{pct(v.raisedWei, v.targetRaiseWei).toFixed(0)}% of target committed</span>}
+            : null}
         </div>
       </div>
 
@@ -128,18 +127,19 @@ function VentureBody({ v, fills, ethUsd }: { v: VentureT; fills: Fill[]; ethUsd:
 
 /** Pre-graduation: the curve itself is the chart. */
 function CurvePanel({ v }: { v: VentureT }) {
-  const funded = pct(v.raisedWei, v.targetRaiseWei);
   const bars = 36;
+  // Purely the shape of the pricing, not the progress: the ring in the trade
+  // box is the one place that reads how far along the raise is. Encoding it
+  // here too gave the same number two visualisations on one screen.
   return (
     <div className="dp-panel dp-chartpanel">
-      <div className="dp-phead"><span>${v.symbol} bonding curve</span><span>{funded.toFixed(1)}% funded</span></div>
+      <div className="dp-phead"><span>${v.symbol} bonding curve</span></div>
       <div className="dp-pbody">
-        <svg className="dp-px" width="100%" viewBox="0 0 560 240" preserveAspectRatio="none" style={{ height: 240 }} aria-hidden>
+        <svg className="dp-px" width="100%" viewBox="0 0 560 150" preserveAspectRatio="none" style={{ height: 150 }} aria-hidden>
           {Array.from({ length: bars }, (_, i) => {
-            const h = 30 + (i / (bars - 1)) * 190;
-            const filled = (i / bars) * 100 <= funded;
-            return <rect key={i} x={i * 15.5 + 2} y={232 - h} width={11} height={h}
-              fill="var(--up)" opacity={filled ? 0.35 + (i / bars) * 0.65 : 0.1} />;
+            const h = 18 + (i / (bars - 1)) * 120;
+            return <rect key={i} x={i * 15.5 + 2} y={142 - h} width={11} height={h}
+              fill="var(--up)" opacity={0.16 + (i / bars) * 0.34} />;
           })}
         </svg>
         <p className="dp-agate" style={{ padding: "4px 6px 2px" }}>
@@ -152,33 +152,18 @@ function CurvePanel({ v }: { v: VentureT }) {
 }
 
 function ProjectPane({ v }: { v: VentureT }) {
-  const days = Math.max(1, Math.round((v.deadline - v.createdAt) / 86_400));
   return (
     <div className="dp-story">
       {v.meta.description || v.meta.pitch
         ? <p>{v.meta.description || v.meta.pitch}</p>
         : <p className="dp-agate">This raise filed no description on-chain.</p>}
 
-      <h2>What the money does</h2>
-      <p>
-        The founder takes <b>{(v.founderRaiseBps / 100).toFixed(1)}%</b> of the raise as funding, released only if
-        the round succeeds. Everything else — the rest of the raise and the remaining supply — becomes locked
-        pool liquidity at graduation.
-      </p>
-
-      <h2>The shape of the raise</h2>
-      <ul className="dp-milestones">
-        <li className={v.raisedWei > 0n ? "dp-done" : ""}>Raise opened on a rising price curve</li>
-        <li className={pct(v.raisedWei, v.targetRaiseWei) >= 50 ? "dp-done" : ""}>Half the target committed</li>
-        <li className={v.phase === "expired" || v.phase === "graduated" ? "dp-done" : ""}>Target reached — {fmtEth(v.targetRaiseWei, 3)} ETH in {days} days</li>
-        <li className={v.phase === "graduated" ? "dp-done" : ""}>Graduated into a locked Uniswap V4 pool</li>
-      </ul>
-
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 16 }}>
-        {v.meta.website && <a className="dp-chit" href={v.meta.website} target="_blank" rel="noreferrer">website ↗</a>}
-        {v.meta.twitter && <a className="dp-chit" href={v.meta.twitter} target="_blank" rel="noreferrer">x / twitter ↗</a>}
-        {env.explorerUrl && <a className="dp-chit" href={`${env.explorerUrl}/token/${v.address}`} target="_blank" rel="noreferrer">contract ↗</a>}
-      </div>
+      {(v.meta.website || v.meta.twitter) && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 16 }}>
+          {v.meta.website && <a className="dp-chit" href={v.meta.website} target="_blank" rel="noreferrer">website ↗</a>}
+          {v.meta.twitter && <a className="dp-chit" href={v.meta.twitter} target="_blank" rel="noreferrer">x / twitter ↗</a>}
+        </div>
+      )}
     </div>
   );
 }
@@ -240,16 +225,11 @@ function TermsPane({ v }: { v: VentureT }) {
   ];
   const rows: [string, string][] = [
     ["Funding target", `${fmtEth(v.targetRaiseWei, 4)} ETH`],
-    ["Raised", `${fmtEth(v.raisedWei, 4)} ETH (${pct(v.raisedWei, v.targetRaiseWei).toFixed(1)}%)`],
+    // Progress belongs to the ring, and the vesting panel below states the
+    // founder stake in full — both were being repeated here.
     ["Founder cut of raise", `${(v.founderRaiseBps / 100).toFixed(1)}% — at graduation only`],
-    ["Founder stake", v.vesting === "0x0000000000000000000000000000000000000000" ? "none" : "vested linearly from graduation"],
-    ["Round deadline", `${days} day${days === 1 ? "" : "s"} · all-or-nothing refunds`],
-    ["Per-wallet cap", `${fmtEth(v.maxBuyWei, 4)} ETH`],
-    ["Buy / sell tax", `${(v.policy.buyTaxBps / 100).toFixed(2)}% / ${(v.policy.sellTaxBps / 100).toFixed(2)}%`],
-    ["Tax split", `dev ${v.policy.devBps / 100} · dividends ${v.policy.dividendBps / 100} · liquidity ${v.policy.liquidityBps / 100} · MM ${v.policy.mmBps / 100}`],
-    ["Protocol fee", `${(VENTURE.platformFeeBps / 100).toFixed(2)}% per trade, ${VENTURE.refShareBps / 100}% of it to referrers`],
+    ["Round deadline", `${days} day${days === 1 ? "" : "s"}`],
     ["Anti-snipe", "15% premium for 5s, 5% to 15s → into the quote walls"],
-    ["Token", v.address],
   ];
   return (
     <>
@@ -261,16 +241,12 @@ function TermsPane({ v }: { v: VentureT }) {
         </div>
       </div>
       <div className="dp-sheet">
-        <p className="dp-sec">Term sheet <span className="dp-agate">sworn at launch · immutable after</span></p>
+        <p className="dp-sec">Term sheet</p>
         <dl>{rows.map(([k, val]) => <span key={k} style={{ display: "contents" }}><dt>{k}</dt><dd>{val}</dd></span>)}</dl>
         <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
           <span className="dp-stamp">LOCKED</span>
         </div>
       </div>
-      <p className="dp-agate" style={{ marginTop: 10 }}>
-        Every number above was written into the factory at launch. Nobody — the founder, the protocol, this
-        website — can change them afterwards.
-      </p>
     </>
   );
 }
@@ -507,7 +483,7 @@ function RaisePanel({ v }: { v: VentureT }) {
               {["0.05", "0.1", "0.5", "1"].map((q) => <button key={q} onClick={() => setAmt(q)}>{q}</button>)}
             </div>
             <p className="dp-tb-est">
-              {tokensOut > 0n ? <>you receive ≈ <b>{fmtTok(tokensOut, true)} ${v.symbol}</b></> : <>price rises with every buy — early backers pay less</>}
+              {tokensOut > 0n ? <>you receive ≈ <b>{fmtTok(tokensOut, true)} ${v.symbol}</b></> : <>enter an amount to see what you get</>}
             </p>
             <button className="dp-tb-go dp-buy"
               disabled={busy || overCap || shortOnEth || (isConnected && parsed === 0n)} onClick={buy}>
