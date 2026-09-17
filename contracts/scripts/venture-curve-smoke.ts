@@ -102,6 +102,36 @@ async function main() {
   if (st.deadline !== 2n ** 64n - 1n) throw new Error(`open deadline not uncapped: ${st.deadline}`);
   console.log(`open curve ${openCoin} target ${ethers.formatEther(gradWei)} ETH, no deadline`);
 
+  // --- dividend policy reaches the token, not just the launch call ---------
+  const divParams = {
+    ...params, name: "Dividend Smoke", symbol: "DSMOKE",
+    minHoldForDividends: 10_000n, dividendMode: 1,
+  };
+  const divSalt = await mineSalt(tokenDeployer, [
+    divParams.name, divParams.symbol, divParams.metadataURI, 10n ** 27n,
+    signer.address, dep.contracts.factory, divParams.buyTaxBps, divParams.pair,
+    BigInt(divParams.minHoldForDividends) * 10n ** 18n, divParams.dividendMode,
+  ]);
+  await (await factory.launch(divParams, divSalt)).wait();
+  const divCoin = await factory.allTokens((await factory.totalTokens()) - 1n);
+  const dt = await ethers.getContractAt("QuiverToken", divCoin);
+  const floor = await dt.minHoldForDividends();
+  const dmode = await dt.dividendMode();
+  if (floor !== 10_000n * 10n ** 18n) throw new Error(`floor ${floor} != 10000e18`);
+  if (dmode !== 1n) throw new Error(`dividendMode ${dmode} != 1`);
+
+  // Buy enough to sit above the floor, then confirm the weight is the tiered
+  // one rather than the plain balance.
+  await (await factory.buy(divCoin, { value: buyWei })).wait();
+  const bal = await dt.balanceOf(signer.address);
+  const weight = await dt.dividendWeight(signer.address);
+  const mult = bal >= floor * 1000n ? 20_000n : bal >= floor * 100n ? 15_000n
+    : bal >= floor * 10n ? 12_500n : bal >= floor ? 10_000n : 0n;
+  const want = (bal * mult) / 10_000n;
+  if (weight !== want) throw new Error(`weight ${weight} != ${want} (balance ${bal}, floor ${floor})`);
+  console.log(`dividends: floor ${ethers.formatEther(floor)} tokens, mode ${dmode}, ` +
+    `balance ${ethers.formatEther(bal)} -> weight ${ethers.formatEther(weight)} (${Number(mult) / 10_000}x)`);
+
   console.log(`treasury accrued: ${ethers.formatEther(await factory.feesAccrued(treasury))} ETH`);
   console.log("CURVE SMOKE OK");
 }
