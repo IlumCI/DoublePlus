@@ -244,4 +244,81 @@ describe("Venture bonding-curve launchpad (unit)", function () {
     expect(await erc.balanceOf(buyer1.address)).to.equal(0n);
     await expect(factory.connect(buyer1).refund(coin)).to.be.revertedWithCustomError(factory, "NothingToRefund");
   });
+
+  it("refunds are bounded by the raise's own escrow and cannot reach a sibling raise", async () => {
+    const [, creatorA, buyer1, buyer2, creatorB, buyer3] = await ethers.getSigners();
+    const { factory, tokenDeployer, weth } = await deployStack();
+    const wethAddr = await weth.getAddress();
+    const factoryAddr = await factory.getAddress();
+
+    // Two concurrent raises sharing one factory balance. B outlives A.
+    const coinA = await launch(factory, tokenDeployer, creatorA, wethAddr);
+    const coinB = await launch(factory, tokenDeployer, creatorB, wethAddr, {
+      raiseDurationSecs: 14 * DAY,
+    });
+    const ercA = await ethers.getContractAt("QuiverToken", coinA);
+
+    await (await factory.connect(buyer1).buy(coinA, { value: ethers.parseEther("0.35") })).wait();
+    await (await factory.connect(buyer2).buy(coinA, { value: ethers.parseEther("0.22") })).wait();
+    await (await factory.connect(buyer3).buy(coinB, { value: ethers.parseEther("0.41") })).wait();
+
+    const raisedA = (await factory.curveState(coinA)).raisedWei;
+    const raisedB = (await factory.curveState(coinB)).raisedWei;
+    // Every wei the factory holds is escrow attributable to one of the raises.
+    expect(await ethers.provider.getBalance(factoryAddr)).to.equal(raisedA + raisedB);
+
+    // Per-user ledgers sum to exactly that raise's total.
+    const spent1 = await factory.spentWei(coinA, buyer1.address);
+    const spent2 = await factory.spentWei(coinA, buyer2.address);
+    expect(spent1 + spent2).to.equal(raisedA);
+
+    await network.provider.send("evm_increaseTime", [3 * DAY]);
+    await network.provider.send("evm_mine");
+    await (await factory.abort(coinA)).wait();
+
+    // B is untouched by A's failure: still live, still unrefundable.
+    await expect(factory.abort(coinB)).to.be.revertedWithCustomError(factory, "CurveLive");
+    await expect(factory.connect(buyer3).refund(coinB)).to.be.revertedWithCustomError(factory, "NotAborted");
+
+    // A buyer of B has no claim on A's escrow.
+    await expect(factory.connect(buyer3).refund(coinA)).to.be.revertedWithCustomError(
+      factory,
+      "NothingToRefund",
+    );
+
+    let paidOut = 0n;
+    for (const [buyer, spent] of [[buyer1, spent1], [buyer2, spent2]] as const) {
+      const bal = await ercA.balanceOf(buyer.address);
+      await (await ercA.connect(buyer).approve(factoryAddr, bal)).wait();
+      const before = await ethers.provider.getBalance(buyer.address);
+      const rc = await (await factory.connect(buyer).refund(coinA)).wait();
+      const got = (await ethers.provider.getBalance(buyer.address)) - before + rc!.gasUsed * rc!.gasPrice;
+      expect(got).to.equal(spent);
+      paidOut += got;
+      // Second attempt pays nothing, even holding tokens bought elsewhere.
+      await expect(factory.connect(buyer).refund(coinA)).to.be.revertedWithCustomError(
+        factory,
+        "NothingToRefund",
+      );
+    }
+
+    // The aborted raise paid out exactly what it took in, and B's escrow is intact.
+    expect(paidOut).to.equal(raisedA);
+    expect(await ethers.provider.getBalance(factoryAddr)).to.equal(raisedB);
+  });
+
+  it("never books spend it cannot refund: a buy too small to mint reverts", async () => {
+    const [, creator, buyer1] = await ethers.getSigners();
+    const { factory, tokenDeployer, weth } = await deployStack();
+    const coin = await launch(factory, tokenDeployer, creator, await weth.getAddress());
+
+    // Below the cost of one whole token the quote rounds to zero. The buy must
+    // revert rather than credit spentWei against zero tokens, which would
+    // strand the ETH: refund() requires both sides to be non-zero.
+    await expect(factory.connect(buyer1).buy(coin, { value: 1n })).to.be.revertedWithCustomError(
+      factory,
+      "InvalidParams",
+    );
+    expect(await factory.spentWei(coin, buyer1.address)).to.equal(0n);
+  });
 });
