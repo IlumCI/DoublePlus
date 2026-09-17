@@ -9,12 +9,13 @@ import {
   type Fill, type PoolTrade, type Venture as VentureT,
 } from "./client";
 import { marketStats } from "./stats";
+import { profileLinks, useDexProfile, type DexProfile } from "./dexscreener";
 import { PriceChart, TradeTape, usePoolTrades } from "./Chart";
 import { refLink, storedRef } from "./referral";
 import { Donut, Legend, Ring, SplitBar, type Slice } from "./charts";
 import { usePageMeta } from "./seo";
-import { ago, BuySellStrength, Change, changePct, CopyButton, Countdown, CurveBar, Delta, fmtEth, fmtMcap, fmtTok,
-  fmtUsdV, Monogram, pct, short, StatCell, StatusBadge, useEthUsd, useTick } from "./ui";
+import { ago, BuySellStrength, Change, changePct, CopyButton, Countdown, CurveBar, Delta, DexBadge, fmtEth, fmtMcap,
+  fmtTok, fmtUsdV, Monogram, pct, short, StatCell, StatusBadge, useEthUsd, useTick } from "./ui";
 import { useWallet, errorText } from "../lib/useWallet";
 import { useUi } from "../store";
 import { env } from "../lib/env";
@@ -49,6 +50,7 @@ export function VenturePage() {
 
 function VentureBody({ v, fills, ethUsd }: { v: VentureT; fills: Fill[]; ethUsd: number }) {
   const trades = usePoolTrades(v);
+  const dex = useDexProfile(v.address);
   const [params, setParams] = useSearchParams();
   const fallbackTab: Tab = v.phase === "graduated" ? "trades" : "project";
   const tab = (params.get("tab") as Tab) || fallbackTab;
@@ -83,9 +85,9 @@ function VentureBody({ v, fills, ethUsd }: { v: VentureT; fills: Fill[]; ethUsd:
           {(v.meta.pitch || v.meta.description) && <p className="dp-oneliner">{v.meta.pitch || v.meta.description}</p>}
           <p className="dp-prov" style={{ margin: "4px 0 0" }}>
             created by <b>{short(v.creator)}</b> · {ago(v.createdAt)} ago
-            {v.meta.sector ? <> · {v.meta.sector}</> : null} · <StatusBadge v={v} />
+            {v.meta.sector ? <> · {v.meta.sector}</> : null} · <StatusBadge v={v} /> <DexBadge profile={dex} />
           </p>
-          <Socials meta={v.meta} />
+          <Socials meta={v.meta} dex={dex} />
         </div>
         <div className="dp-mcbig">
           <span className="dp-k">market cap</span><br />
@@ -126,6 +128,7 @@ function VentureBody({ v, fills, ethUsd }: { v: VentureT; fills: Fill[]; ethUsd:
           {v.phase === "failed" && <FailPanel v={v} />}
           {v.phase === "graduated" && <TradePanel v={v} />}
 
+          <DexPanel v={v} dex={dex} />
           <ContractCard v={v} />
           <WhoEarns v={v} />
           <ReferralChit />
@@ -138,15 +141,21 @@ function VentureBody({ v, fills, ethUsd }: { v: VentureT; fills: Fill[]; ethUsd:
 /** Pre-graduation: the curve itself is the chart. */
 /** The project's own channels. A trader checks these before anything else,
  *  so they sit with the name rather than buried in a tab. */
-function Socials({ meta }: { meta: VentureT["meta"] }) {
-  const links = SOCIAL_FIELDS
-    .map(([key, label]) => [label, meta[key]] as const)
-    .filter(([, href]) => typeof href === "string" && /^https?:\/\//i.test(href));
+function Socials({ meta, dex }: { meta: VentureT["meta"]; dex?: DexProfile }) {
+  const onChain: { label: string; url: string }[] = SOCIAL_FIELDS
+    .map(([key, label]) => ({ label: label as string, url: meta[key] ?? "" }))
+    .filter((l) => /^https?:\/\//i.test(l.url));
+  // A paid DEX Screener profile often carries a channel the founder never put
+  // in the on-chain metadata. Show it, but never shadow the on-chain value:
+  // that one the contract vouches for, this one a third party holds.
+  const have = new Set(onChain.map((l) => l.url.toLowerCase().replace(/\/+$/, "")));
+  const extra = profileLinks(dex?.info ?? null).filter((l) => !have.has(l.url.toLowerCase().replace(/\/+$/, "")));
+  const links = [...onChain, ...extra];
   if (links.length === 0) return null;
   return (
     <div className="dp-socials">
-      {links.map(([label, href]) => (
-        <a key={label} href={href as string} target="_blank" rel="noreferrer noopener">{label} ↗</a>
+      {links.map(({ label, url }, i) => (
+        <a key={`${label}-${i}`} href={url} target="_blank" rel="noreferrer noopener">{label} ↗</a>
       ))}
     </div>
   );
@@ -304,6 +313,59 @@ function TermsPane({ v }: { v: VentureT }) {
 
 /** The contract itself, as a spec sheet. Immutability is the headline: these
  *  numbers were fixed at deployment and there is no key that edits them. */
+/** DEX Screener presence. Whether a token's info there is paid for is one of
+ *  the first things a trader checks, because an unpaid listing on the venue
+ *  everyone browses shows up as a nameless grey row. This states the status,
+ *  names the evidence behind it, and refuses to dress it up as a safety
+ *  rating — paid info proves spend, nothing more. */
+function DexPanel({ v, dex }: { v: VentureT; dex: DexProfile }) {
+  // Pre-graduation there is no pair to index, so there is nothing to report.
+  if (v.phase !== "graduated" && dex.state === "unlisted") return null;
+  if (dex.state === "unknown") return null;
+
+  // The badge already says "dex paid", so the note carries what it cannot:
+  // when, and on what evidence. Repeating the word would be the same fact
+  // twice, six pixels apart.
+  const note = dex.state === "paid"
+    ? dex.paidAt
+      ? `since ${new Date(dex.paidAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`
+      : "logo, banner and links are live there"
+    : dex.state === "pending" ? "order placed, awaiting approval"
+    : dex.state === "unpaid" ? "listed, no paid info"
+    : "not indexed yet";
+
+  return (
+    <div className="dp-panel" style={{ marginTop: 12 }}>
+      <div className="dp-phead"><span>DEX Screener</span>
+        {dex.url && <a href={dex.url} target="_blank" rel="noreferrer noopener">pair ↗</a>}
+      </div>
+      <div className="dp-pbody">
+        <div className="dp-dexrow">
+          <DexBadge profile={dex} title={false} />
+          <span className="dp-dexnote">{note}</span>
+        </div>
+        {dex.state === "paid" && (
+          <p className="dp-spec-note" style={{ marginTop: 10 }}>
+            Someone paid for this token&apos;s info on DEX Screener, so its logo, banner and links
+            render there. That is proof of spend, not of safety.
+          </p>
+        )}
+        {dex.state === "unpaid" && (
+          <p className="dp-spec-note" style={{ marginTop: 10 }}>
+            No paid token info: on DEX Screener this trades as an unnamed row. Anyone can buy the
+            profile — doubleplus does not sell it and takes no cut.
+          </p>
+        )}
+        {dex.state === "unlisted" && (
+          <p className="dp-spec-note" style={{ marginTop: 10 }}>
+            DEX Screener indexes pools, not curves. The pair appears after graduation.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ContractCard({ v }: { v: VentureT }) {
   const vested = v.vesting !== "0x0000000000000000000000000000000000000000";
   const deployed = new Date(v.createdAt * 1000).toLocaleDateString("en-GB", {

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { TOTAL_SUPPLY, VENTURE, type Venture } from "./client";
+import type { DexProfile } from "./dexscreener";
 
 /** Flag-on-a-block mark: a raised founder flag. */
 export function Flag({ size = 22 }: { size?: number }) {
@@ -264,4 +265,26 @@ export function BuySellStrength({ buyWei, sellWei, buys, sells }: {
       </div>
     </div>
   );
+}
+
+
+/** DEX Screener profile status. Traders scan for this mark before they read a
+ *  word of the pitch: a paid profile means someone spent money to be findable.
+ *  It is a spend signal, not a safety rating, so the copy never says "verified".
+ *  `unlisted` and `unknown` render nothing — a raise still on the curve has no
+ *  DEX Screener page to have paid for, and silence beats a wrong answer. */
+export function DexBadge({ profile, title }: { profile: DexProfile; title?: boolean }) {
+  const { state } = profile;
+  if (state === "unlisted" || state === "unknown") return null;
+  const cls = state === "paid" ? "dp-dexpaid" : state === "pending" ? "dp-dexpend" : "dp-dexunpaid";
+  const label = state === "paid" ? "dex paid" : state === "pending" ? "dex pending" : "dex unpaid";
+  const tip = state === "paid"
+    ? `DEX Screener token info is paid for${profile.paidAt ? ` (${new Date(profile.paidAt).toISOString().slice(0, 10)})` : ""} — logo, banner and links are live on their pair page. Proof of spend, not of safety.`
+    : state === "pending"
+      ? "A DEX Screener profile order is placed but not approved yet."
+      : "Listed on DEX Screener with no paid token info: no logo, banner or links there.";
+  const badge = <span className={`dp-badge ${cls}`} title={title === false ? undefined : tip}>{label}</span>;
+  return profile.url
+    ? <a href={profile.url} target="_blank" rel="noreferrer noopener" style={{ textDecoration: "none" }}>{badge}</a>
+    : badge;
 }

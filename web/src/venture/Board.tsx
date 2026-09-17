@@ -2,16 +2,18 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { type Venture } from "./client";
+import { useDexProfiles, type DexProfile } from "./dexscreener";
 import { usePageMeta } from "./seo";
-import { ago, CardSkeletons, CurveBar, fmtEth, fmtMcap, fmtUsdV, Monogram, pct, short, StatusBadge, useEthUsd } from "./ui";
+import { ago, CardSkeletons, CurveBar, DexBadge, fmtEth, fmtMcap, fmtUsdV, Monogram, pct, short, StatusBadge, useEthUsd } from "./ui";
 import { useVentures } from "./useVentures";
 
-type Filter = "all" | "research" | "startup" | "raising" | "soon" | "graduated" | "failed";
+type Filter = "all" | "research" | "startup" | "raising" | "soon" | "graduated" | "dexpaid" | "failed";
 type Sort = "new" | "mcap" | "funded";
 
 const FILTERS: [Filter, string][] = [
   ["all", "All"], ["startup", "Startups"], ["research", "Research"],
-  ["raising", "Raising"], ["soon", "About to graduate"], ["graduated", "Trading"], ["failed", "Refunding"],
+  ["raising", "Raising"], ["soon", "About to graduate"], ["graduated", "Trading"],
+  ["dexpaid", "DEX paid"], ["failed", "Refunding"],
 ];
 const SORTS: [Sort, string][] = [["new", "Newest"], ["mcap", "Market cap"], ["funded", "% funded"]];
 
@@ -21,6 +23,12 @@ const isResearch = (v: Venture) => /research|science|lab|open.?source|academic/i
 export function Board() {
   const { ventures, error, retry } = useVentures();
   const ethUsd = useEthUsd();
+  // Only graduated ventures have a DEX Screener pair, and the bulk endpoint
+  // takes 30 addresses a call, so the whole board costs one or two requests.
+  const dexTokens = useMemo(
+    () => (ventures ?? []).filter((v) => v.phase === "graduated").map((v) => v.address),
+    [ventures]);
+  const dex = useDexProfiles(dexTokens);
   const [params, setParams] = useSearchParams();
   usePageMeta(null);
 
@@ -41,6 +49,7 @@ export function Board() {
     if (filter === "raising") list = list.filter((v) => v.phase === "raising");
     if (filter === "soon") list = list.filter((v) => v.phase === "expired" || (v.phase === "raising" && pct(v.raisedWei, v.targetRaiseWei) >= 85));
     if (filter === "graduated") list = list.filter((v) => v.phase === "graduated");
+    if (filter === "dexpaid") list = list.filter((v) => dex.get(v.address.toLowerCase())?.state === "paid");
     if (filter === "failed") list = list.filter((v) => v.phase === "failed");
     const needle = q.trim().toLowerCase();
     if (needle) {
@@ -53,7 +62,7 @@ export function Board() {
     else if (sort === "funded") list.sort((a, b) => pct(b.raisedWei, b.targetRaiseWei) - pct(a.raisedWei, a.targetRaiseWei));
     else list.sort((a, b) => b.createdAt - a.createdAt);
     return list;
-  }, [ventures, filter, sort, q]);
+  }, [ventures, filter, sort, q, dex]);
 
   return (
     <div className="dp-shell" style={{ paddingBottom: 60 }}>
@@ -104,7 +113,7 @@ export function Board() {
       ) : shown.length === 0 ? (
         <EmptyBoard any={ventures.length > 0} onClear={() => setParams(new URLSearchParams(), { replace: true })} />
       ) : (
-        <div className="dp-grid">{shown.map((v) => <TokenCard key={v.address} v={v} ethUsd={ethUsd} />)}</div>
+        <div className="dp-grid">{shown.map((v) => <TokenCard key={v.address} v={v} ethUsd={ethUsd} dex={dex.get(v.address.toLowerCase())} />)}</div>
       )}
     </div>
   );
@@ -150,7 +159,7 @@ function Proof({ ventures, ethUsd }: { ventures: Venture[] | null; ethUsd: numbe
   );
 }
 
-function TokenCard({ v, ethUsd }: { v: Venture; ethUsd: number }) {
+function TokenCard({ v, ethUsd, dex }: { v: Venture; ethUsd: number; dex?: DexProfile }) {
   const funded = pct(v.raisedWei, v.targetRaiseWei);
   const pitch = v.meta.pitch || v.meta.description || "";
   const flash = useFlashOnChange(v.raisedWei);
@@ -163,7 +172,10 @@ function TokenCard({ v, ethUsd }: { v: Venture; ethUsd: number }) {
           <h3>{v.name}</h3>
           <span className="dp-tick">${v.symbol}{v.meta.sector ? ` · ${v.meta.sector}` : ""}</span>
         </div>
-        <span style={{ marginLeft: "auto", alignSelf: "flex-start" }}><StatusBadge v={v} /></span>
+        <span style={{ marginLeft: "auto", alignSelf: "flex-start", display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          {dex && <DexBadge profile={dex} />}
+          <StatusBadge v={v} />
+        </span>
       </div>
 
       {pitch && <p className="dp-pitch">{pitch}</p>}

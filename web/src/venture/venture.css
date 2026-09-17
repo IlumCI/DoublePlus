@@ -205,6 +205,22 @@ p { text-wrap: pretty; }
 .dp-badge.dp-dead { color: var(--down); border-color: var(--down); }
 .dp-badge.dp-soon { color: var(--paper); border-color: var(--paper); animation: pulse 1.6s infinite; }
 .dp-badge.dp-open { color: #8fb4e3; border-color: #8fb4e3; }
+
+/* DEX Screener profile status. Paid is filled, not outlined: it is the one
+   badge a trader hunts for, so it reads as a stamp rather than a label.
+   Unpaid stays deliberately quiet — an absent profile is information, not an
+   accusation, and the row must not shout it. */
+.dp-badge.dp-dexpaid { color: #10151a; border-color: #d8b25e; background: #d8b25e; font-weight: 600; }
+.dp-badge.dp-dexpend { color: #d8b25e; border-color: color-mix(in oklab, #d8b25e 55%, transparent); }
+.dp-badge.dp-dexunpaid { color: var(--faint); border-color: var(--line-2); }
+a:hover > .dp-badge.dp-dexpaid { background: color-mix(in oklab, #d8b25e 85%, #fff); }
+a:hover > .dp-badge.dp-dexpend, a:hover > .dp-badge.dp-dexunpaid { color: var(--text); border-color: var(--line-2); }
+
+/* the DEX Screener panel on a token page: status and the evidence behind it.
+   The profile's own links are merged into the header's link row instead of
+   repeated here — the same two chips twice on one screen is not information. */
+.dp-dexrow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dp-dexrow .dp-dexnote { font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
 @keyframes pulse { 50% { opacity: .45; } }
 @media (prefers-reduced-motion: reduce) { .dp-badge.dp-soon, .dp-tcard.dp-bump { animation: none; } }
 
