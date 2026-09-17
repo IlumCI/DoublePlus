@@ -188,6 +188,8 @@ contract RhFactory is Ownable, ReentrancyGuard, IUnlockCallback {
             address(this),
             p.taxBps,
             p.pair
+        ,
+            0, 0 // dividends: linear, no minimum holding
         );
         token = address(qt);
         if (uint160(token) & 0xffff != 0x4663) revert BadVanity();

@@ -13,6 +13,10 @@ contract VentureTokenDeployer {
     address public immutable factory;
 
     error OnlyFactory();
+    error FloorTooHigh();
+    error BadDividendPolicy();
+
+    uint256 private constant TOTAL_SUPPLY_WHOLE = 1_000_000_000;
 
     constructor(address factory_) {
         factory = factory_;
@@ -26,11 +30,25 @@ contract VentureTokenDeployer {
         uint256 supply_,
         address creator_,
         uint16 taxBps_,
-        address rewardToken_
+        address rewardToken_,
+        uint256 minHoldForDividends_,
+        uint8 dividendMode_,
+        uint16 dividendBps_
     ) external returns (address token) {
         if (msg.sender != factory) revert OnlyFactory();
+        // The floor arrives in whole tokens and is scaled here; cap it at 1%
+        // of supply so a launch cannot price every ordinary holder out of its
+        // own dividends.
+        if (minHoldForDividends_ > TOTAL_SUPPLY_WHOLE / 100) revert FloorTooHigh();
+        // A floor or a ladder is meaningless when no fee reaches holders, and a
+        // ladder needs a floor to be a multiple of.
+        if (dividendBps_ == 0 && (minHoldForDividends_ != 0 || dividendMode_ != 0)) revert BadDividendPolicy();
+        if (dividendMode_ == 1 && minHoldForDividends_ == 0) revert BadDividendPolicy();
         token = address(
-            new QuiverToken{salt: salt}(name_, symbol_, metadataURI_, supply_, creator_, factory, taxBps_, rewardToken_)
+            new QuiverToken{salt: salt}(
+                name_, symbol_, metadataURI_, supply_, creator_, factory, taxBps_, rewardToken_,
+                minHoldForDividends_ * 1e18, dividendMode_
+            )
         );
     }
 

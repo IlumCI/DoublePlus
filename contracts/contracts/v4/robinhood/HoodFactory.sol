@@ -177,6 +177,8 @@ contract HoodFactory is Ownable, ReentrancyGuard, IUnlockCallback {
 
         QuiverToken qt = new QuiverToken{salt: salt}(
             p.name, p.symbol, p.metadataURI, TOTAL_SUPPLY, msg.sender, address(this), p.taxBps, p.pair
+        ,
+            0, 0 // dividends: linear, no minimum holding
         );
         token = address(qt);
         if (token == p.pair) revert BadPair();

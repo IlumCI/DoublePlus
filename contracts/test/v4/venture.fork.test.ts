@@ -73,11 +73,11 @@ async function launch(factory: any, tokenDeployer: any, signer: any, pair: strin
     devBps: 2500, dividendBps: 2500, liquidityBps: 2500, mmBps: 2500,
     ethUsdPrice8: ETH_USD_8, targetRaiseWei: TARGET, raiseDurationSecs: 3 * DAY,
     maxBuyWei: TARGET, founderRaiseBps: 3000, founderSupplyBps: 1000,
-    vestingSecs: 180 * DAY, mode: 0, v3Path: "0x",
+    vestingSecs: 180 * DAY, mode: 0, minHoldForDividends: 0, dividendMode: 0, v3Path: "0x",
   };
   const args = ethers.AbiCoder.defaultAbiCoder().encode(
-    ["string", "string", "string", "uint256", "address", "address", "uint16", "address"],
-    ["Venture", "VNT", "", 10n ** 27n, signer.address, await factory.getAddress(), 200, pair],
+    ["string", "string", "string", "uint256", "address", "address", "uint16", "address", "uint256", "uint8"],
+    ["Venture", "VNT", "", 10n ** 27n, signer.address, await factory.getAddress(), 200, pair, 0n, 0],
   );
   const hash = ethers.keccak256(ethers.concat([Token.bytecode, args]));
   const depAddr = await tokenDeployer.getAddress();
@@ -222,11 +222,11 @@ describe("Venture bonding-curve launchpad (fork)", function () {
       devBps: 2500, dividendBps: 5000, liquidityBps: 2500, mmBps: 0,
       ethUsdPrice8: ETH_USD_8, targetRaiseWei: TARGET, raiseDurationSecs: 3 * DAY,
       maxBuyWei: TARGET, founderRaiseBps: 2000, founderSupplyBps: 0,
-      vestingSecs: 0, mode: 0, v3Path: buyPath,
+      vestingSecs: 0, mode: 0, minHoldForDividends: 0, dividendMode: 0, v3Path: buyPath,
     };
     const args = ethers.AbiCoder.defaultAbiCoder().encode(
-      ["string", "string", "string", "uint256", "address", "address", "uint16", "address"],
-      ["Stock Venture", "SVNT", "", 10n ** 27n, founder.address, await factory.getAddress(), 200, stock.address],
+      ["string", "string", "string", "uint256", "address", "address", "uint16", "address", "uint256", "uint8"],
+      ["Stock Venture", "SVNT", "", 10n ** 27n, founder.address, await factory.getAddress(), 200, stock.address, 0n, 0],
     );
     const hash = ethers.keccak256(ethers.concat([Token.bytecode, args]));
     const depAddr = await tokenDeployer.getAddress();

@@ -193,6 +193,8 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         uint16 founderSupplyBps; // 0..1500: vested founder allocation
         uint32 vestingSecs;      // required when founderSupplyBps > 0
         RaiseMode mode;          // Guaranteed (AON raise) or Open (free curve)
+        uint256 minHoldForDividends; // whole-token floor to earn dividends; 0 = everyone
+        uint8 dividendMode;      // 0 linear, 1 tiered (bigger holdings earn more per token)
         bytes v3Path;            // WETH -> ... -> pair route for finalize
     }
 
@@ -392,8 +394,11 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         uint256 maxBuy = open ? type(uint256).max : (p.maxBuyWei == 0 ? target / 50 : p.maxBuyWei);
         if (maxBuy < target / 200) revert InvalidParams(); // cap can't make the raise impossible
 
+        // Dividend-policy coherence is checked by the deployer: the factory is
+        // at its bytecode ceiling and the deployer has room to spare.
         token = tokenDeployer.deployToken(
-            salt, p.name, p.symbol, p.metadataURI, TOTAL_SUPPLY, msg.sender, p.buyTaxBps, p.pair
+            salt, p.name, p.symbol, p.metadataURI, TOTAL_SUPPLY, msg.sender, p.buyTaxBps, p.pair,
+            p.minHoldForDividends, p.dividendMode, p.dividendBps
         );
         if (uint160(token) & 0xffff != 0x4663) revert BadVanity();
         if (token == p.pair) revert InvalidParams();

@@ -131,6 +131,8 @@ export const factoryAbi = [
           { name: "founderSupplyBps", type: "uint16" },
           { name: "vestingSecs", type: "uint32" },
           { name: "mode", type: "uint8" },
+          { name: "minHoldForDividends", type: "uint256" },
+          { name: "dividendMode", type: "uint8" },
           { name: "v3Path", type: "bytes" },
         ],
       },

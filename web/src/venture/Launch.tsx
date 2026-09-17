@@ -34,7 +34,9 @@ export function LaunchVenture() {
     name: "", symbol: "", pitch: "", sector: "", banner: "",
     website: "", twitter: "", telegram: "", discord: "", github: "", docs: "",
   });
-  const [moreLinks, setMoreLinks] = useState(false);
+  const [longDesc, setLongDesc] = useState("");
+  const [minHoldInput, setMinHoldInput] = useState("10000");
+  const [tiered, setTiered] = useState(false);
   const [target, setTarget] = useState("");
   const [days, setDays] = useState(7);
   const [founderCut, setFounderCut] = useState(20); // % of raise
@@ -119,7 +121,7 @@ export function LaunchVenture() {
       }
 
       const metadataURI = JSON.stringify({
-        description: form.pitch.trim(),
+        description: (longDesc.trim() || form.pitch.trim()),
         pitch: form.pitch.trim(),
         sector: form.sector.trim(),
         logo: logoData,
@@ -141,8 +143,14 @@ export function LaunchVenture() {
         [
           { type: "string" }, { type: "string" }, { type: "string" }, { type: "uint256" },
           { type: "address" }, { type: "address" }, { type: "uint16" }, { type: "address" },
+          { type: "uint256" }, { type: "uint8" },
         ],
-        [form.name.trim(), symbol, metadataURI, TOTAL_SUPPLY, me, VENTURE.factory, buyTaxBps, pair],
+        [
+          form.name.trim(), symbol, metadataURI, TOTAL_SUPPLY, me, VENTURE.factory, buyTaxBps, pair,
+          // The deployer scales the whole-token floor; the salt must be mined
+          // against the value the constructor actually receives.
+          BigInt(minHold) * 10n ** 18n, divMode,
+        ],
       );
       const initCodeHash = keccak256(concatHex([QUIVER_TOKEN_BYTECODE as `0x${string}`, args]));
       let salt: `0x${string}` | null = null;
@@ -181,6 +189,8 @@ export function LaunchVenture() {
             founderSupplyBps: founderStake * 100,
             vestingSecs: founderStake > 0 ? vestDays * 86_400 : 0,
             mode,
+            minHoldForDividends: BigInt(minHold),
+            dividendMode: divMode,
             v3Path,
           },
           salt,
@@ -255,9 +265,18 @@ export function LaunchVenture() {
       .catch(() => undefined);
   }, []);
 
+  // The contract refuses a dividend floor or ladder when no fee reaches
+  // holders, and refuses a ladder with no floor to be a multiple of.
+  const paysDividends = alloc.dividends > 0;
+  const MAX_HOLD = 10_000_000; // the deployer's cap: 1% of supply
+  const minHold = paysDividends
+    ? Math.max(0, Math.min(MAX_HOLD, Math.round(Number(minHoldInput) || 0)))
+    : 0;
+  const divMode: 0 | 1 = paysDividends && tiered && minHold > 0 ? 1 : 0;
   const cutEth = Number(founderCutEth) / 1e18;
   const avgTax = (buyTaxPct + sellTaxPct) / 2;
   const stockPick = STOCKS.find((s) => s.address === stock);
+  const payoutAsset = pairMode === "stock" ? (stockPick?.symbol ?? "the quote token") : "ETH";
 
   const feeSlices: Slice[] = [
     { label: "You", value: alloc.dev, note: "paid on every trade, forever" },
@@ -325,36 +344,35 @@ export function LaunchVenture() {
                   placeholder="Memory-safety fuzzing lab for the mainline kernel. All findings published open." required />
                 <span className="dp-hint">This is the whole pitch on the board. Say what it is and who it is for — skip the adjectives.</span>
               </div>
+              <div className="dp-field"><label htmlFor="v-long">The full story <span className="dp-agate">· optional</span></label>
+                <textarea id="v-long" value={longDesc} onChange={(e) => setLongDesc(e.target.value)} rows={5}
+                  placeholder="What you are building, who it is for, and what the money buys." />
+                <span className="dp-hint">Shown on your project page under the one-liner. The one-liner sells the
+                  click; this is what someone reads before they commit.</span></div>
+
+              <p className="dp-sec" style={{ marginTop: 18 }}>Links and media
+                <span className="dp-agate">all optional — traders check these first</span></p>
+              <div className="dp-field"><label htmlFor="v-sector">Sector</label>
+                <input id="v-sector" value={form.sector} onChange={set("sector")} placeholder="research · open source" />
+                <span className="dp-hint">Include “research” to file under Research.</span></div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0 16px" }}>
-                <div className="dp-field"><label htmlFor="v-sector">Sector</label>
-                  <input id="v-sector" value={form.sector} onChange={set("sector")} placeholder="research · open source" />
-                  <span className="dp-hint">Include “research” to file under Research.</span></div>
                 <div className="dp-field"><label htmlFor="v-site">Website</label>
                   <input id="v-site" value={form.website} onChange={set("website")} placeholder="https://" /></div>
                 <div className="dp-field"><label htmlFor="v-x">X / Twitter</label>
                   <input id="v-x" value={form.twitter} onChange={set("twitter")} placeholder="https://x.com/…" /></div>
+                <div className="dp-field"><label htmlFor="v-tg">Telegram</label>
+                  <input id="v-tg" value={form.telegram} onChange={set("telegram")} placeholder="https://t.me/…" /></div>
+                <div className="dp-field"><label htmlFor="v-dc">Discord</label>
+                  <input id="v-dc" value={form.discord} onChange={set("discord")} placeholder="https://discord.gg/…" /></div>
+                <div className="dp-field"><label htmlFor="v-gh">GitHub</label>
+                  <input id="v-gh" value={form.github} onChange={set("github")} placeholder="https://github.com/…" /></div>
+                <div className="dp-field"><label htmlFor="v-docs">Docs</label>
+                  <input id="v-docs" value={form.docs} onChange={set("docs")} placeholder="https://" /></div>
               </div>
-              <button type="button" className="dp-linkbtn" onClick={() => setMoreLinks(!moreLinks)}>
-                {moreLinks ? "fewer links" : "telegram, discord, github, docs, banner"}
-              </button>
-              {moreLinks && (
-                <div className="dp-expert">
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
-                    <div className="dp-field"><label htmlFor="v-tg">Telegram</label>
-                      <input id="v-tg" value={form.telegram} onChange={set("telegram")} placeholder="https://t.me/…" /></div>
-                    <div className="dp-field"><label htmlFor="v-dc">Discord</label>
-                      <input id="v-dc" value={form.discord} onChange={set("discord")} placeholder="https://discord.gg/…" /></div>
-                    <div className="dp-field"><label htmlFor="v-gh">GitHub</label>
-                      <input id="v-gh" value={form.github} onChange={set("github")} placeholder="https://github.com/…" /></div>
-                    <div className="dp-field"><label htmlFor="v-docs">Docs / whitepaper</label>
-                      <input id="v-docs" value={form.docs} onChange={set("docs")} placeholder="https://" /></div>
-                  </div>
-                  <div className="dp-field"><label htmlFor="v-banner">Cover image URL</label>
-                    <input id="v-banner" value={form.banner} onChange={set("banner")} placeholder="https://…/cover.jpg" />
-                    <span className="dp-hint">Sits behind your header, 1500×500 or thereabouts. A link, not an
-                      upload — the logo already rides on-chain and a cover would not fit beside it.</span></div>
-                </div>
-              )}
+              <div className="dp-field"><label htmlFor="v-banner">Cover image URL</label>
+                <input id="v-banner" value={form.banner} onChange={set("banner")} placeholder="https://…/cover.jpg" />
+                <span className="dp-hint">Sits behind your header, roughly 1500×500. A link rather than an upload:
+                  the logo already rides on-chain and a cover would not fit beside it.</span></div>
             </div>
           )}
 
@@ -427,19 +445,6 @@ export function LaunchVenture() {
                       <input id="v-cap" type="range" min={1} max={100} value={capPct} onChange={(e) => setCapPct(Number(e.target.value))} />
                       <span className="dp-hint">Stops one wallet taking the whole round and controlling your market
                         afterwards. Low caps spread the cap table; high caps fill faster.</span></div>
-                    {STOCK_PAIRS_ENABLED && (
-                      <div className="dp-field"><label htmlFor="v-pair">Quote asset</label>
-                        <select id="v-pair" value={pairMode} onChange={(e) => setPairMode(e.target.value as "eth" | "stock")}>
-                          <option value="eth">ETH — the default market</option>
-                          <option value="stock">A tokenized stock — holders earn it instead</option>
-                        </select>
-                        {pairMode === "stock" && (
-                          <select value={stock} onChange={(e) => setStock(e.target.value)} style={{ marginTop: 8 }}>
-                            {STOCKS.map((s) => <option key={s.address} value={s.address}>{s.symbol} — {s.name}</option>)}
-                          </select>
-                        )}
-                      </div>
-                    )}
                   </div>
                 </div>
               )}
@@ -520,6 +525,60 @@ export function LaunchVenture() {
                   </div>
                 </div>
               )}
+
+              {paysDividends && (
+                <>
+                  <p className="dp-sec" style={{ marginTop: 20 }}>Dividends
+                    <span className="dp-agate">{alloc.dividends}% of the fee goes to holders</span></p>
+
+                  {STOCK_PAIRS_ENABLED ? (
+                    <div className="dp-field"><label htmlFor="v-payout">Paid out in</label>
+                      <select id="v-payout" value={pairMode} onChange={(e) => setPairMode(e.target.value as "eth" | "stock")}>
+                        <option value="eth">ETH — the default market</option>
+                        <option value="stock">A tokenized stock</option>
+                      </select>
+                      {pairMode === "stock" && (
+                        <select value={stock} onChange={(e) => setStock(e.target.value)} style={{ marginTop: 8 }}>
+                          {STOCKS.map((st) => <option key={st.address} value={st.address}>{st.symbol} — {st.name}</option>)}
+                        </select>
+                      )}
+                      <span className="dp-hint">This is also your market's quote asset: holders are paid in whatever
+                        your token trades against.</span></div>
+                  ) : (
+                    <p className="dp-hint" style={{ margin: "0 0 14px" }}>
+                      Paid out in <b className="dp-up">ETH</b>, your market's quote asset.
+                    </p>
+                  )}
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 22px" }}>
+                    <div className="dp-field">
+                      <label htmlFor="v-minhold">Minimum ${(form.symbol || "TOKEN").toUpperCase()} to earn dividends</label>
+                      <input id="v-minhold" inputMode="numeric" value={minHoldInput}
+                        onChange={(e) => setMinHoldInput(e.target.value.replace(/[^0-9]/g, ""))} placeholder="10000" />
+                      <span className="dp-hint">
+                        {minHold === 0
+                          ? "Every holder earns, however small. Dust wallets cost gas to pay."
+                          : `Hold at least ${minHold.toLocaleString("en-US")} ${(form.symbol || "TOKEN").toUpperCase()} to receive anything. What the wallets below the line would have earned goes to the holders above it.`}
+                      </span>
+                    </div>
+                    <div className="dp-field">
+                      <label htmlFor="v-tiered">Reward bigger holders more</label>
+                      <select id="v-tiered" value={tiered ? "on" : "off"} onChange={(e) => setTiered(e.target.value === "on")}
+                        disabled={minHold === 0}>
+                        <option value="off">Flat — every token earns the same</option>
+                        <option value="on">Tiered — a larger stake earns more per token</option>
+                      </select>
+                      <span className="dp-hint">
+                        {minHold === 0
+                          ? "Needs a minimum to be a multiple of. Set one first."
+                          : divMode === 1
+                          ? `10x the minimum earns 1.25x per token, 100x earns 1.5x, 1000x earns 2x — the cap. Splitting a balance across wallets drops the multiplier, so it never pays to game.`
+                          : "Turn on to pay a larger stake more per token, up to 2x."}
+                      </span>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           )}
 
@@ -530,12 +589,25 @@ export function LaunchVenture() {
               <div className="dp-sheet" style={{ maxWidth: "none" }}>
                 <p className="dp-sec">{form.name || "Your project"} (${(form.symbol || "TICK").toUpperCase()})</p>
                 <dl>
-                  <dt>Raising</dt><dd>{target || "—"} ETH in {days} days{targetUsd > 0 ? ` (~${fmtUsdV(targetUsd)})` : ""}</dd>
-                  <dt>You take</dt><dd>{founderCut}% of the raise{cutEth > 0 ? ` — ${cutEth.toFixed(4)} ETH` : ""}, on success only</dd>
+                  <dt>Raise</dt><dd>{open
+                    ? `open curve — graduates at ${chain ? (Number(chain.grad) / 1e18).toFixed(2) : "—"} ETH, no deadline`
+                    : `${target || "—"} ETH in ${days} days${targetUsd > 0 ? ` (~${fmtUsdV(targetUsd)})` : ""}`}</dd>
+                  {!open && <><dt>You take</dt><dd>{founderCut}% of the raise{cutEth > 0 ? ` — ${cutEth.toFixed(4)} ETH` : ""}, on success only</dd></>}
                   <dt>Your stake</dt><dd>{founderStake}% of supply, vesting {vestDays} days from graduation</dd>
-                  <dt>Per-wallet cap</dt><dd>{capPct}% of target</dd>
+                  {!open && <><dt>Per-wallet cap</dt><dd>{capPct}% of target</dd></>}
                   <dt>Trading fee</dt><dd>{buyTaxPct}% buy / {sellTaxPct}% sell</dd>
                   <dt>Fee split</dt><dd>dev {alloc.dev} · holders {alloc.dividends} · liquidity {alloc.liquidity} · market-making {alloc.mm}</dd>
+                  <dt>Dividends</dt><dd>{paysDividends
+                    ? `${alloc.dividends}% of the fee, paid in ${payoutAsset}${minHold > 0
+                        ? `, to wallets holding ${minHold.toLocaleString("en-US")}+ $${(form.symbol || "TICK").toUpperCase()}`
+                        : ", to every holder"}${divMode === 1 ? ", tiered up to 2x for larger stakes" : ""}`
+                    : "none — no fee routed to holders"}</dd>
+                  <dt>Story</dt><dd>{form.pitch.trim() || "—"}{longDesc.trim() ? " · full description attached" : ""}</dd>
+                  <dt>Links</dt><dd>{[
+                    ["logo", !!logoData], ["cover", !!form.banner.trim()], ["website", !!form.website.trim()],
+                    ["X", !!form.twitter.trim()], ["telegram", !!form.telegram.trim()], ["discord", !!form.discord.trim()],
+                    ["github", !!form.github.trim()], ["docs", !!form.docs.trim()],
+                  ].filter(([, on]) => on).map(([k]) => k).join(" · ") || "none attached"}</dd>
                   <dt>Protocol fee</dt><dd>{(VENTURE.platformFeeBps / 100).toFixed(2)}% per trade, {VENTURE.refShareBps / 100}% of it to referrers</dd>
                 </dl>
               </div>
@@ -594,7 +666,7 @@ export function LaunchVenture() {
             </div>
             <div className="dp-prov">
               <span>by <b>you</b> · just now</span>
-              <span>{open ? "fees only" : `founder takes ${founderCut}%`}</span>
+              <span>{paysDividends ? `holders earn ${alloc.dividends}%` : open ? "fees only" : `founder takes ${founderCut}%`}</span>
             </div>
           </div>
 
@@ -627,7 +699,21 @@ export function LaunchVenture() {
                 ? <p>Early buyers pay less, so momentum builds itself. An open curve lives or dies on attention:
                     there is no deadline forcing the issue, and no refund if it stalls.</p>
                 : <p>Early backers pay less, so momentum builds itself. All-or-nothing: ask for a number you can hit.</p>)}
-              {step === 2 && <p>This fee runs forever. More to holders, they hold. More to you, more runway.</p>}
+              {step === 2 && (
+                <>
+                  <p>This fee runs forever. More to holders, they hold. More to you, more runway.</p>
+                  {paysDividends && (
+                    <p style={{ marginTop: 8 }}>
+                      Holders are paid in <b className="dp-up">{payoutAsset}</b>
+                      {minHold > 0
+                        ? <> once they hold <b className="dp-up">{minHold.toLocaleString("en-US")} ${(form.symbol || "TOKEN").toUpperCase()}</b>. Below that, nothing —
+                          and that forfeited share raises everyone else's.</>
+                        : <>, however little they hold.</>}
+                      {divMode === 1 && <> A stake 1000x the minimum earns double per token.</>}
+                    </p>
+                  )}
+                </>
+              )}
               {step === 3 && <p>Last look. The contract enforces every number here, and nobody can edit it later.</p>}
             </div>
           </div>

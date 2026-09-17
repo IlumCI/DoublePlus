@@ -10,7 +10,7 @@ const DAY = 86_400;
 async function mineSalt(tokenDeployer: any, args: any[]) {
   const Token = await ethers.getContractFactory("QuiverToken");
   const encoded = ethers.AbiCoder.defaultAbiCoder().encode(
-    ["string", "string", "string", "uint256", "address", "address", "uint16", "address"], args,
+    ["string", "string", "string", "uint256", "address", "address", "uint16", "address", "uint256", "uint8"], args,
   );
   const hash = ethers.keccak256(ethers.concat([Token.bytecode, encoded]));
   const depAddr = await tokenDeployer.getAddress();
@@ -59,11 +59,12 @@ async function main() {
     devWallet: ethers.ZeroAddress, devBps: 4000, dividendBps: 3000, liquidityBps: 1500, mmBps: 1500,
     ethUsdPrice8: ETH_USD_8, targetRaiseWei: ethers.parseEther("5"), raiseDurationSecs: 7 * DAY,
     maxBuyWei: ethers.parseEther("5"), founderRaiseBps: 2000, founderSupplyBps: 1000,
-    vestingSecs: 365 * DAY, mode: 0, v3Path: "0x",
+    vestingSecs: 365 * DAY, mode: 0, minHoldForDividends: 0, dividendMode: 0, v3Path: "0x",
   };
   const salt = await mineSalt(tokenDeployer, [
     params.name, params.symbol, params.metadataURI, 10n ** 27n,
     creator.address, await factory.getAddress(), params.buyTaxBps, params.pair,
+    BigInt(params.minHoldForDividends) * 10n ** 18n, params.dividendMode,
   ]);
   await (await factory.connect(creator).launch(params, salt)).wait();
   const coin = await factory.allTokens(0n);

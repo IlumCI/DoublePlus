@@ -320,7 +320,9 @@ p { text-wrap: pretty; }
 @media (max-width: 900px) { .dp-create-grid { grid-template-columns: 1fr; } }
 .dp-field { display: grid; gap: 4px; margin-bottom: 14px; }
 .dp-field > label { font-family: var(--mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); }
-.dp-field input[type="text"], .dp-field input[type="number"], .dp-field textarea, .dp-field select {
+/* Everything except the range sliders: an input with no `type` attribute is a
+   text box too, and an attribute selector will not match one. */
+.dp-field input:not([type="range"]), .dp-field textarea, .dp-field select {
   font-family: var(--body); font-size: 14px; color: var(--text);
   background: var(--bg); border: 1px solid var(--line); border-radius: 5px; padding: 9px 11px;
   field-sizing: content; min-width: 12ch; max-width: 100%;

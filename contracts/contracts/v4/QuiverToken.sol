@@ -30,12 +30,26 @@ contract QuiverToken is ERC20 {
     uint16 public immutable taxBps;
     /// @notice Currency dividends are paid in. address(0) == native.
     address public immutable rewardToken;
+    /// @notice Balance a holder must keep to earn dividends at all. Below it a
+    ///         wallet accrues nothing and its balance leaves the denominator,
+    ///         so the forfeited share flows to holders who are above the line.
+    ///         0 means every holder earns, which is the plain behaviour.
+    uint256 public immutable minHoldForDividends;
+    /// @notice 0 = linear (a holder's share is its balance). 1 = tiered, where
+    ///         holding a larger multiple of the minimum earns a larger share
+    ///         per token, up to 2x. Splitting a balance lowers the multiplier,
+    ///         so the ladder cannot be farmed with extra wallets.
+    uint8 public immutable dividendMode;
 
-    /// @dev Accumulated reward per eligible share, scaled by ACC_PRECISION.
+    uint16 private constant W_BPS = 10_000;
+
+    /// @dev Accumulated reward per unit of weight, scaled by ACC_PRECISION.
     uint256 private accRewardPerShare;
-    /// @dev Supply eligible for dividends (excludes system/excluded holders).
+    /// @dev Total dividend weight in issue — the denominator every
+    ///      distribution divides by. With linear mode and no minimum this is
+    ///      exactly the eligible balance supply.
     uint256 public eligibleSupply;
-    /// @dev Reward already accounted to a holder: balance * acc / PRECISION.
+    /// @dev Reward already accounted to a holder: weight * acc / PRECISION.
     mapping(address => uint256) private rewardDebt;
     /// @dev Settled-but-unclaimed rewards per holder.
     mapping(address => uint256) public claimable;
@@ -67,13 +81,18 @@ contract QuiverToken is ERC20 {
         address creator_,
         address supplyRecipient_,
         uint16 taxBps_,
-        address rewardToken_
+        address rewardToken_,
+        uint256 minHoldForDividends_,
+        uint8 dividendMode_
     ) ERC20(name_, symbol_) {
         require(taxBps_ <= 1000, "tax>10%");
+        require(dividendMode_ <= 1, "mode");
         _factory = msg.sender;
         creator = creator_;
         taxBps = taxBps_;
         rewardToken = rewardToken_;
+        minHoldForDividends = minHoldForDividends_;
+        dividendMode = dividendMode_;
         _metadataURI = metadataURI_;
 
         // Exclude system endpoints (zero, self, and the supply recipient) from
@@ -141,10 +160,28 @@ contract QuiverToken is ERC20 {
         emit RewardsDistributed(amount);
     }
 
+    /// @notice A holder's share of the next distribution. Zero for excluded
+    ///         wallets and for anyone under the minimum; otherwise the balance,
+    ///         scaled by the tier multiplier when the token runs tiered.
+    function dividendWeight(address account) public view returns (uint256) {
+        if (account == address(0) || excluded[account]) return 0;
+        uint256 bal = balanceOf(account);
+        uint256 floor_ = minHoldForDividends;
+        if (bal < floor_) return 0;
+        if (dividendMode == 0 || floor_ == 0) return bal;
+        // A short ladder rather than a curve: three comparisons, legible on a
+        // term sheet, and capped so one wallet can never take the whole flow.
+        uint256 mult = W_BPS;
+        if (bal >= floor_ * 1000) mult = 2 * W_BPS;
+        else if (bal >= floor_ * 100) mult = W_BPS + W_BPS / 2;
+        else if (bal >= floor_ * 10) mult = W_BPS + W_BPS / 4;
+        return (bal * mult) / W_BPS;
+    }
+
     /// @notice Pending, not-yet-settled rewards for a holder.
     function pendingRewards(address holder) public view returns (uint256) {
         if (excluded[holder]) return claimable[holder];
-        uint256 accrued = (balanceOf(holder) * accRewardPerShare) / ACC_PRECISION;
+        uint256 accrued = (dividendWeight(holder) * accRewardPerShare) / ACC_PRECISION;
         uint256 debt = rewardDebt[holder];
         uint256 extra = accrued > debt ? accrued - debt : 0;
         return claimable[holder] + extra;
@@ -194,28 +231,28 @@ contract QuiverToken is ERC20 {
     ///      their debt to the current balance basis.
     function _settle(address account) private {
         if (account == address(0) || excluded[account]) return;
-        uint256 accrued = (balanceOf(account) * accRewardPerShare) / ACC_PRECISION;
+        uint256 accrued = (dividendWeight(account) * accRewardPerShare) / ACC_PRECISION;
         uint256 debt = rewardDebt[account];
         if (accrued > debt) claimable[account] += accrued - debt;
         rewardDebt[account] = accrued;
     }
 
     function _resetDebt(address account) private {
-        rewardDebt[account] = (balanceOf(account) * accRewardPerShare) / ACC_PRECISION;
+        rewardDebt[account] = (dividendWeight(account) * accRewardPerShare) / ACC_PRECISION;
     }
 
     function _setExcluded(address account, bool value) private {
         if (excluded[account] == value) return;
         // Settle then flip participation, adjusting eligibleSupply by balance.
-        uint256 bal = balanceOf(account);
         if (value) {
             _settle(account);
-            if (bal != 0) eligibleSupply -= bal;
+            eligibleSupply -= dividendWeight(account); // weight before the flip
+            excluded[account] = true;
         } else {
-            if (bal != 0) eligibleSupply += bal;
+            excluded[account] = false;
+            eligibleSupply += dividendWeight(account);
             _resetDebt(account);
         }
-        excluded[account] = value;
         emit ExcludedSet(account, value);
     }
 
@@ -229,14 +266,18 @@ contract QuiverToken is ERC20 {
         if (fromEligible) _settle(from);
         if (toEligible) _settle(to);
 
+        // Weight is a function of the balance, so a transfer can push either
+        // side across the minimum or into another tier. Difference the weights
+        // around the move rather than assuming the denominator shifts by
+        // `value`, which only holds when weight tracks balance one for one.
+        uint256 beforeFrom = fromEligible ? dividendWeight(from) : 0;
+        uint256 beforeTo = toEligible ? dividendWeight(to) : 0;
+
         super._update(from, to, value);
 
-        // Keep the eligible-supply denominator correct across the flow.
-        if (fromEligible && !toEligible) {
-            eligibleSupply -= value; // eligible -> excluded (or burn)
-        } else if (!fromEligible && toEligible) {
-            eligibleSupply += value; // mint or excluded -> eligible
-        }
+        uint256 afterFrom = fromEligible ? dividendWeight(from) : 0;
+        uint256 afterTo = toEligible ? dividendWeight(to) : 0;
+        eligibleSupply = eligibleSupply + afterFrom + afterTo - beforeFrom - beforeTo;
 
         if (fromEligible) _resetDebt(from);
         if (toEligible) _resetDebt(to);

@@ -52,7 +52,7 @@ async function deployStack() {
 async function mineSalt(tokenDeployer: any, args: any[]) {
   const Token = await ethers.getContractFactory("QuiverToken");
   const encoded = ethers.AbiCoder.defaultAbiCoder().encode(
-    ["string", "string", "string", "uint256", "address", "address", "uint16", "address"],
+    ["string", "string", "string", "uint256", "address", "address", "uint16", "address", "uint256", "uint8"],
     args,
   );
   const hash = ethers.keccak256(ethers.concat([Token.bytecode, encoded]));
@@ -92,6 +92,8 @@ async function launch(
     founderSupplyBps: 1000,
     vestingSecs: 180 * DAY,
     mode: 0,
+    minHoldForDividends: 0,
+    dividendMode: 0,
     v3Path: "0x",
     ...overrides,
   };
@@ -104,6 +106,8 @@ async function launch(
     await factory.getAddress(),
     params.buyTaxBps,
     params.pair,
+    BigInt(params.minHoldForDividends) * 10n ** 18n, // the deployer scales it
+    params.dividendMode,
   ]);
   await (await factory.connect(creator).launch(params, salt, { value })).wait();
   return factory.allTokens((await factory.totalTokens()) - 1n);
