@@ -6,7 +6,10 @@
     "compile": "hardhat compile",
     "test": "hardhat test",
     "deploy": "hardhat run scripts/deploy.ts",
-    "verify:blockscout": "hardhat run scripts/verify.ts"
+    "verify:blockscout": "hardhat run scripts/verify.ts",
+    "test:venture": "hardhat test test/harness.test.ts test/v4/venture.unit.test.ts test/v4/quiver-dividends.test.ts test/v4/venture.stress.test.ts",
+    "test:harness": "hardhat test test/harness.test.ts",
+    "test:canary": "EXPECT_FAIL=1 hardhat test test/harness.test.ts"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-chai-matchers": "^2.1.2",

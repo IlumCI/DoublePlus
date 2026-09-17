@@ -119,4 +119,93 @@ describe("QuiverToken dividend weight", function () {
     for (const s of signers) sum += await t.dividendWeight(s.address);
     expect(await t.eligibleSupply()).to.equal(sum);
   });
+
+  it("splits a distribution in proportion to weight, and never mints extra", async () => {
+    const [deployer, hook, a, b, c] = await ethers.getSigners();
+    const t = await token(1_000n, 1);
+    // The deploying account is the token's factory, so it can appoint a hook.
+    await (await t.initHook(hook.address, [])).wait();
+
+    await (await t.transfer(a.address, 2_000n * ONE)).wait();     // 2x    -> 1.00
+    await (await t.transfer(b.address, 20_000n * ONE)).wait();    // 20x   -> 1.25
+    await (await t.transfer(c.address, 2_000_000n * ONE)).wait(); // 2000x -> 2.00
+
+    const pot = ethers.parseEther("10");
+    await (await t.connect(hook).distributeRewardsNative({ value: pot })).wait();
+
+    const [wa, wb, wc] = [
+      await t.dividendWeight(a.address),
+      await t.dividendWeight(b.address),
+      await t.dividendWeight(c.address),
+    ];
+    const [pa, pb, pc] = [
+      await t.pendingRewards(a.address),
+      await t.pendingRewards(b.address),
+      await t.pendingRewards(c.address),
+    ];
+    const supply = await t.eligibleSupply();
+    expect(supply).to.equal(wa + wb + wc);
+
+    // Each share is its weight over the total, to the wei the integer maths
+    // can express.
+    for (const [w, got] of [[wa, pa], [wb, pb], [wc, pc]] as const) {
+      expect(got).to.be.closeTo((pot * w) / supply, 10n ** 6n);
+    }
+    // Rounding only ever leaves dust behind; it never conjures any.
+    expect(pa + pb + pc).to.be.at.most(pot);
+    expect(pa + pb + pc).to.be.greaterThan(pot - 10n ** 9n);
+    expect(await t.totalRewardsDistributed()).to.equal(pot);
+  });
+
+  it("pays a wallet under the floor nothing, however many distributions run", async () => {
+    const [deployer, hook, big, dust] = await ethers.getSigners();
+    const t = await token(10_000n, 0);
+    await (await t.initHook(hook.address, [])).wait();
+    await (await t.transfer(big.address, 50_000n * ONE)).wait();
+    await (await t.transfer(dust.address, 9_999n * ONE)).wait();
+
+    for (let i = 0; i < 3; i++) {
+      await (await t.connect(hook).distributeRewardsNative({ value: ethers.parseEther("1") })).wait();
+    }
+    expect(await t.pendingRewards(dust.address)).to.equal(0n);
+    // The whole pot went to the only wallet above the line.
+    expect(await t.pendingRewards(big.address)).to.be.closeTo(ethers.parseEther("3"), 10n ** 6n);
+
+    // Crossing the floor starts the clock — it does not backdate.
+    await (await t.transfer(dust.address, 1n * ONE)).wait();
+    expect(await t.pendingRewards(dust.address)).to.equal(0n);
+    await (await t.connect(hook).distributeRewardsNative({ value: ethers.parseEther("1") })).wait();
+    expect(await t.pendingRewards(dust.address)).to.be.greaterThan(0n);
+  });
+
+  it("keeps the weight sum exact through a randomised transfer storm", async () => {
+    const signers = (await ethers.getSigners()).slice(2, 8);
+    const t = await token(1_000n, 1);
+    for (const s of signers) await (await t.transfer(s.address, 5_000n * ONE)).wait();
+
+    // Fixed seed: a failure here reproduces exactly.
+    let seed = 0xc0ffeec0ffeen;
+    const next = () => {
+      seed ^= seed << 13n; seed &= (1n << 64n) - 1n;
+      seed ^= seed >> 7n;
+      seed ^= seed << 17n; seed &= (1n << 64n) - 1n;
+      return seed;
+    };
+
+    for (let i = 0; i < 40; i++) {
+      const from = signers[Number(next() % BigInt(signers.length))];
+      const to = signers[Number(next() % BigInt(signers.length))];
+      if (from.address === to.address) continue;
+      const bal = await t.balanceOf(from.address);
+      if (bal === 0n) continue;
+      // Sizes chosen to straddle the floor and the tier steps in both directions.
+      const amt = (bal * ((next() % 90n) + 5n)) / 100n;
+      if (amt === 0n) continue;
+      await (await t.connect(from).transfer(to.address, amt)).wait();
+
+      let sum = 0n;
+      for (const s of signers) sum += await t.dividendWeight(s.address);
+      expect(await t.eligibleSupply(), `op ${i}: eligibleSupply drifted from the weight sum`).to.equal(sum);
+    }
+  });
 });
