@@ -117,7 +117,7 @@ function VentureBody({ v, fills, ethUsd }: { v: VentureT; fills: Fill[]; ethUsd:
           {v.phase === "failed" && <FailPanel v={v} />}
           {v.phase === "graduated" && <TradePanel v={v} />}
 
-          <Protections v={v} />
+          <ContractCard v={v} />
           <WhoEarns v={v} />
           <ReferralChit />
         </div>
@@ -275,29 +275,46 @@ function TermsPane({ v }: { v: VentureT }) {
   );
 }
 
-/** What the contract guarantees, stated as the strength it is. */
-function Protections({ v }: { v: VentureT }) {
+/** The contract itself, as a spec sheet. Immutability is the headline: these
+ *  numbers were fixed at deployment and there is no key that edits them. */
+function ContractCard({ v }: { v: VentureT }) {
   const vested = v.vesting !== "0x0000000000000000000000000000000000000000";
-  const rows: [string, string][] = v.phase === "graduated"
-    ? [
-      ["Liquidity is locked", "The raise became pool liquidity at graduation and cannot be pulled."],
-      ["Terms are frozen", "Fees and splits were written into the pool hook at launch and cannot be edited."],
-      ...(vested ? ([["Founder stake vests", "Released linearly from graduation, not all at once."]] as [string, string][]) : []),
-      ["Both sides quoted", "Protocol-funded bid and ask walls re-centre as the price moves."],
-    ]
-    : [
-      ["All-or-nothing", "Miss the target and every wei on the curve goes back to its backer, automatically. The entry fee is the only thing already spent."],
-      ["Founder stake burns on failure", "The founder only keeps a stake if the raise succeeds."],
-      ["Per-wallet cap", `No wallet may commit more than ${fmtEth(v.maxBuyWei, 3)} ETH.`],
-      ["Path-independent pricing", "Splitting a buy into many small ones costs exactly the same."],
-    ];
+  const deployed = new Date(v.createdAt * 1000).toLocaleDateString("en-GB", {
+    day: "numeric", month: "short", year: "numeric",
+  });
+  const rows: [string, React.ReactNode][] = [
+    ["deployed", deployed],
+    ["raise type", v.mode === 1 ? "open curve" : "all-or-nothing"],
+    ["fee policy", `${(v.policy.buyTaxBps / 100).toFixed(2)}% buy · ${(v.policy.sellTaxBps / 100).toFixed(2)}% sell`],
+    ["fee split", `${v.policy.devBps / 100} / ${v.policy.dividendBps / 100} / ${v.policy.liquidityBps / 100} / ${v.policy.mmBps / 100}`],
+    ["protocol fee", `${(VENTURE.platformFeeBps / 100).toFixed(2)}%`],
+    ...(v.mode === 1 ? [] : ([["per-wallet cap", `${fmtEth(v.maxBuyWei, 3)} ETH`]] as [string, React.ReactNode][])),
+    ["founder stake", vested ? "vested from graduation" : "none"],
+    ...(v.phase === "graduated"
+      ? ([["liquidity", "locked in the V4 pool"]] as [string, React.ReactNode][])
+      : []),
+  ];
   return (
     <div className="dp-panel" style={{ marginTop: 12 }}>
-      <div className="dp-phead"><span>What the contract guarantees</span></div>
-      <div className="dp-pbody dp-guard">
-        {rows.map(([h, b]) => (
-          <div key={h}><span className="dp-yes">✓</span><p><b style={{ color: "var(--text)" }}>{h}.</b> {b}</p></div>
-        ))}
+      <div className="dp-phead"><span>Contract</span>
+        {env.explorerUrl && (
+          <a href={`${env.explorerUrl}/address/${v.address}`} target="_blank" rel="noreferrer">source ↗</a>
+        )}
+      </div>
+      <div className="dp-pbody">
+        <div className="dp-spec">
+          <div className="dp-spec-head">
+            <CopyButton value={v.address} />
+            <span>immutable</span>
+          </div>
+          {rows.map(([k, val]) => (
+            <div className="dp-spec-row" key={k}><dt>{k}</dt><dd>{val}</dd></div>
+          ))}
+        </div>
+        <p className="dp-spec-note">
+          Set once, at deployment. There is no admin key, no upgrade path and no owner who can
+          rewrite these numbers — the creator included.
+        </p>
       </div>
     </div>
   );
@@ -537,12 +554,12 @@ function RaisePanel({ v }: { v: VentureT }) {
         </div>
         <p className="dp-tb-note">
           {side === "sell" && guaranteed
-            ? "You can leave whenever you like. Until it graduates the curve pays out at most what you put in — that ceiling is what keeps everyone else's money in the pot."
+            ? "Exit any time. Before graduation the curve pays back up to what you put in."
             : side === "sell"
-            ? "Open curve: the exit price is whatever the curve is worth right now, up or down."
+            ? "Exit any time, at the live curve price."
             : guaranteed
-            ? "All-or-nothing: if the raise misses its target by the deadline, you reclaim every wei you put into the curve."
-            : "No target and no deadline. It graduates by itself once the curve fills."}
+            ? "All-or-nothing. Miss the target and your curve spend comes back."
+            : "No target, no deadline. It graduates once the curve fills."}
         </p>
       </div>
       {guaranteed && (
@@ -640,8 +657,8 @@ function FailPanel({ v }: { v: VentureT }) {
       <div className="dp-phead"><span>Refund</span><span className="dp-badge dp-dead">raise failed</span></div>
       <div className="dp-pbody">
         <p style={{ fontSize: 13, color: "var(--dim)", margin: "0 0 12px" }}>
-          The deadline passed below target. All-or-nothing means nobody is left holding the bag: return your
-          ${v.symbol} and reclaim everything you put into the curve. The founder allocation is burned.
+          Closed below target. Return your ${v.symbol} and take your curve spend back. The founder
+          allocation is burned.
         </p>
         {!v.aborted ? (
           <button className="dp-tb-go dp-buy" style={{ background: "var(--up-dim)" }} disabled={busy} onClick={() => act("abort")}>

@@ -101,11 +101,9 @@ export function Docs() {
 
           <H id="risks">Risks</H>
           <p>
-            These are open ERC-20 tokens whose economics resemble equity — a funded raise, a vested founder stake,
-            fee income for holders — but they are not registered securities and carry no legal claim on any
-            company. Holder income comes from trading fees, not company revenue. The contracts are unaudited.
-            After a raise succeeds the founder's cut is theirs, and only the vested stake remains time-locked.
-            Back what you can afford to lose.
+            Anyone can launch here and the contracts are unaudited. Prices move, projects fail, and a
+            token can go to zero. The full risk disclosure lives with the{" "}
+            <Link to="/legal" viewTransition>terms</Link>.
           </p>
 
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 22 }}>

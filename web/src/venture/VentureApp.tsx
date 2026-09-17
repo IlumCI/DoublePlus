@@ -10,6 +10,7 @@ import { Board } from "./Board";
 import { Desk } from "./Desk";
 import { Docs } from "./Docs";
 import { Flywheel } from "./Flywheel";
+import Legal from "./Legal";
 import { LaunchVenture } from "./Launch";
 import { Stats } from "./Stats";
 import { VenturePage } from "./Venture";
@@ -32,6 +33,21 @@ const NAV: [string, string, string][] = [
 export function VentureApp() {
   return (
     <BrowserRouter>
+      <Routes>
+        {/* The legal document renders outside the app chrome on purpose: no
+            topbar, no activity strip, no marketing furniture. It is a
+            document that happens to live at a URL. */}
+        <Route path="/legal" element={<Legal />} />
+        <Route path="*" element={<Shell />} />
+      </Routes>
+      <Toasts />
+    </BrowserRouter>
+  );
+}
+
+function Shell() {
+  return (
+    <>
       <FilterDefs />
       <Topbar />
       <ChainBar />
@@ -50,8 +66,7 @@ export function VentureApp() {
       </main>
       <Footer />
       <MobileNav />
-      <Toasts />
-    </BrowserRouter>
+    </>
   );
 }
 
@@ -170,7 +185,7 @@ function Footer() {
         <span>protocol fee 1% per trade · 20% of it to referrers</span>
         {env.explorerUrl && <a href={env.explorerUrl} target="_blank" rel="noreferrer">explorer ↗</a>}
         <Link to="/docs" viewTransition>docs</Link>
-        <span>Project tokens, not registered securities. Contracts are unaudited. Back only what you can afford to lose.</span>
+        <Link to="/legal" viewTransition>terms</Link>
       </div>
     </footer>
   );

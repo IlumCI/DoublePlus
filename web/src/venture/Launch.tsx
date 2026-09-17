@@ -579,8 +579,8 @@ export function LaunchVenture() {
               <div><b className="dp-up">{founderStake}%</b><span>of supply, vesting {vestDays} days</span></div>
               <p className="dp-hint" style={{ marginTop: 4 }}>
                 {open
-                  ? "An open curve pays you out of trading, not out of a raise. There is no target to miss, so there is nothing to refund and nothing to wait for."
-                  : `The other ${100 - founderCut}% becomes the pool's locked liquidity. Miss the target and backers take their curve spend back — you are paid nothing.`}
+                  ? "Paid out of trading, not out of a raise — there is nothing to wait for."
+                  : `The other ${100 - founderCut}% becomes your pool's locked liquidity.`}
               </p>
             </div>
           </div>
