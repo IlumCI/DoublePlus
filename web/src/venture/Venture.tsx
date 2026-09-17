@@ -4,8 +4,8 @@ import { useBalance, useWalletClient } from "wagmi";
 import { formatEther, parseEther, type Address } from "viem";
 
 import {
-  ercAbi, factoryAbi, hookAbi, loadFills, loadUpdates, loadVenture, quoteTokens, routerAbi, toCandles, VENTURE,
-  venturePc, vestingAbi, type Fill, type Venture as VentureT,
+  ercAbi, factoryAbi, hookAbi, loadFills, loadUpdates, loadVenture, quoteSellWei, quoteTokens, routerAbi,
+  toCandles, VENTURE, venturePc, vestingAbi, type Fill, type Venture as VentureT,
 } from "./client";
 import { PriceChart, TradeTape, usePoolTrades } from "./Chart";
 import { refLink, storedRef } from "./referral";
@@ -286,7 +286,7 @@ function Protections({ v }: { v: VentureT }) {
       ["Both sides quoted", "Protocol-funded bid and ask walls re-centre as the price moves."],
     ]
     : [
-      ["All-or-nothing", "Miss the target and every backer is refunded in full, automatically."],
+      ["All-or-nothing", "Miss the target and every wei on the curve goes back to its backer, automatically. The entry fee is the only thing already spent."],
       ["Founder stake burns on failure", "The founder only keeps a stake if the raise succeeds."],
       ["Per-wallet cap", `No wallet may commit more than ${fmtEth(v.maxBuyWei, 3)} ETH.`],
       ["Path-independent pricing", "Splitting a buy into many small ones costs exactly the same."],
@@ -385,24 +385,50 @@ function RaisePanel({ v }: { v: VentureT }) {
   const { address: me, isConnected, connectFirst } = useWallet();
   const { data: wc } = useWalletClient();
   const pushToast = useUi((s) => s.pushToast);
+  const [side, setSide] = useState<"buy" | "sell">("buy");
   const [amt, setAmt] = useState("");
+  const [sellQ, setSellQ] = useState("");
   const [busy, setBusy] = useState(false);
   const [spent, setSpent] = useState(0n);
+  const [bought, setBought] = useState(0n);
+  const [fees, setFees] = useState({ buyBps: 0, sellBps: 0 });
   const eth = useBalance({ address: me });
 
   useEffect(() => {
+    const read = (fn: "curveBuyFeeBps" | "curveSellFeeBps") =>
+      venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: fn });
+    Promise.all([read("curveBuyFeeBps"), read("curveSellFeeBps")])
+      .then(([b, sl]) => setFees({ buyBps: Number(b), sellBps: Number(sl) })).catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
     if (!me) return;
-    venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "spentWei", args: [v.address, me] })
-      .then((x) => setSpent(x as bigint)).catch(() => undefined);
+    const read = (fn: "spentWei" | "boughtTokens") =>
+      venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: fn, args: [v.address, me] });
+    read("spentWei").then((x) => setSpent(x as bigint)).catch(() => undefined);
+    read("boughtTokens").then((x) => setBought(x as bigint)).catch(() => undefined);
   }, [me, v.address, busy]);
 
   const parsed = useMemo(() => { try { return amt ? parseEther(amt) : 0n; } catch { return 0n; } }, [amt]);
-  const tokensOut = quoteTokens(v, parsed);
+  // The entry fee comes off before the curve is quoted, so the tokens you get
+  // are priced on what actually reaches the curve.
+  const entryFee = (parsed * BigInt(fees.buyBps)) / 10_000n;
+  const tokensOut = quoteTokens(v, parsed - entryFee);
   const funded = pct(v.raisedWei, v.targetRaiseWei);
   const capLeft = v.maxBuyWei > spent ? v.maxBuyWei - spent : 0n;
   const overCap = v.maxBuyWei > 0n && parsed > capLeft;
   const shortOnEth = eth.data !== undefined && parsed > eth.data.value;
   const ethUsdInPanel = useEthUsd();
+
+  const ownedWhole = bought / 10n ** 18n;
+  const sellWhole = useMemo(() => {
+    const n = BigInt(Math.floor(Number(sellQ) || 0));
+    return n > ownedWhole ? ownedWhole : n < 0n ? 0n : n;
+  }, [sellQ, ownedWhole]);
+  const sellQuote = useMemo(
+    () => quoteSellWei(v, sellWhole, bought, spent, fees.sellBps),
+    [v, sellWhole, bought, spent, fees.sellBps],
+  );
 
   const buy = async () => {
     if (!isConnected) return connectFirst();
@@ -419,48 +445,117 @@ function RaisePanel({ v }: { v: VentureT }) {
     } finally { setBusy(false); }
   };
 
+  const sell = async () => {
+    if (!isConnected) return connectFirst();
+    if (!wc || sellWhole === 0n) return;
+    setBusy(true);
+    try {
+      const need = sellWhole * 10n ** 18n;
+      const allowance = (await venturePc.readContract({ address: v.address, abi: ercAbi, functionName: "allowance", args: [wc.account!.address, VENTURE.factory] })) as bigint;
+      if (allowance < need) {
+        const a = await wc.writeContract({ address: v.address, abi: ercAbi, functionName: "approve", args: [VENTURE.factory, 2n ** 256n - 1n], chain: wc.chain, account: wc.account });
+        await venturePc.waitForTransactionReceipt({ hash: a });
+      }
+      // 1% tolerance: the curve can move between quote and mine.
+      const minOut = (sellQuote.out * 9_900n) / 10_000n;
+      const hash = await wc.writeContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "sell", args: [v.address, sellWhole, minOut], chain: wc.chain, account: wc.account });
+      pushToast({ kind: "info", title: "Exit submitted", txHash: hash });
+      await venturePc.waitForTransactionReceipt({ hash });
+      pushToast({ kind: "success", title: "Sold back to the curve", txHash: hash });
+      setSellQ("");
+    } catch (e) {
+      pushToast({ kind: "error", title: "Sell failed", body: errorText(e) });
+    } finally { setBusy(false); }
+  };
+
+  const guaranteed = v.mode === 0;
+
   return (
     <div className="dp-panel dp-tradebox">
-      <div className="dp-tb-tabs"><button className="dp-buy on" style={{ gridColumn: "1 / -1" }}>Back this raise</button></div>
+      <div className="dp-tb-tabs">
+        <button className={`dp-buy ${side === "buy" ? "on" : ""}`} onClick={() => setSide("buy")}>
+          {guaranteed ? "Back this raise" : "Buy"}
+        </button>
+        <button className={`dp-sell ${side === "sell" ? "on" : ""}`} onClick={() => setSide("sell")}>Sell back</button>
+      </div>
       <div className="dp-tb-body">
         <ReferralBanner />
-        <div className="dp-tb-amt">
-          <input inputMode="decimal" placeholder="0.0" value={amt} onChange={(e) => setAmt(e.target.value.replace(/[^0-9.]/g, ""))} />
-          <span>ETH</span>
+        {side === "buy" ? (
+          <>
+            <div className="dp-tb-amt">
+              <input inputMode="decimal" placeholder="0.0" value={amt} onChange={(e) => setAmt(e.target.value.replace(/[^0-9.]/g, ""))} />
+              <span>ETH</span>
+            </div>
+            <div className="dp-quicks">
+              {["0.05", "0.1", "0.5", "1"].map((q) => <button key={q} onClick={() => setAmt(q)}>{q}</button>)}
+            </div>
+            <p className="dp-tb-est">
+              {tokensOut > 0n ? <>you receive ≈ <b>{fmtTok(tokensOut, true)} ${v.symbol}</b></> : <>price rises with every buy — early backers pay less</>}
+            </p>
+            <button className="dp-tb-go dp-buy"
+              disabled={busy || overCap || shortOnEth || (isConnected && parsed === 0n)} onClick={buy}>
+              {busy ? "Confirm in wallet…"
+                : !isConnected ? "Connect wallet"
+                : shortOnEth ? "Not enough ETH"
+                : overCap ? "Over your wallet cap"
+                : guaranteed ? `Back ${v.name}` : `Buy $${v.symbol}`}
+            </button>
+            <div className="dp-tb-slip">
+              <span>balance <b style={{ color: "var(--dim)" }}>{eth.data ? fmtEth(eth.data.value, 4) : "—"} ETH</b></span>
+              <span>entry fee {(fees.buyBps / 100).toFixed(2)}%{entryFee > 0n ? ` · ${fmtEth(entryFee, 5)} ETH` : ""}</span>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="dp-tb-amt">
+              <input inputMode="numeric" placeholder="0" value={sellQ} onChange={(e) => setSellQ(e.target.value.replace(/[^0-9]/g, ""))} />
+              <span>${v.symbol}</span>
+            </div>
+            <div className="dp-quicks">
+              {([["25%", 4n], ["50%", 2n], ["Max", 1n]] as const).map(([label, div]) => (
+                <button key={label} onClick={() => setSellQ(String(ownedWhole / div))}>{label}</button>
+              ))}
+            </div>
+            <p className="dp-tb-est">
+              {sellQuote.out > 0n
+                ? <>you receive ≈ <b>{fmtEth(sellQuote.out, 5)} ETH</b></>
+                : <>you hold {fmtTok(bought)} ${v.symbol} from the curve</>}
+            </p>
+            <button className="dp-tb-go dp-sell"
+              disabled={busy || (isConnected && sellWhole === 0n)} onClick={sell}>
+              {busy ? "Confirm in wallet…" : !isConnected ? "Connect wallet" : `Sell ${fmtTok(sellWhole, true)} $${v.symbol}`}
+            </button>
+            <div className="dp-tb-slip">
+              <span>your curve position <b style={{ color: "var(--dim)" }}>{fmtTok(bought)}</b></span>
+              <span>exit fee {(fees.sellBps / 100).toFixed(2)}%</span>
+            </div>
+          </>
+        )}
+        <div className="dp-tb-slip">
+          <span>{guaranteed ? <>closes in <Countdown deadline={v.deadline} /></> : <>no deadline — graduates on the curve</>}</span>
+          <span>{ethUsdInPanel > 0 && parsed > 0n && side === "buy" ? fmtUsdV((Number(parsed) / 1e18) * ethUsdInPanel) : ""}</span>
         </div>
-        <div className="dp-quicks">
-          {["0.05", "0.1", "0.5", "1"].map((q) => <button key={q} onClick={() => setAmt(q)}>{q}</button>)}
-        </div>
-        <p className="dp-tb-est">
-          {tokensOut > 0n ? <>you receive ≈ <b>{fmtTok(tokensOut, true)} ${v.symbol}</b></> : <>price rises with every buy — early backers pay less</>}
+        <p className="dp-tb-note">
+          {side === "sell" && guaranteed
+            ? "You can leave whenever you like. Until it graduates the curve pays out at most what you put in — that ceiling is what keeps everyone else's money in the pot."
+            : side === "sell"
+            ? "Open curve: the exit price is whatever the curve is worth right now, up or down."
+            : guaranteed
+            ? "All-or-nothing: if the raise misses its target by the deadline, you reclaim every wei you put into the curve."
+            : "No target and no deadline. It graduates by itself once the curve fills."}
         </p>
-        <button className="dp-tb-go dp-buy"
-          disabled={busy || overCap || shortOnEth || (isConnected && parsed === 0n)} onClick={buy}>
-          {busy ? "Confirm in wallet…"
-            : !isConnected ? "Connect wallet"
-            : shortOnEth ? "Not enough ETH"
-            : overCap ? "Over your wallet cap"
-            : `Back ${v.name}`}
-        </button>
-        <div className="dp-tb-slip">
-          <span>balance <b style={{ color: "var(--dim)" }}>{eth.data ? fmtEth(eth.data.value, 4) : "—"} ETH</b></span>
-          <span>{isConnected ? `cap left ${fmtEth(capLeft, 3)} ETH` : `cap ${fmtEth(v.maxBuyWei, 3)} ETH / wallet`}</span>
-        </div>
-        <div className="dp-tb-slip">
-          <span>closes in <Countdown deadline={v.deadline} /></span>
-          <span>{ethUsdInPanel > 0 && parsed > 0n ? fmtUsdV((Number(parsed) / 1e18) * ethUsdInPanel) : ""}</span>
-        </div>
-        <p className="dp-tb-note">All-or-nothing: if the raise misses its target by the deadline, you reclaim every wei.</p>
       </div>
-      <div className="dp-gradblock dp-chartrow">
-        <Ring pct={funded} size={104} label="funded" />
-        <div style={{ flex: 1, minWidth: 140 }}>
-          <p style={{ margin: 0, fontSize: 12, color: "var(--dim)" }}>
-            <b style={{ color: "var(--text)" }}>{fmtEth(v.targetRaiseWei - (v.raisedWei > v.targetRaiseWei ? v.targetRaiseWei : v.raisedWei), 3)} ETH</b> to go.
-          </p>
-          <p style={{ margin: "6px 0 0" }}>At 100% it graduates: liquidity locks and trading opens.</p>
+      {guaranteed && (
+        <div className="dp-gradblock dp-chartrow">
+          <Ring pct={funded} size={104} label="funded" />
+          <div style={{ flex: 1, minWidth: 140 }}>
+            <p style={{ margin: 0, fontSize: 12, color: "var(--dim)" }}>
+              <b style={{ color: "var(--text)" }}>{fmtEth(v.targetRaiseWei - (v.raisedWei > v.targetRaiseWei ? v.targetRaiseWei : v.raisedWei), 3)} ETH</b> to go.
+            </p>
+            <p style={{ margin: "6px 0 0" }}>At 100% it graduates: liquidity locks and trading opens.</p>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -546,7 +641,7 @@ function FailPanel({ v }: { v: VentureT }) {
       <div className="dp-pbody">
         <p style={{ fontSize: 13, color: "var(--dim)", margin: "0 0 12px" }}>
           The deadline passed below target. All-or-nothing means nobody is left holding the bag: return your
-          ${v.symbol} and reclaim your full spend. The founder allocation is burned.
+          ${v.symbol} and reclaim everything you put into the curve. The founder allocation is burned.
         </p>
         {!v.aborted ? (
           <button className="dp-tb-go dp-buy" style={{ background: "var(--up-dim)" }} disabled={busy} onClick={() => act("abort")}>

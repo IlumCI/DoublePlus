@@ -37,6 +37,9 @@ export function LaunchVenture() {
   const [founderStake, setFounderStake] = useState(10); // % of supply
   const [vestDays, setVestDays] = useState(365);
   const [capPct, setCapPct] = useState(2); // per-wallet, % of target
+  const [mode, setMode] = useState<0 | 1>(0); // 0 = funded raise, 1 = open curve
+  const open = mode === 1;
+  const [chain, setChain] = useState<{ creation: bigint; grad: bigint; buyBps: number; sellBps: number } | null>(null);
   const [pairMode, setPairMode] = useState<"eth" | "stock">("eth");
   const [stock, setStock] = useState<string>(STOCKS[0]?.address ?? "");
   const [buyTaxPct, setBuyTaxPct] = useState(2); // 0-4, founder trade tax on buys
@@ -160,16 +163,20 @@ export function LaunchVenture() {
             liquidityBps: alloc.liquidity * 100,
             mmBps: alloc.mm * 100,
             ethUsdPrice8: ethUsd8,
-            targetRaiseWei: parsedTarget,
-            raiseDurationSecs: BigInt(days * 86_400),
-            maxBuyWei: (parsedTarget * BigInt(Math.round(capPct * 100))) / 10_000n,
-            founderRaiseBps: founderCut * 100,
+            // An open curve has no target of its own: the factory substitutes
+            // the protocol's graduation threshold and ignores these three.
+            targetRaiseWei: open ? 0n : parsedTarget,
+            raiseDurationSecs: BigInt((open ? 7 : days) * 86_400),
+            maxBuyWei: open ? 0n : (parsedTarget * BigInt(Math.round(capPct * 100))) / 10_000n,
+            founderRaiseBps: open ? 0 : founderCut * 100,
             founderSupplyBps: founderStake * 100,
             vestingSecs: founderStake > 0 ? vestDays * 86_400 : 0,
+            mode,
             v3Path,
           },
           salt,
         ],
+        value: chain?.creation ?? 0n,
         chain: wc.chain,
         account: wc.account,
       });
@@ -230,6 +237,15 @@ export function LaunchVenture() {
     : t <= 3.5 ? "chunky; your holders will want it back"
     : "steep — you will need to earn this one";
 
+  useEffect(() => {
+    const read = (fn: "creationFeeWei" | "graduationRaiseWei" | "curveBuyFeeBps" | "curveSellFeeBps") =>
+      venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: fn });
+    Promise.all([read("creationFeeWei"), read("graduationRaiseWei"), read("curveBuyFeeBps"), read("curveSellFeeBps")])
+      .then(([c, g, b, sl]) =>
+        setChain({ creation: c as bigint, grad: g as bigint, buyBps: Number(b), sellBps: Number(sl) }))
+      .catch(() => undefined);
+  }, []);
+
   const cutEth = Number(founderCutEth) / 1e18;
   const avgTax = (buyTaxPct + sellTaxPct) / 2;
   const stockPick = STOCKS.find((s) => s.address === stock);
@@ -244,7 +260,7 @@ export function LaunchVenture() {
   const STEPS = ["Your project", "Your raise", "How trading works", "Review"];
   const canAdvance =
     step === 0 ? form.name.trim().length > 0 && form.symbol.trim().length > 0 && form.pitch.trim().length > 0
-    : step === 1 ? parsedTarget > 0n && (minTargetEth === 0 || Number(target) >= minTargetEth * 0.999)
+    : step === 1 ? open || (parsedTarget > 0n && (minTargetEth === 0 || Number(target) >= minTargetEth * 0.999))
     : step === 2 ? true
     : true;
 
@@ -318,7 +334,30 @@ export function LaunchVenture() {
               <p className="dp-sec">Your raise <button type="button" className="dp-linkbtn" onClick={() => setExpertRaise(!expertRaise)}>
                 {expertRaise ? "hide expert settings" : "expert settings"}</button></p>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 22px" }}>
+              <div className="dp-presets" style={{ gridTemplateColumns: "1fr 1fr" }}>
+                {([
+                  [0, "Funded raise", "Ask for an amount", "Hit the target and the money is yours. Miss it and backers take theirs back — nobody is stuck."],
+                  [1, "Open curve", "Trade from second one", "No target, no deadline. It graduates on its own once the curve fills."],
+                ] as const).map(([m, title, line, why]) => (
+                  <button type="button" key={m} className={mode === m ? "on" : ""} onClick={() => setMode(m)}>
+                    <b>{title}</b>
+                    <span className="dp-mono">{line}</span>
+                    <span>{why}</span>
+                  </button>
+                ))}
+              </div>
+
+              {open && (
+                <p className="dp-hint" style={{ margin: "2px 0 14px" }}>
+                  An open curve graduates at{" "}
+                  <b className="dp-up">{chain ? `${(Number(chain.grad) / 1e18).toFixed(2)} ETH` : "the protocol threshold"}</b>{" "}
+                  on the curve, then locks its liquidity into the pool like any other launch. Buyers
+                  can sell back to the curve at any moment, so there is no deadline to miss and no
+                  refund to open. You earn from trade fees rather than a cut of a raise.
+                </p>
+              )}
+
+              <div style={{ display: open ? "none" : "grid", gridTemplateColumns: "1fr 1fr", gap: "0 22px" }}>
                 <div className="dp-field"><label htmlFor="v-target">How much do you want to raise?</label>
                   <input id="v-target" inputMode="decimal" value={target}
                     onChange={(e) => setTarget(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="5.0" required />
@@ -330,11 +369,11 @@ export function LaunchVenture() {
                 </div>
                 <div className="dp-field"><label htmlFor="v-days">How long to raise it? — {days} days</label>
                   <input id="v-days" type="range" min={1} max={60} value={days} onChange={(e) => setDays(Number(e.target.value))} />
-                  <span className="dp-hint">Miss the deadline and every backer is refunded in full, automatically.
+                  <span className="dp-hint">Miss the deadline and every backer takes their curve spend back, automatically.
                     Short windows create urgency; long ones give word of mouth time to work.</span></div>
               </div>
 
-              <div className="dp-field"><label htmlFor="v-cut">How much of the raise do you take? — {founderCut}%</label>
+              <div className="dp-field" style={{ display: open ? "none" : undefined }}><label htmlFor="v-cut">How much of the raise do you take? — {founderCut}%</label>
                 <input id="v-cut" type="range" min={0} max={30} value={founderCut} onChange={(e) => setFounderCut(Number(e.target.value))} />
                 <span className="dp-hint">
                   {cutEth > 0 ? `${cutEth.toFixed(4)} ETH at this target. ` : ""}
@@ -354,7 +393,7 @@ export function LaunchVenture() {
                         onChange={(e) => setVestDays(Number(e.target.value))} disabled={founderStake === 0} />
                       <span className="dp-hint">Unlocks linearly from graduation. Longer vesting is the cheapest
                         credibility you can buy — it tells the market you cannot dump on it.</span></div>
-                    <div className="dp-field"><label htmlFor="v-cap">Per-wallet cap — {capPct}% of target</label>
+                    <div className="dp-field" style={{ display: open ? "none" : undefined }}><label htmlFor="v-cap">Per-wallet cap — {capPct}% of target</label>
                       <input id="v-cap" type="range" min={1} max={100} value={capPct} onChange={(e) => setCapPct(Number(e.target.value))} />
                       <span className="dp-hint">Stops one wallet taking the whole round and controlling your market
                         afterwards. Low caps spread the cap table; high caps fill faster.</span></div>
@@ -510,27 +549,38 @@ export function LaunchVenture() {
                 <h3>{form.name || "Your project"}</h3>
                 <span className="dp-tick">${(form.symbol || "TICK").toUpperCase()}{form.sector ? ` · ${form.sector}` : ""}</span>
               </div>
-              <span style={{ marginLeft: "auto" }}><span className="dp-badge dp-live">live</span></span>
+              <span style={{ marginLeft: "auto" }}>
+                <span className={open ? "dp-badge dp-open" : "dp-badge dp-live"}>{open ? "open curve" : "live"}</span>
+              </span>
             </div>
             {form.pitch && <p className="dp-pitch">{form.pitch}</p>}
             <div className="dp-curvebar" style={{ ["--pct" as string]: "0%" }}><i /></div>
             <div className="dp-curvelabel">
               <span><b>0%</b> to graduation</span>
-              <span>0 / {target || "—"} ETH</span>
+              <span>0 / {open ? (chain ? (Number(chain.grad) / 1e18).toFixed(2) : "—") : (target || "—")} ETH</span>
             </div>
-            <div className="dp-prov"><span>by <b>you</b> · just now</span><span>founder takes {founderCut}%</span></div>
+            <div className="dp-prov">
+              <span>by <b>you</b> · just now</span>
+              <span>{open ? "fees only" : `founder takes ${founderCut}%`}</span>
+            </div>
           </div>
 
           <div className="dp-panel" style={{ marginTop: 12 }}>
             <div className="dp-phead"><span>What you earn</span></div>
             <div className="dp-pbody dp-earn">
-              <div><b className="dp-up">{cutEth > 0 ? `${cutEth.toFixed(4)} ETH` : "—"}</b>
-                <span>your {founderCut}% of the {target || "—"} ETH backers put in, paid at graduation</span></div>
+              {open ? (
+                <div><b className="dp-up">{(chain ? chain.sellBps / 100 : 1).toFixed(2)}%</b>
+                  <span>of every curve exit, plus your cut of the pool fee once it graduates</span></div>
+              ) : (
+                <div><b className="dp-up">{cutEth > 0 ? `${cutEth.toFixed(4)} ETH` : "—"}</b>
+                  <span>your {founderCut}% of the {target || "—"} ETH backers put in, paid at graduation</span></div>
+              )}
               <div><b className="dp-up">{(avgTax * alloc.dev / 100).toFixed(2)}%</b><span>of every trade, forever</span></div>
               <div><b className="dp-up">{founderStake}%</b><span>of supply, vesting {vestDays} days</span></div>
               <p className="dp-hint" style={{ marginTop: 4 }}>
-                The other {100 - founderCut}% becomes the pool's locked liquidity. Miss the target and
-                backers are refunded in full — you are paid nothing.
+                {open
+                  ? "An open curve pays you out of trading, not out of a raise. There is no target to miss, so there is nothing to refund and nothing to wait for."
+                  : `The other ${100 - founderCut}% becomes the pool's locked liquidity. Miss the target and backers take their curve spend back — you are paid nothing.`}
               </p>
             </div>
           </div>
@@ -540,7 +590,10 @@ export function LaunchVenture() {
             <div className="dp-pbody dp-teach">
               {step === 0 && <p>Backers scan dozens of cards. A real logo, a short name and one concrete sentence
                 are what make yours stop the scroll — the rest of your story lives on the project page.</p>}
-              {step === 1 && <p>Early backers pay less, so momentum builds itself. All-or-nothing: ask for a number you can hit.</p>}
+              {step === 1 && (open
+                ? <p>Early buyers pay less, so momentum builds itself. An open curve lives or dies on attention:
+                    there is no deadline forcing the issue, and no refund if it stalls.</p>
+                : <p>Early backers pay less, so momentum builds itself. All-or-nothing: ask for a number you can hit.</p>)}
               {step === 2 && <p>This fee runs forever. More to holders, they hold. More to you, more runway.</p>}
               {step === 3 && <p>Last look. The contract enforces every number here, and nobody can edit it later.</p>}
             </div>

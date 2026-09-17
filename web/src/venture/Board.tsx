@@ -114,7 +114,7 @@ export function Board() {
 function Edge() {
   const rows: [string, string, string][] = [
     ["\u25A4", "Terms locked on-chain", "Set at launch. Never editable."],
-    ["\u21BA", "Full refund if it misses", "All-or-nothing. Founder stake burns."],
+    ["\u21BA", "Your curve spend back if it misses", "All-or-nothing. Founder stake burns."],
     ["\u25C9", "Holders paid every trade", "In ETH, forever. Liquidity locked."],
   ];
   return (
@@ -147,7 +147,7 @@ function Proof({ ventures, ethUsd }: { ventures: Venture[] | null; ethUsd: numbe
       </span>
       <span className="dp-item">
         <span className="dp-n">100%</span>
-        <span className="dp-l">refunded when a raise misses target</span>
+        <span className="dp-l">of what you put in the curve, back if a raise misses</span>
       </span>
     </div>
   );

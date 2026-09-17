@@ -17,7 +17,7 @@ const FLAVOR_META: Record<string, { title: string; description: string; icon?: s
   venture: {
     title: "doubleplus — back an idea, own a stake in its market",
     description:
-      "Back startups and research projects at day zero on Robinhood Chain. Every raise publishes its terms on-chain before any money moves, refunds in full if it misses target, and pays holders a share of every trade in ETH.",
+      "Back startups and research projects at day zero on Robinhood Chain. Every raise publishes its terms on-chain before any money moves, returns every wei on the curve if it misses target, and pays holders a share of every trade in ETH.",
     ogImage: "/doubleplus-card.png",
   },
   steadypads: {

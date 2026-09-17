@@ -86,6 +86,8 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
     uint32 public constant MAX_VESTING_SECS = 730 days;
     uint16 public constant MAX_FOUNDER_RAISE_BPS = 3_000; // <= 30% of the raise
     uint16 public constant MAX_FOUNDER_SUPPLY_BPS = 1_500; // <= 15% of supply
+    uint16 public constant MAX_CURVE_FEE_BPS = 300; // ceiling on both curve fees
+    uint64 public constant MIN_SWEEP_DELAY = 180 days;
     int24 public constant TICK_SPACING = 60;
     uint24 public constant LP_FEE = 0;
     uint16 internal constant BPS = 10_000;
@@ -98,7 +100,36 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
     VentureTokenDeployer public immutable tokenDeployer;
     address public immutable protocolAdmin;
 
+    /// @notice Protocol fee on curve buys, taken off the incoming value before
+    ///         the curve is quoted, so `spentWei` records net escrow.
+    uint16 public immutable curveBuyFeeBps;
+    /// @notice Protocol fee on curve sells, taken out of the proceeds.
+    uint16 public immutable curveSellFeeBps;
+
     bool public launchesPaused;
+
+    /// @notice Flat fee to open a listing. Prices out spam as much as it earns.
+    uint256 public creationFeeWei;
+    /// @notice Open-mode graduation trigger, in raised wei. Frozen per listing
+    ///         at launch so a live curve never has its finish line moved. The
+    ///         optimum is empirical, hence settable rather than immutable.
+    uint256 public graduationRaiseWei = 5 ether;
+    /// @notice How long an aborted raise's escrow stays claimable.
+    uint64 public sweepDelaySecs = 365 days;
+    /// @notice Open-mode creator's share of the curve fee, in bps of the fee.
+    uint16 public creatorCurveShareBps = 1_000;
+
+    /// @notice Pull-payment ledger. Nothing in the trade path makes an external
+    ///         call to a fee recipient: a treasury that cannot receive ETH must
+    ///         never be able to brick every buy on the platform.
+    mapping(address recipient => uint256 wei_) public feesAccrued;
+
+    /// @notice `Guaranteed` is all-or-nothing with a target, a deadline and a
+    ///         full refund on failure; curve sells are capped at the seller's
+    ///         cost basis so the refund stays funded. `Open` has no target, no
+    ///         deadline and no refund, graduates on `graduationRaiseWei`, and
+    ///         lets the curve run uncapped in both directions.
+    enum RaiseMode { Guaranteed, Open }
 
     struct Listing {
         address creator;
@@ -119,6 +150,9 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         uint256 raisedWei;
         uint256 targetRaiseWei;
         uint256 maxBuyWei;    // per-wallet spend cap
+        RaiseMode mode;
+        uint64 abortedAt;     // 0 until abort(); starts the sweep clock
+        bool swept;
         bytes v3Path;         // WETH -> ... -> pair (empty when pair IS WETH)
     }
 
@@ -158,6 +192,7 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         uint16 founderRaiseBps;  // 0..3000: cut of the raise paid at graduation
         uint16 founderSupplyBps; // 0..1500: vested founder allocation
         uint32 vestingSecs;      // required when founderSupplyBps > 0
+        RaiseMode mode;          // Guaranteed (AON raise) or Open (free curve)
         bytes v3Path;            // WETH -> ... -> pair route for finalize
     }
 
@@ -176,6 +211,13 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
     );
     event Aborted(address indexed token, uint256 raisedWei, uint256 burned);
     event Refunded(address indexed token, address indexed buyer, uint256 ethOut, uint256 tokensReturned);
+    event CurveSell(
+        address indexed token, address indexed seller, uint256 ethOut, uint256 tokensIn, uint128 priceWei, uint256 feeWei
+    );
+    event FeeAccrued(address indexed token, address indexed recipient, uint256 amount);
+    event FeesWithdrawn(address indexed recipient, uint256 amount);
+    event Swept(address indexed token, uint256 amount);
+    event ParamsSet(uint256 creationFeeWei, uint256 graduationRaiseWei, uint64 sweepDelaySecs, uint16 creatorCurveShareBps);
     event Collected(address indexed token, uint256 tokenAmount, uint256 pairAmount, address indexed recipient);
     event LaunchesPausedSet(bool paused);
 
@@ -189,6 +231,13 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
     error NotAborted();
     error CapExceeded();
     error NothingToRefund();
+    error NothingToSell();
+    error SlippageExceeded();
+    error SweepTooEarly();
+    error AlreadySwept();
+    error FeeTooHigh();
+    error EthTransferFailed();
+    error NotPoolManager();
 
     modifier onlyProtocolAdmin() {
         if (msg.sender != protocolAdmin) revert NotProtocolAdmin();
@@ -203,9 +252,14 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         address weth_,
         ISwapRouterV3V v3Router_,
         VestingDeployer vestingDeployer_,
-        VentureTokenDeployer tokenDeployer_
+        VentureTokenDeployer tokenDeployer_,
+        uint16 curveBuyFeeBps_,
+        uint16 curveSellFeeBps_
     ) Ownable(owner_) {
         require(protocolAdmin_ != address(0), "admin=0");
+        if (curveBuyFeeBps_ > MAX_CURVE_FEE_BPS || curveSellFeeBps_ > MAX_CURVE_FEE_BPS) revert FeeTooHigh();
+        curveBuyFeeBps = curveBuyFeeBps_;
+        curveSellFeeBps = curveSellFeeBps_;
         protocolAdmin = protocolAdmin_;
         poolManager = poolManager_;
         hook = hook_;
@@ -229,25 +283,95 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         emit LaunchesPausedSet(false);
     }
 
+    /// @notice Tune the parameters whose optimum is empirical. The curve fees
+    ///         themselves are immutable; these are not, because a graduation
+    ///         threshold guessed before launch can never be the right one.
+    ///         Applies to new launches only: `graduationRaiseWei` is copied
+    ///         into the curve at launch, so no live raise moves.
+    function setParams(
+        uint256 creationFeeWei_,
+        uint256 graduationRaiseWei_,
+        uint64 sweepDelaySecs_,
+        uint16 creatorCurveShareBps_
+    ) external onlyProtocolAdmin {
+        if (graduationRaiseWei_ == 0 || graduationRaiseWei_ > MAX_TARGET_WEI) revert InvalidParams();
+        if (sweepDelaySecs_ < MIN_SWEEP_DELAY) revert InvalidParams();
+        if (creatorCurveShareBps_ > 5_000) revert InvalidParams();
+        creationFeeWei = creationFeeWei_;
+        graduationRaiseWei = graduationRaiseWei_;
+        sweepDelaySecs = sweepDelaySecs_;
+        creatorCurveShareBps = creatorCurveShareBps_;
+        emit ParamsSet(creationFeeWei_, graduationRaiseWei_, sweepDelaySecs_, creatorCurveShareBps_);
+    }
+
+    // ---------------------------------------------------------------------
+    // Fee ledger: accrue in the trade path, withdraw out of band
+    // ---------------------------------------------------------------------
+
+    function _accrue(address token, address to, uint256 amount) internal {
+        if (amount == 0 || to == address(0)) return;
+        feesAccrued[to] += amount;
+        emit FeeAccrued(token, to, amount);
+    }
+
+    /// @dev Referrer first, then the Open-mode creator's share, remainder to
+    ///      the protocol treasury. Nothing here calls out to the recipients.
+    function _splitCurveFee(address token, uint256 fee) internal {
+        if (fee == 0) return;
+        uint256 remaining = fee;
+        address ref = hook.referrerOf(msg.sender);
+        if (ref != address(0) && ref != msg.sender) {
+            uint256 toRef = (fee * hook.refShareBps()) / BPS;
+            _accrue(token, ref, toRef);
+            remaining -= toRef;
+        }
+        if (_curves[token].mode == RaiseMode.Open && creatorCurveShareBps > 0) {
+            uint256 toCreator = (fee * creatorCurveShareBps) / BPS;
+            _accrue(token, listings[token].creator, toCreator);
+            remaining -= toCreator;
+        }
+        _accrue(token, hook.platformTreasury(), remaining);
+    }
+
+    /// @notice Withdraw everything accrued to the caller.
+    function withdrawFees() external nonReentrant returns (uint256 amount) {
+        amount = feesAccrued[msg.sender];
+        if (amount == 0) revert NothingToRefund();
+        feesAccrued[msg.sender] = 0;
+        (bool ok,) = payable(msg.sender).call{value: amount}("");
+        if (!ok) revert EthTransferFailed();
+        emit FeesWithdrawn(msg.sender, amount);
+    }
+
     // ---------------------------------------------------------------------
     // Launch: deploy the token, escrow the founder allocation, open the curve
     // ---------------------------------------------------------------------
 
-    function launch(LaunchParams calldata p, bytes32 salt) external nonReentrant returns (address token) {
+    function launch(LaunchParams calldata p, bytes32 salt) external payable nonReentrant returns (address token) {
         if (launchesPaused) revert LaunchesPaused_();
+        if (msg.value < creationFeeWei) revert InvalidParams();
         if (bytes(p.name).length == 0 || bytes(p.symbol).length == 0) revert InvalidParams();
         if (p.buyTaxBps > hook.MAX_SIDE_TAX_BPS() || p.sellTaxBps > hook.MAX_SIDE_TAX_BPS()) revert InvalidParams();
         if (uint256(p.devBps) + p.dividendBps + p.liquidityBps + p.mmBps != BPS) revert InvalidParams();
         if (p.ethUsdPrice8 == 0) revert InvalidParams();
         if (p.pair == address(0) || p.pair.code.length == 0) revert InvalidParams();
         if (p.pair != address(weth) && p.v3Path.length == 0) revert InvalidParams();
-        if (p.raiseDurationSecs < MIN_RAISE_SECS || p.raiseDurationSecs > MAX_RAISE_SECS) revert InvalidParams();
+        bool open = p.mode == RaiseMode.Open;
+        // Open mode has no deadline and no cut of a raise: the creator is paid
+        // out of curve fees instead, so there is nothing to hold to a target.
+        if (!open && (p.raiseDurationSecs < MIN_RAISE_SECS || p.raiseDurationSecs > MAX_RAISE_SECS)) {
+            revert InvalidParams();
+        }
+        if (open && p.founderRaiseBps != 0) revert InvalidParams();
         if (p.founderRaiseBps > MAX_FOUNDER_RAISE_BPS) revert InvalidParams();
         if (p.founderSupplyBps > MAX_FOUNDER_SUPPLY_BPS) revert InvalidParams();
         if (p.founderSupplyBps > 0 && (p.vestingSecs < MIN_VESTING_SECS || p.vestingSecs > MAX_VESTING_SECS)) {
             revert InvalidParams();
         }
-        if (p.targetRaiseWei == 0 || p.targetRaiseWei > MAX_TARGET_WEI) revert InvalidParams();
+        // One trigger serves both modes: Guaranteed uses the founder's target,
+        // Open takes the protocol's graduation threshold, frozen here.
+        uint256 target = open ? graduationRaiseWei : p.targetRaiseWei;
+        if (target == 0 || target > MAX_TARGET_WEI) revert InvalidParams();
 
         // p0: whole-supply FDV of START_MCAP_USD at the first curve buy.
         uint256 p0 = Math.mulDiv(START_MCAP_USD_8, 1e18, TOTAL_SUPPLY_WHOLE * p.ethUsdPrice8);
@@ -258,13 +382,15 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         // k (Q18) such that selling the whole curve raises exactly the target:
         // target = p0*C + k*C^2/2  =>  k = 2*(target - p0*C)/C^2.
         uint256 baseCost = p0 * CURVE_SUPPLY_WHOLE;
-        if (p.targetRaiseWei < baseCost) revert InvalidParams(); // curve slope must be >= 0
+        if (target < baseCost) revert InvalidParams(); // curve slope must be >= 0
         uint256 slopeQ =
-            Math.mulDiv(2 * (p.targetRaiseWei - baseCost), 1e18, CURVE_SUPPLY_WHOLE * CURVE_SUPPLY_WHOLE);
+            Math.mulDiv(2 * (target - baseCost), 1e18, CURVE_SUPPLY_WHOLE * CURVE_SUPPLY_WHOLE);
         if (slopeQ > type(uint128).max) revert InvalidParams();
 
-        uint256 maxBuy = p.maxBuyWei == 0 ? p.targetRaiseWei / 50 : p.maxBuyWei;
-        if (maxBuy < p.targetRaiseWei / 200) revert InvalidParams(); // cap can't make the raise impossible
+        // A per-wallet cap is a fairness device for an all-or-nothing raise.
+        // Open mode is a market; it does not have one.
+        uint256 maxBuy = open ? type(uint256).max : (p.maxBuyWei == 0 ? target / 50 : p.maxBuyWei);
+        if (maxBuy < target / 200) revert InvalidParams(); // cap can't make the raise impossible
 
         token = tokenDeployer.deployToken(
             salt, p.name, p.symbol, p.metadataURI, TOTAL_SUPPLY, msg.sender, p.buyTaxBps, p.pair
@@ -292,14 +418,17 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         _curves[token] = Curve({
             basePriceWei: uint128(p0),
             slopeQ: uint128(slopeQ),
-            deadline: uint64(block.timestamp) + p.raiseDurationSecs,
+            deadline: open ? type(uint64).max : uint64(block.timestamp) + p.raiseDurationSecs,
             finalized: false,
             aborted: false,
             founderRaiseBps: p.founderRaiseBps,
             soldWhole: 0,
             raisedWei: 0,
-            targetRaiseWei: p.targetRaiseWei,
+            targetRaiseWei: target,
             maxBuyWei: maxBuy,
+            mode: p.mode,
+            abortedAt: 0,
+            swept: false,
             v3Path: p.v3Path
         });
         feePolicyOf[token] = VentureFeeHook.FeePolicy({
@@ -316,9 +445,13 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         allTokens.push(token);
         _tokensByCreator[msg.sender].push(token);
 
-        emit Launched(
-            token, msg.sender, p.pair, p.buyTaxBps, p.targetRaiseWei, uint64(block.timestamp) + p.raiseDurationSecs, vesting
-        );
+        if (creationFeeWei > 0) _accrue(token, hook.platformTreasury(), creationFeeWei);
+        if (msg.value > creationFeeWei) {
+            (bool back,) = payable(msg.sender).call{value: msg.value - creationFeeWei}("");
+            if (!back) revert EthTransferFailed();
+        }
+
+        emit Launched(token, msg.sender, p.pair, p.buyTaxBps, target, _curves[token].deadline, vesting);
     }
 
     // ---------------------------------------------------------------------
@@ -366,13 +499,20 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         if (c.raisedWei >= c.targetRaiseWei || c.soldWhole >= CURVE_SUPPLY_WHOLE) revert CurveClosed();
         if (msg.value == 0) revert InvalidParams();
 
-        uint256 q = tokensForValue(token, msg.value);
+        // The entry fee comes off the incoming value before the curve is
+        // quoted, so spentWei records what actually reaches escrow. Booking it
+        // gross would leave refund liability above escrow by exactly the take.
+        uint256 feeIn = (msg.value * curveBuyFeeBps) / BPS;
+        uint256 netValue = msg.value - feeIn;
+        if (netValue == 0) revert InvalidParams();
+
+        uint256 q = tokensForValue(token, netValue);
         uint256 remaining = CURVE_SUPPLY_WHOLE - c.soldWhole;
         if (q > remaining) q = remaining;
         if (q == 0) revert InvalidParams();
 
         uint256 spend = curveCost(token, q, c.soldWhole) + 1; // round the cost up
-        if (spend > msg.value) spend = msg.value;
+        if (spend > netValue) spend = netValue;
         if (spentWei[token][msg.sender] + spend > c.maxBuyWei) revert CapExceeded();
 
         uint128 price = priceNow(token);
@@ -383,11 +523,65 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         boughtTokens[token][msg.sender] += tokensOut;
 
         IERC20(token).safeTransfer(msg.sender, tokensOut);
-        if (msg.value > spend) {
-            (bool ok,) = payable(msg.sender).call{value: msg.value - spend}("");
-            require(ok, "refund");
+        _splitCurveFee(token, feeIn);
+        if (netValue > spend) {
+            (bool ok,) = payable(msg.sender).call{value: netValue - spend}("");
+            if (!ok) revert EthTransferFailed();
         }
         emit CurveBuy(token, msg.sender, spend, tokensOut, price);
+    }
+
+    // ---------------------------------------------------------------------
+    // Sell back to the curve
+    // ---------------------------------------------------------------------
+
+    /// @notice Return `qWhole` tokens to the curve for ETH. The claim belongs
+    ///         to the address that bought on the curve: tokens acquired by
+    ///         plain transfer carry no curve position, exactly as with refund().
+    /// @dev    In Guaranteed mode the payout is capped at the seller's pro-rata
+    ///         cost basis. That cap is a solvency requirement, not a policy:
+    ///         escrow is `B - S` and refund liability is `B - C`, so refunds
+    ///         stay funded iff `C >= S`. Uncapped, an early buyer could sell
+    ///         into later buyers' ETH and leave the rest short.
+    function sell(address token, uint256 qWhole, uint256 minEthOut)
+        external
+        nonReentrant
+        returns (uint256 ethOut)
+    {
+        Curve storage c = _curves[token];
+        if (c.basePriceWei == 0) revert InvalidParams();
+        if (c.finalized || c.aborted) revert CurveClosed();
+        // High-water lock: once the graduation trigger is crossed the curve is
+        // frozen both ways, so a sell cannot drag a funded raise back under it.
+        if (c.raisedWei >= c.targetRaiseWei || c.soldWhole >= CURVE_SUPPLY_WHOLE) revert CurveClosed();
+
+        uint256 owned = boughtTokens[token][msg.sender];
+        if (owned == 0 || qWhole == 0) revert NothingToSell();
+        uint256 qMax = owned / 1e18;
+        uint256 q = qWhole > qMax ? qMax : qWhole;
+        if (q == 0 || q > c.soldWhole) revert NothingToSell();
+
+        uint256 tokenWei = q * 1e18;
+        uint256 costBasis = Math.mulDiv(spentWei[token][msg.sender], tokenWei, owned);
+        uint256 gross = curveCost(token, q, c.soldWhole - q);
+        if (c.mode == RaiseMode.Guaranteed && gross > costBasis) gross = costBasis;
+        if (gross > c.raisedWei) gross = c.raisedWei;
+
+        uint256 fee = (gross * curveSellFeeBps) / BPS;
+        ethOut = gross - fee;
+        if (ethOut < minEthOut) revert SlippageExceeded();
+
+        spentWei[token][msg.sender] -= costBasis;
+        boughtTokens[token][msg.sender] = owned - tokenWei;
+        c.soldWhole -= q;
+        c.raisedWei -= gross;
+
+        // Tokens go back to factory inventory so the curve can resell them.
+        IERC20(token).safeTransferFrom(msg.sender, address(this), tokenWei);
+        _splitCurveFee(token, fee);
+        (bool ok,) = payable(msg.sender).call{value: ethOut}("");
+        if (!ok) revert EthTransferFailed();
+        emit CurveSell(token, msg.sender, ethOut, tokenWei, priceNow(token), fee);
     }
 
     // ---------------------------------------------------------------------
@@ -407,7 +601,7 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         uint256 founderCut = (c.raisedWei * c.founderRaiseBps) / BPS;
         if (founderCut > 0) {
             (bool ok,) = payable(l.creator).call{value: founderCut}("");
-            require(ok, "founder cut");
+            if (!ok) revert EthTransferFailed();
         }
 
         // 2) Remaining ETH -> pair token (liquidity side).
@@ -512,6 +706,7 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         if (block.timestamp < c.deadline) revert CurveLive();
         if (c.raisedWei >= c.targetRaiseWei || c.soldWhole >= CURVE_SUPPLY_WHOLE) revert CurveLive();
         c.aborted = true;
+        c.abortedAt = uint64(block.timestamp);
 
         address vesting = vestingOf[token];
         if (vesting != address(0)) FounderVesting(vesting).reclaim();
@@ -527,18 +722,39 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
     function refund(address token) external nonReentrant returns (uint256 ethOut) {
         Curve storage c = _curves[token];
         if (!c.aborted) revert NotAborted();
+        if (c.swept) revert AlreadySwept();
         uint256 tokensBack = boughtTokens[token][msg.sender];
         ethOut = spentWei[token][msg.sender];
         if (tokensBack == 0 || ethOut == 0) revert NothingToRefund();
         boughtTokens[token][msg.sender] = 0;
         spentWei[token][msg.sender] = 0;
+        // Keep raisedWei equal to the ETH this raise still holds, so the two
+        // ledgers stay in step and sweepUnclaimed knows what is genuinely left.
+        c.raisedWei -= ethOut;
 
         IERC20(token).safeTransferFrom(msg.sender, address(this), tokensBack);
         QuiverToken(payable(token)).burn(tokensBack);
 
         (bool ok,) = payable(msg.sender).call{value: ethOut}("");
-        require(ok, "refund xfer");
+        if (!ok) revert EthTransferFailed();
         emit Refunded(token, msg.sender, ethOut, tokensBack);
+    }
+
+    /// @notice Sweep escrow left behind long after an aborted raise. A curve
+    ///         claim is keyed to the buying address, so a backer who moves
+    ///         their tokens away can no longer refund and their ETH would
+    ///         otherwise sit here forever. The window is deliberately long and
+    ///         the claim page stays open for all of it.
+    function sweepUnclaimed(address token) external nonReentrant returns (uint256 amount) {
+        Curve storage c = _curves[token];
+        if (!c.aborted) revert NotAborted();
+        if (c.swept) revert AlreadySwept();
+        if (block.timestamp < uint256(c.abortedAt) + sweepDelaySecs) revert SweepTooEarly();
+        amount = c.raisedWei;
+        c.swept = true;
+        c.raisedWei = 0;
+        _accrue(token, hook.platformTreasury(), amount);
+        emit Swept(token, amount);
     }
 
     // ---------------------------------------------------------------------
@@ -546,7 +762,7 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
     // ---------------------------------------------------------------------
 
     function unlockCallback(bytes calldata data) external override returns (bytes memory) {
-        require(msg.sender == address(poolManager), "not pool manager");
+        if (msg.sender != address(poolManager)) revert NotPoolManager();
         (uint8 action, bytes memory payload) = abi.decode(data, (uint8, bytes));
 
         if (action == 0) {
@@ -689,7 +905,9 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
             uint256 maxBuyWei,
             address vesting,
             uint128 basePriceWei,
-            uint128 slopeQ
+            uint128 slopeQ,
+            RaiseMode mode,
+            bool swept
         )
     {
         Curve storage c = _curves[token];
@@ -698,6 +916,8 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         vesting = vestingOf[token];
         basePriceWei = c.basePriceWei;
         slopeQ = c.slopeQ;
+        mode = c.mode;
+        swept = c.swept;
     }
 
     receive() external payable {}

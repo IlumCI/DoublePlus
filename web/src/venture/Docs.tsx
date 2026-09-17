@@ -93,7 +93,7 @@ export function Docs() {
           <div className="dp-compare">
             <div className="dp-row dp-head"><span>Typical launchpad</span><span>{BRAND.name}</span></div>
             <div className="dp-row"><span>A name, a ticker and a curve</span><span>A term sheet written on-chain before anyone buys</span></div>
-            <div className="dp-row"><span>Raise fails, funds are gone</span><span>Raise misses target, everyone is refunded in full</span></div>
+            <div className="dp-row"><span>Raise fails, funds are gone</span><span>Raise misses target, every wei on the curve goes back</span></div>
             <div className="dp-row"><span>Creator can exit at any time</span><span>Founder stake vests, and burns entirely if the raise fails</span></div>
             <div className="dp-row"><span>Fees mostly to the platform</span><span>Founder-set split; holders can take the largest share</span></div>
             <div className="dp-row"><span>Liquidity at the deployer's mercy</span><span>Locked at graduation, market-made on both sides by the protocol</span></div>
@@ -158,7 +158,7 @@ function Figure() {
           </marker>
         </defs>
         <path d="M258 78 v22 h-150 v-22" stroke="var(--down)" strokeWidth="1.5" fill="none" strokeDasharray="4 3" />
-        <text x="183" y="116" textAnchor="middle" fill="var(--down)" fontSize="10.5" fontFamily="var(--mono)">misses target → everyone refunded</text>
+        <text x="183" y="116" textAnchor="middle" fill="var(--down)" fontSize="10.5" fontFamily="var(--mono)">misses target → curve spend returned</text>
         {["founder", "holders", "liquidity", "market-making"].map((d, i) => (
           <text key={d} x={545} y={100 + i * 16} textAnchor="middle" fill="var(--dim)" fontSize="10.5" fontFamily="var(--mono)">↳ {d}</text>
         ))}

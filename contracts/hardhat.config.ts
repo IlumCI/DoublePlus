@@ -22,10 +22,26 @@ const STABLE_CHAIN_ID = Number(process.env.STABLE_CHAIN_ID ?? 988);
 
 const config: HardhatUserConfig = {
   solidity: {
-    version: "0.8.26",
-    settings: {
-      optimizer: { enabled: true, runs: 400 },
-      viaIR: true,
+    compilers: [
+      {
+        version: "0.8.26",
+        settings: {
+          optimizer: { enabled: true, runs: 400 },
+          viaIR: true,
+        },
+      },
+    ],
+    // VentureFactory carries the whole curve lifecycle and sits close to the
+    // 24576-byte limit. Optimising it for size rather than call gas buys the
+    // headroom; every other contract keeps runs: 400.
+    overrides: {
+      "contracts/v4/venture/VentureFactory.sol": {
+        version: "0.8.26",
+        settings: {
+          optimizer: { enabled: true, runs: 1 },
+          viaIR: true,
+        },
+      },
     },
   },
   networks: {

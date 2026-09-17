@@ -51,6 +51,7 @@ async function main() {
     founderRaiseBps: 3000,
     founderSupplyBps: 1000,
     vestingSecs: 90n * DAY,
+    mode: 0,
     v3Path: "0x",
   };
   const Token = await ethers.getContractFactory("QuiverToken");

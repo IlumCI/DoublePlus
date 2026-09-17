@@ -69,6 +69,8 @@ export const factoryAbi = [
       { name: "vesting", type: "address" },
       { name: "basePriceWei", type: "uint128" },
       { name: "slopeQ", type: "uint128" },
+      { name: "mode", type: "uint8" },
+      { name: "swept", type: "bool" },
     ],
   },
   { type: "function", name: "priceNow", stateMutability: "view", inputs: [{ type: "address" }], outputs: [{ type: "uint128" }] },
@@ -91,13 +93,20 @@ export const factoryAbi = [
   { type: "function", name: "spentWei", stateMutability: "view", inputs: [{ type: "address" }, { type: "address" }], outputs: [{ type: "uint256" }] },
   { type: "function", name: "boughtTokens", stateMutability: "view", inputs: [{ type: "address" }, { type: "address" }], outputs: [{ type: "uint256" }] },
   { type: "function", name: "buy", stateMutability: "payable", inputs: [{ type: "address" }], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "sell", stateMutability: "nonpayable", inputs: [{ type: "address" }, { type: "uint256" }, { type: "uint256" }], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "curveBuyFeeBps", stateMutability: "view", inputs: [], outputs: [{ type: "uint16" }] },
+  { type: "function", name: "curveSellFeeBps", stateMutability: "view", inputs: [], outputs: [{ type: "uint16" }] },
+  { type: "function", name: "creationFeeWei", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "graduationRaiseWei", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "feesAccrued", stateMutability: "view", inputs: [{ type: "address" }], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "withdrawFees", stateMutability: "nonpayable", inputs: [], outputs: [{ type: "uint256" }] },
   { type: "function", name: "finalize", stateMutability: "nonpayable", inputs: [{ type: "address" }], outputs: [{ type: "bytes32" }] },
   { type: "function", name: "abort", stateMutability: "nonpayable", inputs: [{ type: "address" }], outputs: [] },
   { type: "function", name: "refund", stateMutability: "nonpayable", inputs: [{ type: "address" }], outputs: [{ type: "uint256" }] },
   {
     type: "function",
     name: "launch",
-    stateMutability: "nonpayable",
+    stateMutability: "payable",
     inputs: [
       {
         name: "p",
@@ -121,6 +130,7 @@ export const factoryAbi = [
           { name: "founderRaiseBps", type: "uint16" },
           { name: "founderSupplyBps", type: "uint16" },
           { name: "vestingSecs", type: "uint32" },
+          { name: "mode", type: "uint8" },
           { name: "v3Path", type: "bytes" },
         ],
       },
@@ -236,8 +246,15 @@ export interface Venture {
   };
   basePriceWei: bigint;
   slopeQ: bigint;
+  /** 0 = Guaranteed (all-or-nothing raise), 1 = Open (free curve). */
+  mode: RaiseMode;
+  swept: boolean;
   phase: Phase;
 }
+
+export type RaiseMode = 0 | 1;
+export const GUARANTEED: RaiseMode = 0;
+export const OPEN: RaiseMode = 1;
 
 function phaseOf(v: { finalized: boolean; aborted: boolean; deadline: number; raisedWei: bigint; targetRaiseWei: bigint; remainingWhole: bigint }): Phase {
   if (v.finalized) return "graduated";
@@ -245,6 +262,8 @@ function phaseOf(v: { finalized: boolean; aborted: boolean; deadline: number; ra
   const now = Math.floor(Date.now() / 1000);
   const targetHit = v.raisedWei >= v.targetRaiseWei || v.remainingWhole === 0n;
   if (targetHit) return "expired"; // fully funded, awaiting the graduation call
+  // An Open curve carries deadline = uint64 max: it never expires, it only
+  // graduates, so this branch is unreachable for it by design.
   if (now >= v.deadline) return "failed"; // past deadline below target (abort pending or done)
   return "raising";
 }
@@ -279,7 +298,7 @@ export async function loadVenture(address: Address): Promise<Venture> {
   ]);
   const [creator, pair, taxBps, createdAt, poolId] = listing as unknown as [Address, Address, number, bigint, string];
   const c = curve as unknown as [bigint, bigint, bigint, bigint, bigint, bigint, boolean, boolean];
-  const t = terms as unknown as [number, bigint, Address, bigint, bigint];
+  const t = terms as unknown as [number, bigint, Address, bigint, bigint, number, boolean];
   const pol = policyRaw as unknown as [Address, number, number, number, number, number, number];
   let meta: VentureMeta = {};
   try {
@@ -327,6 +346,8 @@ export async function loadVenture(address: Address): Promise<Venture> {
     },
     basePriceWei: t[3],
     slopeQ: t[4],
+    mode: Number(t[5]) as RaiseMode,
+    swept: Boolean(t[6]),
     phase: phaseOf(base),
   };
 }
@@ -367,6 +388,34 @@ export function quoteTokens(v: Venture, valueWei: bigint): bigint {
   const disc = b * b + 2n * k * 10n ** 18n * valueWei;
   const q = (sqrtBig(disc) - b) / k;
   return q > v.remainingWhole ? v.remainingWhole : q;
+}
+
+/** Mirror of VentureFactory.curveCost: the exact integral, so the sell quote
+ *  the panel shows is the one the contract computes. */
+export function curveCostWei(v: Venture, qWhole: bigint, fromSoldWhole: bigint): bigint {
+  if (qWhole <= 0n) return 0n;
+  return qWhole * v.basePriceWei
+    + (v.slopeQ * (2n * fromSoldWhole * qWhole + qWhole * qWhole)) / (2n * 10n ** 18n);
+}
+
+/** What selling `qWhole` back to the curve pays, net of the protocol fee.
+ *  Guaranteed mode caps the gross at the seller's pro-rata cost basis — that
+ *  cap is what keeps the refund pot solvent, so the quote must respect it. */
+export function quoteSellWei(
+  v: Venture,
+  qWhole: bigint,
+  ownedWei: bigint,
+  basisWei: bigint,
+  sellFeeBps: number,
+): { gross: bigint; fee: bigint; out: bigint; capped: boolean } {
+  if (qWhole <= 0n || ownedWei === 0n) return { gross: 0n, fee: 0n, out: 0n, capped: false };
+  const q = qWhole > v.soldWhole ? v.soldWhole : qWhole;
+  const raw = curveCostWei(v, q, v.soldWhole - q);
+  const basis = (basisWei * (q * 10n ** 18n)) / ownedWei;
+  const capped = v.mode === GUARANTEED && raw > basis;
+  const gross = capped ? basis : raw;
+  const fee = (gross * BigInt(sellFeeBps)) / 10_000n;
+  return { gross, fee, out: gross - fee, capped };
 }
 
 function sqrtBig(n: bigint): bigint {

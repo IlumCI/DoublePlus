@@ -110,6 +110,8 @@ export function StatusBadge({ v }: { v: Venture }) {
   if (v.phase === "failed") return <span className="dp-badge dp-dead">failed</span>;
   if (v.phase === "expired") return <span className="dp-badge dp-soon">funded</span>;
   if (funded >= 85) return <span className="dp-badge dp-soon">graduating soon</span>;
+  // An open curve has no target to be "live" against — it trades until it fills.
+  if (v.mode === 1) return <span className="dp-badge dp-open">open curve</span>;
   return <span className="dp-badge dp-live">live</span>;
 }
 

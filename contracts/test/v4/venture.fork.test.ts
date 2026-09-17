@@ -51,6 +51,7 @@ async function deployAll(admin: any, treasury: any) {
   const factory = await (await ethers.getContractFactory("VentureFactory")).deploy(
     admin.address, admin.address, POOL_MANAGER, hookAddr, WETH, V3_ROUTER,
     await vestingDeployer.getAddress(), await tokenDeployer.getAddress(),
+     50, 100,
   );
   await factory.waitForDeployment();
   expect(await factory.getAddress()).to.equal(predictedFactory);
@@ -72,7 +73,7 @@ async function launch(factory: any, tokenDeployer: any, signer: any, pair: strin
     devBps: 2500, dividendBps: 2500, liquidityBps: 2500, mmBps: 2500,
     ethUsdPrice8: ETH_USD_8, targetRaiseWei: TARGET, raiseDurationSecs: 3 * DAY,
     maxBuyWei: TARGET, founderRaiseBps: 3000, founderSupplyBps: 1000,
-    vestingSecs: 180 * DAY, v3Path: "0x",
+    vestingSecs: 180 * DAY, mode: 0, v3Path: "0x",
   };
   const args = ethers.AbiCoder.defaultAbiCoder().encode(
     ["string", "string", "string", "uint256", "address", "address", "uint16", "address"],
@@ -221,7 +222,7 @@ describe("Venture bonding-curve launchpad (fork)", function () {
       devBps: 2500, dividendBps: 5000, liquidityBps: 2500, mmBps: 0,
       ethUsdPrice8: ETH_USD_8, targetRaiseWei: TARGET, raiseDurationSecs: 3 * DAY,
       maxBuyWei: TARGET, founderRaiseBps: 2000, founderSupplyBps: 0,
-      vestingSecs: 0, v3Path: buyPath,
+      vestingSecs: 0, mode: 0, v3Path: buyPath,
     };
     const args = ethers.AbiCoder.defaultAbiCoder().encode(
       ["string", "string", "string", "uint256", "address", "address", "uint16", "address"],

@@ -78,7 +78,7 @@ export function Desk() {
         <div className="dp-three-col" style={{ marginTop: 6 }}>
           <div className="dp-record"><span className="dp-k">Fee income</span><span className="dp-val">— <small style={{ fontSize: 13 }}>ETH</small></span><p className="dp-foot dp-agate">paid to holders every 15 minutes</p></div>
           <div className="dp-record"><span className="dp-k">Referral earnings</span><span className="dp-val">— <small style={{ fontSize: 13 }}>ETH</small></span><p className="dp-foot dp-agate">20% of the protocol fee on trades your link brings</p></div>
-          <div className="dp-record"><span className="dp-k">Backed on curves</span><span className="dp-val">— <small style={{ fontSize: 13 }}>ETH</small></span><p className="dp-foot dp-agate">refunded in full if a raise misses target</p></div>
+          <div className="dp-record"><span className="dp-k">Backed on curves</span><span className="dp-val">— <small style={{ fontSize: 13 }}>ETH</small></span><p className="dp-foot dp-agate">your curve spend comes back if a raise misses target</p></div>
         </div>
         <p className="dp-agate" style={{ marginTop: 14 }}>
           Nothing here is custodial: every figure is read from your wallet's position on-chain.

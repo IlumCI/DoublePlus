@@ -204,6 +204,7 @@ p { text-wrap: pretty; }
 .dp-badge.dp-grad { color: var(--violet); border-color: var(--violet); }
 .dp-badge.dp-dead { color: var(--down); border-color: var(--down); }
 .dp-badge.dp-soon { color: var(--paper); border-color: var(--paper); animation: pulse 1.6s infinite; }
+.dp-badge.dp-open { color: #8fb4e3; border-color: #8fb4e3; }
 @keyframes pulse { 50% { opacity: .45; } }
 @media (prefers-reduced-motion: reduce) { .dp-badge.dp-soon, .dp-tcard.dp-bump { animation: none; } }
 

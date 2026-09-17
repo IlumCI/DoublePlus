@@ -73,7 +73,7 @@ const FLAVORS: Record<string, Brand> = {
     twitterHandle: "",
     tagline: "day-zero funding for startups and research projects",
     description:
-      "Back startups and research projects at day zero on Robinhood Chain. Every raise publishes its terms on-chain before any money moves, refunds in full if it misses target, and pays holders a share of every trade in ETH.",
+      "Back startups and research projects at day zero on Robinhood Chain. Every raise publishes its terms on-chain before any money moves, returns every wei on the curve if it misses target, and pays holders a share of every trade in ETH.",
     title: "doubleplus — back an idea, own a stake in its market",
   },
   steadypads: {

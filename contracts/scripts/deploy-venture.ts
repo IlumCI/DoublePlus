@@ -46,8 +46,12 @@ async function main() {
   const treasury = process.env.TREASURY ?? admin;
   const platformFeeBps = Number(process.env.PLATFORM_FEE_BPS ?? 100);
   const refShareBps = Number(process.env.REF_SHARE_BPS ?? 2000);
+  // Curve-phase protocol fees. Immutable once deployed, so they are set here.
+  const curveBuyFeeBps = Number(process.env.CURVE_BUY_FEE_BPS ?? 50);
+  const curveSellFeeBps = Number(process.env.CURVE_SELL_FEE_BPS ?? 100);
   console.log(`network: ${network.name} (${chainId})  deployer: ${signer.address}`);
   console.log(`admin: ${admin}  treasury: ${treasury}  platformFeeBps: ${platformFeeBps}  refShareBps: ${refShareBps}`);
+  console.log(`curveBuyFeeBps: ${curveBuyFeeBps}  curveSellFeeBps: ${curveSellFeeBps}`);
 
   // 1) CREATE2 deployer + vesting deployer, then pin the factory address two
   //    creates ahead so the hook (immutable launcher) and the token deployer
@@ -89,6 +93,7 @@ async function main() {
   const factory = await (await ethers.getContractFactory("VentureFactory")).deploy(
     signer.address, admin, infra.poolManager, hookAddr, infra.weth, infra.v3Router,
     await vestingDeployer.getAddress(), await tokenDeployer.getAddress(),
+    curveBuyFeeBps, curveSellFeeBps,
   );
   await factory.waitForDeployment();
   const factoryAddr = await factory.getAddress();
@@ -116,6 +121,8 @@ async function main() {
     treasury,
     platformFeeBps,
     refShareBps,
+    curveBuyFeeBps,
+    curveSellFeeBps,
     startBlock,
     contracts: {
       hookDeployer: c2Addr,
