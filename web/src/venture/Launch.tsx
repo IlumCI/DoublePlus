@@ -524,9 +524,14 @@ export function LaunchVenture() {
           <div className="dp-panel" style={{ marginTop: 12 }}>
             <div className="dp-phead"><span>What you earn</span></div>
             <div className="dp-pbody dp-earn">
-              <div><b className="dp-up">{cutEth > 0 ? `${cutEth.toFixed(4)} ETH` : "—"}</b><span>funding when the raise succeeds</span></div>
+              <div><b className="dp-up">{cutEth > 0 ? `${cutEth.toFixed(4)} ETH` : "—"}</b>
+                <span>your {founderCut}% of the {target || "—"} ETH backers put in, paid at graduation</span></div>
               <div><b className="dp-up">{(avgTax * alloc.dev / 100).toFixed(2)}%</b><span>of every trade, forever</span></div>
               <div><b className="dp-up">{founderStake}%</b><span>of supply, vesting {vestDays} days</span></div>
+              <p className="dp-hint" style={{ marginTop: 4 }}>
+                The other {100 - founderCut}% becomes the pool's locked liquidity. Miss the target and
+                backers are refunded in full — you are paid nothing.
+              </p>
             </div>
           </div>
 
