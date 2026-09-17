@@ -207,10 +207,25 @@ export interface VentureMeta {
   pitch?: string;
   sector?: string;
   logo?: string;
+  /** Cover image URL. Kept a URL, not a data URI: metadata rides calldata. */
+  banner?: string;
   website?: string;
   twitter?: string;
   telegram?: string;
+  discord?: string;
+  github?: string;
+  docs?: string;
 }
+
+/** The link rows a trader actually scans for, in the order they scan them. */
+export const SOCIAL_FIELDS = [
+  ["website", "Website"],
+  ["twitter", "X"],
+  ["telegram", "Telegram"],
+  ["discord", "Discord"],
+  ["github", "GitHub"],
+  ["docs", "Docs"],
+] as const;
 
 export type Phase = "raising" | "expired" | "graduated" | "failed";
 

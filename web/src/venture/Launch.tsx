@@ -30,7 +30,11 @@ export function LaunchVenture() {
   const pushToast = useUi((s) => s.pushToast);
   const navigate = useNavigate();
 
-  const [form, setForm] = useState({ name: "", symbol: "", pitch: "", sector: "", website: "", twitter: "" });
+  const [form, setForm] = useState({
+    name: "", symbol: "", pitch: "", sector: "", banner: "",
+    website: "", twitter: "", telegram: "", discord: "", github: "", docs: "",
+  });
+  const [moreLinks, setMoreLinks] = useState(false);
   const [target, setTarget] = useState("");
   const [days, setDays] = useState(7);
   const [founderCut, setFounderCut] = useState(20); // % of raise
@@ -119,8 +123,13 @@ export function LaunchVenture() {
         pitch: form.pitch.trim(),
         sector: form.sector.trim(),
         logo: logoData,
+        banner: form.banner.trim(),
         website: form.website.trim(),
         twitter: form.twitter.trim(),
+        telegram: form.telegram.trim(),
+        discord: form.discord.trim(),
+        github: form.github.trim(),
+        docs: form.docs.trim(),
       });
       const buyTaxBps = Math.round(buyTaxPct * 100);
       const symbol = form.symbol.trim().toUpperCase();
@@ -325,6 +334,27 @@ export function LaunchVenture() {
                 <div className="dp-field"><label htmlFor="v-x">X / Twitter</label>
                   <input id="v-x" value={form.twitter} onChange={set("twitter")} placeholder="https://x.com/…" /></div>
               </div>
+              <button type="button" className="dp-linkbtn" onClick={() => setMoreLinks(!moreLinks)}>
+                {moreLinks ? "fewer links" : "telegram, discord, github, docs, banner"}
+              </button>
+              {moreLinks && (
+                <div className="dp-expert">
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
+                    <div className="dp-field"><label htmlFor="v-tg">Telegram</label>
+                      <input id="v-tg" value={form.telegram} onChange={set("telegram")} placeholder="https://t.me/…" /></div>
+                    <div className="dp-field"><label htmlFor="v-dc">Discord</label>
+                      <input id="v-dc" value={form.discord} onChange={set("discord")} placeholder="https://discord.gg/…" /></div>
+                    <div className="dp-field"><label htmlFor="v-gh">GitHub</label>
+                      <input id="v-gh" value={form.github} onChange={set("github")} placeholder="https://github.com/…" /></div>
+                    <div className="dp-field"><label htmlFor="v-docs">Docs / whitepaper</label>
+                      <input id="v-docs" value={form.docs} onChange={set("docs")} placeholder="https://" /></div>
+                  </div>
+                  <div className="dp-field"><label htmlFor="v-banner">Cover image URL</label>
+                    <input id="v-banner" value={form.banner} onChange={set("banner")} placeholder="https://…/cover.jpg" />
+                    <span className="dp-hint">Sits behind your header, 1500×500 or thereabouts. A link, not an
+                      upload — the logo already rides on-chain and a cover would not fit beside it.</span></div>
+                </div>
+              )}
             </div>
           )}
 

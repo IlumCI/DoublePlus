@@ -762,3 +762,32 @@ main { container-type: inline-size; }
 .dp-spec-row dt { font-size: 11.5px; color: var(--faint); font-family: var(--mono); margin: 0; }
 .dp-spec-row dd { font-size: 12px; color: var(--text); font-family: var(--mono); margin: 0; text-align: right; }
 .dp-spec-note { font-size: 11.5px; color: var(--faint); margin: 12px 0 0; line-height: 1.55; }
+
+/* Trading stat strip ------------------------------------------------------ */
+.dp-statbar { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 1px;
+  background: var(--line); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin-bottom: 14px; }
+.dp-stat { background: var(--panel); padding: 10px 12px; display: grid; gap: 3px; }
+.dp-stat-k { font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); }
+.dp-stat-v { font-family: var(--mono); font-size: 14px; color: var(--text); }
+@media (max-width: 760px) { .dp-statbar { grid-template-columns: repeat(3, 1fr); } .dp-stat-v { font-size: 12.5px; } }
+
+/* Buy/sell pressure ------------------------------------------------------- */
+.dp-strength { display: grid; gap: 6px; }
+.dp-strength-head, .dp-strength-foot { display: flex; justify-content: space-between; gap: 8px;
+  font-family: var(--mono); font-size: 11px; }
+.dp-strength-head .dp-up { color: var(--up); }
+.dp-strength-head .dp-down { color: var(--down); }
+.dp-strength-mid { color: var(--faint); }
+.dp-strength-foot { color: var(--faint); }
+.dp-strength-bar { display: flex; height: 8px; border-radius: 99px; overflow: hidden; background: var(--line); }
+.dp-strength-bar i { background: var(--up); transition: width .25s ease; }
+.dp-strength-bar u { background: var(--down); transition: width .25s ease; }
+
+/* Cover banner + social rail --------------------------------------------- */
+.dp-banner { height: 132px; border-radius: 14px; overflow: hidden; border: 1px solid var(--line);
+  margin-bottom: -44px; background: var(--panel-2); }
+.dp-banner img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.dp-socials { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.dp-socials a { font-family: var(--mono); font-size: 11px; color: var(--dim); border: 1px solid var(--line);
+  border-radius: 99px; padding: 4px 10px; text-decoration: none; }
+.dp-socials a:hover { color: var(--text); border-color: var(--line-2); }

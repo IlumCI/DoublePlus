@@ -216,3 +216,52 @@ export const fmtValue = (wei: bigint): string => {
   if (gwei >= 0.01) return `${gwei.toLocaleString("en-US", { maximumFractionDigits: 2 })} gwei`;
   return `${Number(wei).toLocaleString("en-US", { maximumFractionDigits: 0 })} wei`;
 };
+
+
+/** The stat strip a trader reads first: price, size, and how it moved.
+ *  Dense, monospaced, no prose — the row scans in under a second. */
+export function StatCell({ k, children }: { k: string; children: React.ReactNode }) {
+  return (
+    <div className="dp-stat">
+      <span className="dp-stat-k">{k}</span>
+      <span className="dp-stat-v">{children}</span>
+    </div>
+  );
+}
+
+/** Percent change with the sign baked into the colour. */
+export function Delta({ pct: p, size = 13 }: { pct: number | null; size?: number }) {
+  if (p === null || !Number.isFinite(p)) return <span className="dp-mono" style={{ color: "var(--faint)", fontSize: size }}>—</span>;
+  const big = Math.abs(p) >= 1000;
+  return (
+    <span className="dp-mono" style={{ color: p >= 0 ? "var(--up)" : "var(--down)", fontSize: size }}>
+      {p >= 0 ? "+" : ""}{big ? p.toExponential(1) : p.toFixed(p >= 100 || p <= -100 ? 0 : 2)}%
+    </span>
+  );
+}
+
+/** Buy versus sell pressure over 24h, by value. The bar is the headline and
+ *  the counts are the detail — both are what a trader asks for next. */
+export function BuySellStrength({ buyWei, sellWei, buys, sells }: {
+  buyWei: bigint; sellWei: bigint; buys: number; sells: number;
+}) {
+  const total = buyWei + sellWei;
+  const buyPct = total === 0n ? 50 : Number((buyWei * 10_000n) / total) / 100;
+  return (
+    <div className="dp-strength">
+      <div className="dp-strength-head">
+        <span className="dp-up">buys {buys}</span>
+        <span className="dp-strength-mid">{total === 0n ? "no trades yet" : `${buyPct.toFixed(0)}% buy pressure`}</span>
+        <span className="dp-down">sells {sells}</span>
+      </div>
+      <div className="dp-strength-bar" role="img" aria-label={`${buyPct.toFixed(0)}% of 24h volume was buys`}>
+        <i style={{ width: `${buyPct}%` }} />
+        <u style={{ width: `${100 - buyPct}%` }} />
+      </div>
+      <div className="dp-strength-foot">
+        <span>{fmtEth(buyWei, 3)} ETH</span>
+        <span>{fmtEth(sellWei, 3)} ETH</span>
+      </div>
+    </div>
+  );
+}

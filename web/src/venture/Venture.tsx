@@ -4,14 +4,17 @@ import { useBalance, useWalletClient } from "wagmi";
 import { formatEther, parseEther, type Address } from "viem";
 
 import {
-  ercAbi, factoryAbi, hookAbi, loadFills, loadUpdates, loadVenture, quoteSellWei, quoteTokens, routerAbi,
-  toCandles, VENTURE, venturePc, vestingAbi, type Fill, type Venture as VentureT,
+  ercAbi, factoryAbi, hookAbi, loadFills, loadUpdates, loadVenture, quoteSellWei, quoteTokens,
+  routerAbi, SOCIAL_FIELDS, toCandles, VENTURE, venturePc, vestingAbi,
+  type Fill, type PoolTrade, type Venture as VentureT,
 } from "./client";
+import { marketStats } from "./stats";
 import { PriceChart, TradeTape, usePoolTrades } from "./Chart";
 import { refLink, storedRef } from "./referral";
 import { Donut, Legend, Ring, SplitBar, type Slice } from "./charts";
 import { usePageMeta } from "./seo";
-import { ago, Change, changePct, CopyButton, Countdown, CurveBar, fmtEth, fmtMcap, fmtTok, fmtUsdV, Monogram, pct, short, StatusBadge, useEthUsd, useTick } from "./ui";
+import { ago, BuySellStrength, Change, changePct, CopyButton, Countdown, CurveBar, Delta, fmtEth, fmtMcap, fmtTok,
+  fmtUsdV, Monogram, pct, short, StatCell, StatusBadge, useEthUsd, useTick } from "./ui";
 import { useWallet, errorText } from "../lib/useWallet";
 import { useUi } from "../store";
 import { env } from "../lib/env";
@@ -69,6 +72,10 @@ function VentureBody({ v, fills, ethUsd }: { v: VentureT; fills: Fill[]; ethUsd:
     <div className="dp-shell" style={{ paddingBottom: 70 }}>
       <Link to="/" viewTransition className="dp-mono" style={{ display: "inline-block", marginTop: 14, fontSize: 11, color: "var(--faint)" }}>← all raises</Link>
 
+      {v.meta.banner && (
+        <div className="dp-banner"><img src={v.meta.banner} alt="" loading="lazy" /></div>
+      )}
+
       <div className="dp-coinhead">
         <Monogram v={v} size="lg" />
         <div style={{ minWidth: 0 }}>
@@ -78,6 +85,7 @@ function VentureBody({ v, fills, ethUsd }: { v: VentureT; fills: Fill[]; ethUsd:
             created by <b>{short(v.creator)}</b> · {ago(v.createdAt)} ago
             {v.meta.sector ? <> · {v.meta.sector}</> : null} · <StatusBadge v={v} />
           </p>
+          <Socials meta={v.meta} />
         </div>
         <div className="dp-mcbig">
           <span className="dp-k">market cap</span><br />
@@ -87,6 +95,8 @@ function VentureBody({ v, fills, ethUsd }: { v: VentureT; fills: Fill[]; ethUsd:
             : null}
         </div>
       </div>
+
+      {v.phase === "graduated" && <StatBar v={v} trades={trades} ethUsd={ethUsd} />}
 
       <div className="dp-coingrid">
         {/* LEFT: the market, then everything that justifies it */}
@@ -126,6 +136,47 @@ function VentureBody({ v, fills, ethUsd }: { v: VentureT; fills: Fill[]; ethUsd:
 }
 
 /** Pre-graduation: the curve itself is the chart. */
+/** The project's own channels. A trader checks these before anything else,
+ *  so they sit with the name rather than buried in a tab. */
+function Socials({ meta }: { meta: VentureT["meta"] }) {
+  const links = SOCIAL_FIELDS
+    .map(([key, label]) => [label, meta[key]] as const)
+    .filter(([, href]) => typeof href === "string" && /^https?:\/\//i.test(href));
+  if (links.length === 0) return null;
+  return (
+    <div className="dp-socials">
+      {links.map(([label, href]) => (
+        <a key={label} href={href as string} target="_blank" rel="noreferrer noopener">{label} ↗</a>
+      ))}
+    </div>
+  );
+}
+
+/** Price, size and momentum, read straight off the swap log. */
+function StatBar({ v, trades, ethUsd }: { v: VentureT; trades: PoolTrade[]; ethUsd: number }) {
+  const st = useMemo(() => marketStats(trades), [trades]);
+  const priceEth = Number(st.priceWei) / 1e18;
+  return (
+    <>
+      <div className="dp-statbar">
+        <StatCell k="price">{ethUsd > 0 && priceEth > 0 ? fmtUsdV(priceEth * ethUsd) : `${fmtEth(st.priceWei, 8)}`}</StatCell>
+        <StatCell k="market cap">{fmtMcap(v, ethUsd)}</StatCell>
+        <StatCell k="24h vol">{ethUsd > 0 ? fmtUsdV((Number(st.vol24Wei) / 1e18) * ethUsd) : `${fmtEth(st.vol24Wei, 3)} ETH`}</StatCell>
+        <StatCell k="24h txns">{st.buys24 + st.sells24}</StatCell>
+        <StatCell k="5m"><Delta pct={st.change.m5} /></StatCell>
+        <StatCell k="1h"><Delta pct={st.change.h1} /></StatCell>
+        <StatCell k="4h"><Delta pct={st.change.h4} /></StatCell>
+        <StatCell k="24h"><Delta pct={st.change.h24} /></StatCell>
+      </div>
+      <div className="dp-panel" style={{ marginBottom: 14 }}>
+        <div className="dp-pbody">
+          <BuySellStrength buyWei={st.buyVol24Wei} sellWei={st.sellVol24Wei} buys={st.buys24} sells={st.sells24} />
+        </div>
+      </div>
+    </>
+  );
+}
+
 function CurvePanel({ v }: { v: VentureT }) {
   const bars = 36;
   // Purely the shape of the pricing, not the progress: the ring in the trade
