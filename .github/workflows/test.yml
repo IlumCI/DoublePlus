@@ -36,11 +36,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      # --ignore-scripts skips better-sqlite3's node-gyp build, which is a
-      # dependency of the unused backend/ workspace and fails on newer Node.
-      # Nothing in the contract path needs the native module.
       - name: Install
-        run: npm install --ignore-scripts --no-audit --no-fund
+        run: npm install --no-audit --no-fund
       - name: Compile
         run: npm run compile --workspace @launchpad/contracts
       - name: Test
@@ -56,40 +53,95 @@ jobs:
         with:
           node-version: "20"
       - name: Install
-        run: npm install --ignore-scripts --no-audit --no-fund
+        run: npm install --no-audit --no-fund
       - name: Build SDK
         run: npm run build --workspace @launchpad/sdk
-      # NOTE: web's `test` script intends to exclude *.live.test.ts but the
-      # quoted glob does not always apply, so this step can make real calls to
-      # the DexScreener API and will fail on a network blip. Fix the exclude
-      # in web/package.json and this becomes hermetic.
+      # Hermetic: *.live.test.ts is excluded, so nothing here calls out to
+      # DexScreener. Run those deliberately with `npm run test:live -w web`.
       - name: Test
         run: npm test --workspace @launchpad/web
 
   fork:
-    name: Fork tests (manual)
-    # Needs a Robinhood Chain RPC. Every *.fork.test.ts self-skips unless
-    # FORK=1, so without this job they never execute anywhere — which is how
-    # the constructor-ABI drift survived in nine of them.
+    name: Fork tests — ${{ matrix.chain }} (manual)
+    # Every *.fork.test.ts self-skips unless FORK=1, so without this job they
+    # never execute anywhere — which is how the constructor-ABI drift survived
+    # in nine of them.
+    #
+    # Two chains, because the 20 files are not all one target: 13 hardcode
+    # Robinhood Chain infra (PoolManager 0x8366a39c…) and 7 hardcode Base
+    # (0x498581fF…). hardhat.config.ts forks whatever ROBINHOOD_RPC_URL points
+    # at regardless of the name, so a single RPC would fail one group for a
+    # reason that has nothing to do with the code. Files are classified at run
+    # time by which PoolManager they reference, so a new fork test lands in the
+    # right group without editing this file.
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        chain: [robinhood, base]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
       - name: Install
-        run: npm install --ignore-scripts --no-audit --no-fund
-      - name: Fork suite
+        run: npm install --no-audit --no-fund
+      - name: Compile once
+        run: npm run compile --workspace @launchpad/contracts
+      # One hardhat invocation per file, not one across all of them.
+      #
+      # The public RPC (https://rpc.mainnet.chain.robinhood.com) is a full node,
+      # not an archive node: measured state retention is ~6-8k blocks, and the
+      # chain runs ~10 blocks/sec, so a pinned fork block's state expires in
+      # roughly 10-13 minutes of wall clock. Hardhat pins the fork when the run
+      # starts and keeps fetching state at that block as tests touch new
+      # storage, so one run across all 20 files outlives its own fork and dies
+      # partway through with "historical state ... is not available" — which
+      # reads like a test failure rather than an expired fork.
+      #
+      # Each file re-pins a fresh block and finishes well inside the window.
+      # For the same reason: do NOT set BASE_FORK_BLOCK to an old block here.
+      - name: Fork suite (per file)
         working-directory: contracts
         env:
           FORK: "1"
-          ROBINHOOD_RPC_URL: ${{ secrets.ROBINHOOD_RPC_URL }}
-          ROBINHOOD_CHAIN_ID: "4663"
+          # hardhat.config.ts reads these two for the fork url and chain id
+          # whatever the target chain actually is; the names are historical.
+          ROBINHOOD_RPC_URL: ${{ matrix.chain == 'base' && (secrets.BASE_RPC_URL || 'https://mainnet.base.org') || secrets.ROBINHOOD_RPC_URL }}
+          ROBINHOOD_CHAIN_ID: ${{ matrix.chain == 'base' && '8453' || '4663' }}
+          BASE_PM: "0x498581fF718922c3f8e6A244956aF099B2652b2b"
         run: |
           if [ -z "$ROBINHOOD_RPC_URL" ]; then
-            echo "ROBINHOOD_RPC_URL secret not set; nothing to fork against."
+            echo "No RPC for ${{ matrix.chain }}. Set the ROBINHOOD_RPC_URL secret"
+            echo "(or BASE_RPC_URL for the base leg); nothing to fork against."
             exit 1
           fi
-          npx hardhat test
+          failed=""; ran=0
+          for f in test/v4/*.fork.test.ts; do
+            # Classify by the PoolManager the file pins.
+            if grep -qi "$BASE_PM" "$f"; then target=base; else target=robinhood; fi
+            [ "$target" = "${{ matrix.chain }}" ] || continue
+            ran=$((ran+1))
+            echo "::group::$f"
+            if npx hardhat test --no-compile "$f"; then
+              echo "PASS $f"
+            else
+              echo "FAIL $f"
+              failed="$failed $f"
+            fi
+            echo "::endgroup::"
+          done
+          echo
+          echo "ran $ran file(s) against ${{ matrix.chain }}"
+          if [ "$ran" -eq 0 ]; then
+            echo "No files classified for this chain — the classifier is stale."
+            exit 1
+          fi
+          if [ -n "$failed" ]; then
+            echo "Failed files:"
+            for f in $failed; do echo "  $f"; done
+            exit 1
+          fi
+          echo "All ${{ matrix.chain }} fork files passed."
