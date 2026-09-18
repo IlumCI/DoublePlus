@@ -128,6 +128,7 @@ async function main() {
     refShareBps,
     curveBuyFeeBps,
     curveSellFeeBps,
+    minTargetWei: minTargetWei.toString(),
     startBlock,
     contracts: {
       hookDeployer: c2Addr,
