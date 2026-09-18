@@ -56,3 +56,33 @@ export function marketStats(trades: PoolTrade[], nowSecs?: number): MarketStats 
     change: { m5: pctFrom(WINDOWS.m5), h1: pctFrom(WINDOWS.h1), h4: pctFrom(WINDOWS.h4), h24: pctFrom(WINDOWS.h24) },
   };
 }
+
+/** A pool swap whose sender is the protocol itself, not a trader.
+ *
+ *  The fee hook swaps inside `afterSwap` to convert a founder-tax bucket into
+ *  the pair token for dividends, liquidity and market-making. Those emit their
+ *  own Swap events on the same pool, in the same transaction as the trade that
+ *  triggered them — measured on a live graduated pool: 7 trades produced 19
+ *  Swap events, 12 of them from the hook, every one sharing a tx with a router
+ *  swap.
+ *
+ *  They are real swaps, but they are a mechanical consequence of a trade that
+ *  is already counted, so counting them again double-counts the same economic
+ *  activity. The distortion is almost entirely in the transaction COUNT, not
+ *  in value: on that same pool the hook's 12 swaps carried 0.0000140 ETH of
+ *  0.0038 ETH gross, 0.4%, leaving buy pressure at 25.6% either way. So the
+ *  number this protects is "24h txns", which read 19 for 7 trades — a 2.7x
+ *  overstatement of how busy the token looks, which is exactly the figure a
+ *  trader skims to judge whether anything is happening. */
+export function isProtocolSwap(
+  sender: string,
+  protocolAddresses: { hook?: string; factory?: string },
+): boolean {
+  const s = sender.toLowerCase();
+  for (const a of [protocolAddresses.hook, protocolAddresses.factory]) {
+    // An unconfigured address is the zero address; never filter on that, or a
+    // misconfigured build would silently drop the whole tape.
+    if (a && !/^0x0{40}$/i.test(a) && a.toLowerCase() === s) return true;
+  }
+  return false;
+}

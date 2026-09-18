@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { PoolTrade } from "./client";
-import { marketStats } from "./stats";
+import { isProtocolSwap, marketStats } from "./stats";
 
 const NOW = 1_700_000_000;
 
@@ -73,5 +73,36 @@ describe("marketStats", () => {
     expect(empty.vol24Wei).toBe(0n);
     expect(empty.buys24).toBe(0);
     expect(empty.change.h24).toBeNull();
+  });
+});
+
+describe("isProtocolSwap", () => {
+  // Real addresses from the testnet stack the behaviour was measured on.
+  const HOOK = "0x3485280D944E18b1D64A76Fe42200F12967d2044";
+  const FACTORY = "0x6AbCaAD1F8b5272E8006bca288C1Bcc77248E62D";
+  const ROUTER = "0x2b43391216071b9041357f297FDBA6a856ab14B4";
+  const ZERO = "0x0000000000000000000000000000000000000000";
+
+  it("identifies the fee hook's own conversions", () => {
+    expect(isProtocolSwap(HOOK, { hook: HOOK, factory: FACTORY })).toBe(true);
+    expect(isProtocolSwap(FACTORY, { hook: HOOK, factory: FACTORY })).toBe(true);
+  });
+
+  it("leaves real trades alone", () => {
+    expect(isProtocolSwap(ROUTER, { hook: HOOK, factory: FACTORY })).toBe(false);
+    expect(isProtocolSwap("0xB663e6DE5Dd76bf30BE308f847Da5b1B276Dc700", { hook: HOOK, factory: FACTORY })).toBe(false);
+  });
+
+  it("compares case-insensitively, since log addresses are not checksummed", () => {
+    expect(isProtocolSwap(HOOK.toLowerCase(), { hook: HOOK, factory: FACTORY })).toBe(true);
+    expect(isProtocolSwap(HOOK.toUpperCase().replace("0X", "0x"), { hook: HOOK, factory: FACTORY })).toBe(true);
+  });
+
+  it("never filters on an unconfigured address", () => {
+    // A build with no hook configured must not drop every swap whose sender
+    // fails to match, nor match the zero address by accident.
+    expect(isProtocolSwap(ZERO, { hook: ZERO, factory: ZERO })).toBe(false);
+    expect(isProtocolSwap(ROUTER, {})).toBe(false);
+    expect(isProtocolSwap(ZERO, {})).toBe(false);
   });
 });

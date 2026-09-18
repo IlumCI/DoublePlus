@@ -1,6 +1,7 @@
 import { createPublicClient, fallback, http, parseAbiItem, type Address, type PublicClient } from "viem";
 
 import { chain, env } from "../lib/env";
+import { isProtocolSwap } from "./stats";
 
 /** VentureFactory deployment. Defaults target the Robinhood Chain testnet
  *  (46630) deployment; every address is overridable via env so the same build
@@ -477,16 +478,21 @@ export async function loadPoolTrades(v: Venture): Promise<PoolTrade[]> {
     fromBlock: VENTURE.startBlock,
     toBlock: latest,
   });
-  if (logs.length === 0) return [];
+  // Drop the hook's own fee conversions: they are protocol mechanics riding
+  // the same transaction as the trade that caused them, not trader activity.
+  const swaps = logs.filter((l) => !isProtocolSwap(String(l.args.sender), {
+    hook: VENTURE.hook, factory: VENTURE.factory,
+  }));
+  if (swaps.length === 0) return [];
   const coinIsC0 = BigInt(v.address) < BigInt(v.pair);
   // Estimate timestamps: anchor first and last blocks, interpolate between.
-  const firstB = Number(logs[0].blockNumber), lastB = Number(logs[logs.length - 1].blockNumber);
+  const firstB = Number(swaps[0].blockNumber), lastB = Number(swaps[swaps.length - 1].blockNumber);
   const [first, last] = await Promise.all([
     venturePc.getBlock({ blockNumber: BigInt(firstB) }),
     venturePc.getBlock({ blockNumber: BigInt(lastB) }),
   ]);
   const perBlock = lastB > firstB ? Number(last.timestamp - first.timestamp) / (lastB - firstB) : 1;
-  return logs.map((l) => {
+  return swaps.map((l) => {
     const a0 = l.args.amount0 as bigint, a1 = l.args.amount1 as bigint;
     const coinDelta = coinIsC0 ? a0 : a1;
     const pairDelta = coinIsC0 ? a1 : a0;
