@@ -621,7 +621,23 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         if (c.basePriceWei == 0) revert InvalidParams();
         if (c.finalized) revert AlreadyFinalized();
         if (c.aborted) revert CurveClosed();
-        if (c.raisedWei < c.targetRaiseWei && c.soldWhole < CURVE_SUPPLY_WHOLE) revert CurveLive();
+        // One whole token of tolerance on the target, because the curve only
+        // moves in whole tokens. A buy books curveCost(q)+1 for the largest
+        // whole q its value covers and refunds the rest, so every buy can leave
+        // up to one token's price unbooked; filling a raise in slices lands
+        // short by that much. Observed live: a 2 ETH raise filled in three
+        // slices stopped 6.26 gwei short, and the wallet that filled it could
+        // not close the gap either, because its per-wallet cap had exactly that
+        // much headroom while the buy needed one wei more.
+        //
+        // A different wallet could still close it, so this is a tolerance, not
+        // an impossibility proof: a raise within one token of target counts as
+        // reached rather than waiting on a stranger to spend a few gwei, or
+        // running to its deadline and refunding everyone over rounding dust.
+        // The shortfall is bounded by the price of one token.
+        if (c.raisedWei < c.targetRaiseWei && c.soldWhole < CURVE_SUPPLY_WHOLE) {
+            if (c.targetRaiseWei - c.raisedWei > curveCost(token, 1, c.soldWhole)) revert CurveLive();
+        }
         c.finalized = true;
 
         // 1) Founder's declared cut of the raise, straight to the founder.

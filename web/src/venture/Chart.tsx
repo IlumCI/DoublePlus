@@ -3,9 +3,14 @@ import { CandleType, PolygonType, dispose, init, registerLocale, type Chart as K
 
 import { loadPoolTrades, type PoolTrade, type Venture } from "./client";
 import { fmtTok, fmtValue, short } from "./ui";
+import { pickInterval } from "./format";
 import { env } from "../lib/env";
 
 const INTERVALS = [
+  // 1m exists for the first minutes of a pool's life. Without it a token that
+  // graduated moments ago draws a single candle at every setting, which looks
+  // like a broken chart rather than a new one.
+  { label: "1m", secs: 60 },
   { label: "5m", secs: 300 },
   { label: "15m", secs: 900 },
   { label: "1h", secs: 3600 },
@@ -76,7 +81,18 @@ try {
 export function PriceChart({ v, trades }: { v: Venture; trades: PoolTrade[] }) {
   const box = useRef<HTMLDivElement>(null);
   const chart = useRef<KChart | null>(null);
-  const [interval_, setInterval_] = useState<(typeof INTERVALS)[number]>(INTERVALS[0]);
+  // Default to the finest interval that still resolves the pool's history into
+  // a few bars, rather than a fixed one: a pool minutes old and a pool weeks
+  // old want opposite ends of this list.
+  const suggested = useMemo(() => {
+    if (trades.length < 2) return INTERVALS[0];
+    const span = trades[trades.length - 1].ts - trades[0].ts;
+    const secs = pickInterval(span, INTERVALS.map((iv) => iv.secs));
+    return INTERVALS.find((iv) => iv.secs === secs) ?? INTERVALS[0];
+  }, [trades]);
+  const [picked, setPicked] = useState<(typeof INTERVALS)[number] | null>(null);
+  const interval_ = picked ?? suggested;
+  const setInterval_ = setPicked;
   const [style, setStyle] = useState<CandleType>(CandleType.CandleSolid);
 
   const bars = useMemo(() => toBars(trades, interval_.secs), [trades, interval_]);

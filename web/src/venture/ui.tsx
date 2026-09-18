@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 
 import { TOTAL_SUPPLY, VENTURE, type Venture } from "./client";
 import type { DexProfile } from "../lib/dexscreener";
+import { fmtUsdPrice } from "./format";
+
+export { fmtUsdPrice };
 
 /** Flag-on-a-block mark: a raised founder flag. */
 export function Flag({ size = 22 }: { size?: number }) {
@@ -231,12 +234,29 @@ export function StatCell({ k, children }: { k: string; children: React.ReactNode
 }
 
 /** Percent change with the sign baked into the colour. */
-export function Delta({ pct: p, size = 13 }: { pct: number | null; size?: number }) {
+export function Delta({ pct: p, size = 13, sinceInception, ageSecs }: {
+  pct: number | null; size?: number; sinceInception?: boolean; ageSecs?: number;
+}) {
   if (p === null || !Number.isFinite(p)) return <span className="dp-mono" style={{ color: "var(--faint)", fontSize: size }}>—</span>;
   const big = Math.abs(p) >= 1000;
+  // A pool younger than the window has no price from that far back, so the
+  // figure is the change since its first trade. Showing it is right — "—" for
+  // 24h on a two-hour-old pool answers nothing — but four identical numbers
+  // read as a broken widget unless the strip says why.
+  const title = sinceInception
+    ? `Pool is only ${ageSecs !== undefined ? ago(Math.floor(Date.now() / 1000) - ageSecs) : "minutes"} old — this is the change since its first trade, not a full window.`
+    : undefined;
   return (
-    <span className="dp-mono" style={{ color: p >= 0 ? "var(--up)" : "var(--down)", fontSize: size }}>
-      {p >= 0 ? "+" : ""}{big ? p.toExponential(1) : p.toFixed(p >= 100 || p <= -100 ? 0 : 2)}%
+    <span
+      className="dp-mono"
+      title={title}
+      style={{
+        color: p >= 0 ? "var(--up)" : "var(--down)",
+        fontSize: size,
+        ...(sinceInception ? { borderBottom: "1px dotted var(--line-2)", cursor: "help" } : {}),
+      }}
+    >
+      {sinceInception ? "~" : ""}{p >= 0 ? "+" : ""}{big ? p.toExponential(1) : p.toFixed(p >= 100 || p <= -100 ? 0 : 2)}%
     </span>
   );
 }

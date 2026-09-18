@@ -17,15 +17,18 @@ async function main() {
 
   // A mixed tape: alternating sizes and both directions, from two wallets, so
   // the 5m/1h/4h/24h deltas and the buy/sell pressure bar have real inputs.
-  const plan: [string, "buy" | "sell", string][] = [
-    ["A", "buy", "0.00030"],
-    ["B", "buy", "0.00018"],
+  const plan: [string, "buy" | "sell", string][] = JSON.parse(process.env.PLAN ?? `[
+    ["A", "buy",  "0.00030"],
+    ["B", "buy",  "0.00018"],
     ["A", "sell", "35"],
-    ["A", "buy", "0.00022"],
-    ["B", "buy", "0.00012"],
+    ["A", "buy",  "0.00022"],
+    ["B", "buy",  "0.00012"],
     ["A", "sell", "20"],
-    ["A", "buy", "0.00015"],
-  ];
+    ["A", "buy",  "0.00015"]
+  ]`);
+  // Spacing matters for the chart: trades packed into one minute are one
+  // candle at every interval, correctly, and prove nothing about bucketing.
+  const gapMs = Number(process.env.GAP_MS ?? 2500);
 
   for (const [who, side, amt] of plan) {
     const w = who === "A" ? signer : second;
@@ -44,7 +47,7 @@ async function main() {
     } catch (e: any) {
       console.log(`  ${who} ${side} ${amt} failed:`, (e.shortMessage ?? e.message).slice(0, 120));
     }
-    await nap(2500); // spread across blocks so the candles are not one bar
+    await nap(gapMs); // spread across blocks so the candles are not one bar
   }
 
   console.log("\ndeployer balance:", eth(await ethers.provider.getBalance(signer.address)), "ETH");

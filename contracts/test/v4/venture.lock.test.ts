@@ -126,4 +126,57 @@ describe("VentureFactory: locked liquidity and the raise floor", function () {
       await expect(deployStack(0n)).to.be.reverted;
     });
   });
+
+  describe("a raise cannot strand a few wei under target", () => {
+    it("finalizes when the gap is smaller than the price of one more token", async () => {
+      // Reproduces the live stall: fill the curve with one grossed-up buy from
+      // a single wallet whose per-wallet cap equals the target. curveCost
+      // rounds up, so escrow lands just short; the cap is then spent and the
+      // gap is worth less than one whole token, so no further buy from that
+      // wallet can mint anything. Before the guard was relaxed this raise
+      // could only run to its deadline and abort.
+      const [, creator, whale] = await ethers.getSigners();
+      const target = ethers.parseEther("2");
+      const { factory, tokenDeployer, weth } = await deployStack(1n);
+      const coin = await launch(factory, tokenDeployer, creator, await weth.getAddress(), {
+        targetRaiseWei: target, maxBuyWei: target, symbol: "STALL",
+      });
+
+      // Fill in slices, as the live run did. Each buy books curveCost(q)+1 for
+      // the largest whole q its value covers, so the remainder too small to
+      // mint a token is never booked — every slice can leave up to one token's
+      // price on the floor.
+      const buyBps = BigInt(await factory.curveBuyFeeBps());
+      const gross = (target * 10_000n) / (10_000n - buyBps) + 10n;
+      const slice = gross / 3n;
+      for (const v of [slice, slice, gross - 2n * slice]) {
+        await (await factory.connect(whale).buy(coin, { value: v })).wait();
+      }
+
+      const st = await factory.curveState(coin);
+      const gap = st.targetRaiseWei - st.raisedWei;
+      expect(gap).to.be.greaterThan(0n);               // short, as the live run was
+      expect(gap).to.be.lessThanOrEqual(await factory.curveCost(coin, 1, st.soldWhole));
+
+      // The stranded buyer genuinely cannot close it themselves.
+      await expect(factory.connect(whale).buy(coin, { value: gap * 2n })).to.be.reverted;
+
+      // But the raise is no longer stuck: the gap is uncrossable, so it counts.
+      await expect(factory.finalize(coin)).to.not.be.revertedWithCustomError(factory, "CurveLive");
+    });
+
+    it("still refuses to finalize while the gap is genuinely reachable", async () => {
+      const [, creator, buyer] = await ethers.getSigners();
+      const target = ethers.parseEther("2");
+      const { factory, tokenDeployer, weth } = await deployStack(1n);
+      const coin = await launch(factory, tokenDeployer, creator, await weth.getAddress(), {
+        targetRaiseWei: target, maxBuyWei: target, symbol: "LIVE",
+      });
+      await (await factory.connect(buyer).buy(coin, { value: ethers.parseEther("0.5") })).wait();
+      const st = await factory.curveState(coin);
+      // Half a raise short is many tokens away, so the curve is still live.
+      expect(st.targetRaiseWei - st.raisedWei).to.be.greaterThan(await factory.curveCost(coin, 1, st.soldWhole));
+      await expect(factory.finalize(coin)).to.be.revertedWithCustomError(factory, "CurveLive");
+    });
+  });
 });

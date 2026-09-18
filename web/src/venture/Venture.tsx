@@ -15,7 +15,7 @@ import { refLink, storedRef } from "./referral";
 import { Donut, Legend, Ring, SplitBar, type Slice } from "./charts";
 import { usePageMeta } from "./seo";
 import { ago, BuySellStrength, Change, changePct, CopyButton, Countdown, CurveBar, Delta, DexBadge, fmtEth, fmtMcap,
-  fmtTok, fmtUsdV, Monogram, pct, short, StatCell, StatusBadge, useEthUsd, useTick } from "./ui";
+  fmtTok, fmtUsdPrice, fmtUsdV, Monogram, pct, short, StatCell, StatusBadge, useEthUsd, useTick } from "./ui";
 import { useWallet, errorText } from "../lib/useWallet";
 import { useUi } from "../store";
 import { env } from "../lib/env";
@@ -168,14 +168,14 @@ function StatBar({ v, trades, ethUsd }: { v: VentureT; trades: PoolTrade[]; ethU
   return (
     <>
       <div className="dp-statbar">
-        <StatCell k="price">{ethUsd > 0 && priceEth > 0 ? fmtUsdV(priceEth * ethUsd) : `${fmtEth(st.priceWei, 8)}`}</StatCell>
+        <StatCell k="price">{ethUsd > 0 && priceEth > 0 ? fmtUsdPrice(priceEth * ethUsd) : `${fmtEth(st.priceWei, 8)}`}</StatCell>
         <StatCell k="market cap">{fmtMcap(v, ethUsd)}</StatCell>
         <StatCell k="24h vol">{ethUsd > 0 ? fmtUsdV((Number(st.vol24Wei) / 1e18) * ethUsd) : `${fmtEth(st.vol24Wei, 3)} ETH`}</StatCell>
         <StatCell k="24h txns">{st.buys24 + st.sells24}</StatCell>
-        <StatCell k="5m"><Delta pct={st.change.m5} /></StatCell>
-        <StatCell k="1h"><Delta pct={st.change.h1} /></StatCell>
-        <StatCell k="4h"><Delta pct={st.change.h4} /></StatCell>
-        <StatCell k="24h"><Delta pct={st.change.h24} /></StatCell>
+        <StatCell k="5m"><Delta pct={st.change.m5} sinceInception={st.ageSecs < 300} ageSecs={st.ageSecs} /></StatCell>
+        <StatCell k="1h"><Delta pct={st.change.h1} sinceInception={st.ageSecs < 3_600} ageSecs={st.ageSecs} /></StatCell>
+        <StatCell k="4h"><Delta pct={st.change.h4} sinceInception={st.ageSecs < 14_400} ageSecs={st.ageSecs} /></StatCell>
+        <StatCell k="24h"><Delta pct={st.change.h24} sinceInception={st.ageSecs < 86_400} ageSecs={st.ageSecs} /></StatCell>
       </div>
       <div className="dp-panel" style={{ marginBottom: 14 }}>
         <div className="dp-pbody">
@@ -897,7 +897,7 @@ function TradePanel({ v }: { v: VentureT }) {
               {side === "buy" ? `${eth.data ? fmtEth(eth.data.value, 4) : "—"} ETH` : `${fmtTok(bal)} $${v.symbol}`}
             </b>
           </span>
-          <span>fee {(tax / 100).toFixed(1)}% + {(VENTURE.platformFeeBps / 100).toFixed(1)}%</span>
+          <span>fee {(tax / 100).toFixed(1)}% + {(VENTURE.platformFeeBps / 100).toFixed(2)}%</span>
         </div>
         <div className="dp-tb-slip">
           <label style={{ display: "flex", gap: 6, alignItems: "center" }}>

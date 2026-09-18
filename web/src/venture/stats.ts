@@ -11,8 +11,13 @@ export interface MarketStats {
   sellVol24Wei: bigint;
   buys24: number;
   sells24: number;
-  /** Percent change over each window, or null when the window predates the pool. */
+  /** Percent change over each window. Null only when there is no change to
+   *  state (fewer than two trades); a window longer than the pool's life
+   *  measures from its first trade instead — see `priceAt`. */
   change: { m5: number | null; h1: number | null; h4: number | null; h24: number | null };
+  /** Seconds since the pool's first trade. A window wider than this is
+   *  reported since inception, which the strip marks rather than hides. */
+  ageSecs: number;
 }
 
 const WINDOWS = { m5: 300, h1: 3_600, h4: 14_400, h24: 86_400 } as const;
@@ -54,6 +59,7 @@ export function marketStats(trades: PoolTrade[], nowSecs?: number): MarketStats 
   return {
     priceWei, vol24Wei, buyVol24Wei, sellVol24Wei, buys24, sells24,
     change: { m5: pctFrom(WINDOWS.m5), h1: pctFrom(WINDOWS.h1), h4: pctFrom(WINDOWS.h4), h24: pctFrom(WINDOWS.h24) },
+    ageSecs: trades.length > 0 ? Math.max(0, now - trades[0].ts) : 0,
   };
 }
 
