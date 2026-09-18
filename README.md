@@ -42,7 +42,7 @@ venture artifact that exists.
 2. The `web/.env.*.example` files are stale. `.env.base.example` points at
    StockFly **V2** while CI deploys V3; `.env.venture.example` points at a
    superseded venture factory. **The deployment JSONs in `contracts/deployments/`
-   and the env block in `.github/workflows/deploy-base.yml` are authoritative.**
+   are authoritative.**
    Regenerate an env file from the JSON, never the other way round.
 
 ---
@@ -91,17 +91,6 @@ Server-side env required on the Vercel project:
 
 Every one of these is read from `process.env`; the functions return 503 when
 unset rather than running degraded.
-
-### Base (basedstonk)
-
-Fully automated in `.github/workflows/deploy-base.yml` — builds, adds the SPA
-rewrite, deploys and aliases `basedstonk`, `stonked`, `koifun`, `stonkpad`.
-All flavor config is in the workflow `env:` block.
-
-It triggers on pushes to `main`. If Base is not shipping, delete the
-workflow rather than leaving it armed.
-
-Needs repo secret `VERCEL_TOKEN`.
 
 ### Any other flavor
 
