@@ -4,6 +4,7 @@ import { useWalletClient } from "wagmi";
 import { concatHex, encodeAbiParameters, getContractAddress, keccak256, parseEther } from "viem";
 
 import { factoryAbi, VENTURE, venturePc } from "./client";
+import { raiseFields, requiresTarget, targetIssue } from "./raiseMode";
 import { fmtEth, fmtUsdV } from "./ui";
 import { Donut, Legend, SPLIT_COLORS, type Slice } from "./charts";
 import { usePageMeta } from "./seo";
@@ -45,7 +46,7 @@ export function LaunchVenture() {
   const [vestDays, setVestDays] = useState(365);
   const [capPct, setCapPct] = useState(2); // per-wallet, % of target
   const [mode, setMode] = useState<0 | 1>(0); // 0 = funded raise, 1 = open curve
-  const open = mode === 1;
+  const open = !requiresTarget(mode);
   const [chain, setChain] = useState<{ creation: bigint; grad: bigint; buyBps: number; sellBps: number } | null>(null);
   const [pairMode, setPairMode] = useState<"eth" | "stock">("eth");
   const [stock, setStock] = useState<string>(STOCKS[0]?.address ?? "");
@@ -103,11 +104,11 @@ export function LaunchVenture() {
     e.preventDefault();
     if (!isConnected) return connectFirst();
     if (!wc || !me) return;
-    // Both target checks are Guaranteed-only. An open curve has no target of
-    // its own — the factory substitutes graduationRaiseWei and ignores the one
-    // sent — so demanding a figure here blocks a launch over an unused field.
-    if (!open && parsedTarget === 0n) return pushToast({ kind: "error", title: "Set a funding target" });
-    if (!open && minTargetEth > 0 && Number(target) < minTargetEth * 0.999) {
+    // Mode-aware by construction: see raiseMode.ts. An open curve has no
+    // target of its own, so targetIssue() is always null there.
+    const issue = targetIssue(mode, Number(target), minTargetEth);
+    if (issue === "missing") return pushToast({ kind: "error", title: "Set a funding target" });
+    if (issue === "below-floor") {
       return pushToast({ kind: "error", title: `Target too low`, body: curveFloorEth > MIN_TARGET_ETH
           ? `Minimum is ~${minTargetEth.toFixed(4)} ETH (the curve's $${START_FDV_USD} starting valuation).`
           : `Minimum is ${MIN_TARGET_ETH} ETH.` });
@@ -188,12 +189,12 @@ export function LaunchVenture() {
             liquidityBps: alloc.liquidity * 100,
             mmBps: alloc.mm * 100,
             ethUsdPrice8: ethUsd8,
-            // An open curve has no target of its own: the factory substitutes
-            // the protocol's graduation threshold and ignores these three.
-            targetRaiseWei: open ? 0n : parsedTarget,
-            raiseDurationSecs: BigInt((open ? 7 : days) * 86_400),
-            maxBuyWei: open ? 0n : (parsedTarget * BigInt(Math.round(capPct * 100))) / 10_000n,
-            founderRaiseBps: open ? 0 : founderCut * 100,
+            // The four fields that differ by mode, from the one module that
+            // decides that — so validation, presentation and payload cannot
+            // drift apart again. See raiseMode.ts.
+            ...raiseFields(mode, {
+              targetWei: parsedTarget, days, capPct, founderCutPct: founderCut,
+            }),
             founderSupplyBps: founderStake * 100,
             vestingSecs: founderStake > 0 ? vestDays * 86_400 : 0,
             mode,
@@ -421,7 +422,7 @@ export function LaunchVenture() {
                 <div className="dp-field"><label htmlFor="v-target">How much do you want to raise?</label>
                   <input id="v-target" inputMode="decimal" value={target}
                     onChange={(e) => setTarget(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="5.0"
-                    required={!open} />
+                    required={requiresTarget(mode)} />
                   <span className="dp-hint">
                     In ETH{targetUsd > 0 ? ` — about ${fmtUsdV(targetUsd)} today` : ""}.
                     {minTargetEth > 0 ? ` Minimum ${minTargetEth.toFixed(4)} ETH.` : ""}
