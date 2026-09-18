@@ -1,10 +1,16 @@
 name: Keeper — harvest rewards
 
+# SCHEDULE DISABLED. This keeper services deployments/quiver-v4.json, the
+# oldest V4 deployment on Robinhood Chain (start block 12.74M). No current
+# front end points at it — production builds target the flywheel deployment
+# (see web/.env.production.local), whose keeper is the Vercel cron at
+# /api/keeper. Running this every 30 minutes only burned gas.
+#
+# Kept as manual-dispatch rather than deleted: if quiver-v4 still has holders
+# with unharvested fees, this is what pays them out. Re-enable the cron only
+# if that turns out to be true.
 on:
-  schedule:
-    # Every 30 minutes. GitHub cron is best-effort and can be delayed a few min.
-    - cron: "*/30 * * * *"
-  workflow_dispatch: {} # allow manual runs from the Actions tab
+  workflow_dispatch: {} # manual runs from the Actions tab
 
 concurrency:
   group: quiver-keeper

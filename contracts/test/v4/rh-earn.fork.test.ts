@@ -41,8 +41,8 @@ describe("RhEarn launch-to-earn: 80% creator / 20% holders (fork)", function () 
     const fAddr = await factory.getAddress();
     const params = { name: "Earn", symbol: "EARN", metadataURI: "", pair: WETH, taxBps: 300, pairUsdPrice8: ETH_USD_8 };
     const args = ethers.AbiCoder.defaultAbiCoder().encode(
-      ["string", "string", "string", "uint256", "address", "address", "uint16", "address"],
-      ["Earn", "EARN", "", 10n ** 27n, creator.address, fAddr, 300, WETH],
+      ["string", "string", "string", "uint256", "address", "address", "uint16", "address", "uint256", "uint8"],
+      ["Earn", "EARN", "", 10n ** 27n, creator.address, fAddr, 300, WETH, 0n, 0],
     );
     const hash = ethers.keccak256(ethers.concat([Token.bytecode, args]));
     let tsalt = "";

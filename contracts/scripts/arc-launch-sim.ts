@@ -22,8 +22,8 @@ async function main() {
   const initCode = ethers.concat([
     Token.bytecode,
     ethers.AbiCoder.defaultAbiCoder().encode(
-      ["string", "string", "string", "uint256", "address", "address", "uint16", "address"],
-      [params.name, params.symbol, params.metadataURI, ethers.parseEther("1000000000"), signer.address, dep.contracts.factory, params.taxBps, params.stock],
+      ["string", "string", "string", "uint256", "address", "address", "uint16", "address", "uint256", "uint8"],
+      [params.name, params.symbol, params.metadataURI, ethers.parseEther("1000000000"), signer.address, dep.contracts.factory, params.taxBps, params.stock, 0n, 0],
     ),
   ]);
   const hash = ethers.keccak256(initCode);

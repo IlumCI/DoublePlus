@@ -48,8 +48,8 @@ async function launch(factory: any, signer: any, name: string, symbol: string, p
   const fAddr = await factory.getAddress();
   const params = { name, symbol, metadataURI: "", pair, taxBps: 300, pairUsdPrice8: pairUsd8 };
   const args = ethers.AbiCoder.defaultAbiCoder().encode(
-    ["string", "string", "string", "uint256", "address", "address", "uint16", "address"],
-    [name, symbol, "", 10n ** 27n, signer.address, fAddr, 300, pair],
+    ["string", "string", "string", "uint256", "address", "address", "uint16", "address", "uint256", "uint8"],
+    [name, symbol, "", 10n ** 27n, signer.address, fAddr, 300, pair, 0n, 0],
   );
   const hash = ethers.keccak256(ethers.concat([Token.bytecode, args]));
   let salt = "";

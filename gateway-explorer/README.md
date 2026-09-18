@@ -7,7 +7,7 @@ explorer traffic never affects RPC uptime.
 
 ## Deploy (Back4app, second service)
 
-1. New App -> Container -> pick this repo, branch `claude/arc-inspired-crypto-app-if7yel`.
+1. New App -> Container -> pick this repo, branch `main`.
 2. **Root Directory:** `gateway-explorer`
 3. **Port:** `8080`
 4. **Health -> Path:** `/__health`

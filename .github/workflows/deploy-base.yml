@@ -8,7 +8,7 @@ name: Deploy basedstonk
 #   VERCEL_TOKEN   a Vercel token with access to the kf-app project
 on:
   push:
-    branches: [claude/relaxed-mayer-ln64im]
+    branches: [main]
   workflow_dispatch: {}
 
 concurrency:

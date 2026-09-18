@@ -19,8 +19,8 @@ async function main() {
 
   const params = { name: NAME, symbol: SYMBOL, metadataURI: "", pair: PAIR, taxBps: 300, pairUsdPrice8: USD8 };
   const args = ethers.AbiCoder.defaultAbiCoder().encode(
-    ["string", "string", "string", "uint256", "address", "address", "uint16", "address"],
-    [NAME, SYMBOL, "", 10n ** 27n, signer.address, factoryAddr, 300, PAIR],
+    ["string", "string", "string", "uint256", "address", "address", "uint16", "address", "uint256", "uint8"],
+    [NAME, SYMBOL, "", 10n ** 27n, signer.address, factoryAddr, 300, PAIR, 0n, 0],
   );
   const hash = ethers.keccak256(ethers.concat([Token.bytecode, args]));
   let salt = "";

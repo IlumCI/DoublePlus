@@ -86,8 +86,11 @@ describe("Steadypads dollar rewards (local)", function () {
     const factoryAddr = await factory.getAddress();
     const params = { name: "Steady Test", symbol: "STDY", metadataURI: "", stock, taxBps: 300 };
     const args = ethers.AbiCoder.defaultAbiCoder().encode(
-      ["string", "string", "string", "uint256", "address", "address", "uint16", "address"],
-      [params.name, params.symbol, params.metadataURI, 10n ** 27n, signer.address, factoryAddr, params.taxBps, params.stock],
+      // Must mirror QuiverToken's constructor exactly, or the predicted CREATE2
+      // address is wrong and the factory rejects the mined salt with BadVanity.
+      // The trailing 0, 0 are the dividend floor and mode the factory passes.
+      ["string", "string", "string", "uint256", "address", "address", "uint16", "address", "uint256", "uint8"],
+      [params.name, params.symbol, params.metadataURI, 10n ** 27n, signer.address, factoryAddr, params.taxBps, params.stock, 0n, 0],
     );
     const initCodeHash = ethers.keccak256(ethers.concat([Token.bytecode, args]));
     let salt = "";

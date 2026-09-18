@@ -32,8 +32,8 @@ async function main() {
   for (const t of TOKENS) {
     const meta = JSON.stringify({ description: t.desc });
     const args = ethers.AbiCoder.defaultAbiCoder().encode(
-      ["string", "string", "string", "uint256", "address", "address", "uint16", "address"],
-      [t.name, t.symbol, meta, 10n ** 27n, signer.address, factoryAddr, t.tax, t.stock],
+      ["string", "string", "string", "uint256", "address", "address", "uint16", "address", "uint256", "uint8"],
+      [t.name, t.symbol, meta, 10n ** 27n, signer.address, factoryAddr, t.tax, t.stock, 0n, 0],
     );
     const initCodeHash = ethers.keccak256(ethers.concat([Token.bytecode, args]));
     let salt = "";

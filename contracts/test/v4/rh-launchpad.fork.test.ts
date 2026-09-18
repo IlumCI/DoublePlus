@@ -64,8 +64,8 @@ async function launchToken(
   const Token = await ethers.getContractFactory("QuiverToken");
   const factoryAddr = await factory.getAddress();
   const args = ethers.AbiCoder.defaultAbiCoder().encode(
-    ["string", "string", "string", "uint256", "address", "address", "uint16", "address"],
-    [params.name, params.symbol, params.metadataURI, 10n ** 27n, signer.address, factoryAddr, params.taxBps, params.pair],
+    ["string", "string", "string", "uint256", "address", "address", "uint16", "address", "uint256", "uint8"],
+    [params.name, params.symbol, params.metadataURI, 10n ** 27n, signer.address, factoryAddr, params.taxBps, params.pair, 0n, 0],
   );
   const initCodeHash = ethers.keccak256(ethers.concat([Token.bytecode, args]));
   let salt = "";

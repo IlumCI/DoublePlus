@@ -47,8 +47,8 @@ async function launch(factory: any, signer: any, pair: string) {
     pairUsdPrice8: ETH_USD_8, ethUsdPrice8: ETH_USD_8, v3Path: "0x",
   };
   const args = ethers.AbiCoder.defaultAbiCoder().encode(
-    ["string", "string", "string", "uint256", "address", "address", "uint16", "address"],
-    ["Lot", "LOT", "", 10n ** 27n, signer.address, fAddr, 300, pair],
+    ["string", "string", "string", "uint256", "address", "address", "uint16", "address", "uint256", "uint8"],
+    ["Lot", "LOT", "", 10n ** 27n, signer.address, fAddr, 300, pair, 0n, 0],
   );
   const hash = ethers.keccak256(ethers.concat([Token.bytecode, args]));
   let salt = "";

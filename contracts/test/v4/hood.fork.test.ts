@@ -53,8 +53,8 @@ describe("Hood: ETH fees 80/15/5, sniper tax, bid wall (fork)", function () {
     const fAddr = await factory.getAddress();
     const params = { name: "Hood", symbol: "HOOD", metadataURI: "", pair: WETH, taxBps: 100, pairUsdPrice8: ETH_USD_8 };
     const args = ethers.AbiCoder.defaultAbiCoder().encode(
-      ["string", "string", "string", "uint256", "address", "address", "uint16", "address"],
-      ["Hood", "HOOD", "", 10n ** 27n, creator.address, fAddr, 100, WETH],
+      ["string", "string", "string", "uint256", "address", "address", "uint16", "address", "uint256", "uint8"],
+      ["Hood", "HOOD", "", 10n ** 27n, creator.address, fAddr, 100, WETH, 0n, 0],
     );
     const ih = ethers.keccak256(ethers.concat([Token.bytecode, args]));
     let ts = "";

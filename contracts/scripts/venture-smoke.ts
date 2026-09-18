@@ -59,7 +59,11 @@ async function main() {
   const Token = await ethers.getContractFactory("QuiverToken");
   const args = ethers.AbiCoder.defaultAbiCoder().encode(
     ["string", "string", "string", "uint256", "address", "address", "uint16", "address", "uint256", "uint8"],
-    [params.name, params.symbol, params.metadataURI, 10n ** 27n, signer.address, dep.contracts.factory, params.buyTaxBps, weth],
+    // The last two mirror what VentureTokenDeployer passes on: the dividend
+    // floor scaled to 18dp, then the mode. Read them off params so changing a
+    // launch term here can't silently desync the mined salt from the deploy.
+    [params.name, params.symbol, params.metadataURI, 10n ** 27n, signer.address, dep.contracts.factory, params.buyTaxBps, weth,
+      BigInt(params.minHoldForDividends) * 10n ** 18n, params.dividendMode],
   );
   const hash = ethers.keccak256(ethers.concat([Token.bytecode, args]));
   let salt = "";

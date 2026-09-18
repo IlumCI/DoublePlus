@@ -31,8 +31,8 @@ async function main() {
   const Token = await ethers.getContractFactory("QuiverToken");
   const params = { name: NAME, symbol: SYMBOL, metadataURI: METADATA, pair: PAIR, taxBps: TAX, pairUsdPrice8: USD8 };
   const args = ethers.AbiCoder.defaultAbiCoder().encode(
-    ["string", "string", "string", "uint256", "address", "address", "uint16", "address"],
-    [NAME, SYMBOL, METADATA, 10n ** 27n, signer.address, factoryAddr, TAX, PAIR],
+    ["string", "string", "string", "uint256", "address", "address", "uint16", "address", "uint256", "uint8"],
+    [NAME, SYMBOL, METADATA, 10n ** 27n, signer.address, factoryAddr, TAX, PAIR, 0n, 0],
   );
   const hash = ethers.keccak256(ethers.concat([Token.bytecode, args]));
   let salt = "";

@@ -2,16 +2,15 @@
   "name": "launchpad-monorepo",
   "version": "1.0.0",
   "private": true,
-  "description": "Production token launchpad for Robinhood Chain: direct Uniswap V3 launches with anti-whale protection",
+  "description": "Multi-brand token launchpad monorepo. One web app builds six flavors (VITE_BRAND) across Robinhood Chain, Base, Arc and Stable; contracts/ carries every deployed generation.",
   "workspaces": [
     "contracts",
     "sdk",
-    "backend",
     "web"
   ],
   "scripts": {
-    "build": "npm run build -w sdk && npm run build -w backend && npm run build -w web",
-    "test": "npm run test -w contracts",
+    "build": "npm run build -w sdk && npm run build -w web",
+    "test": "npm run test -w contracts && npm run test -w web",
     "compile": "npm run compile -w contracts"
   }
 }

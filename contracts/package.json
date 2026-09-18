@@ -6,8 +6,8 @@
     "compile": "hardhat compile",
     "test": "hardhat test",
     "deploy": "hardhat run scripts/deploy.ts",
-    "verify:blockscout": "hardhat run scripts/verify.ts",
-    "test:venture": "hardhat test test/harness.test.ts test/v4/venture.unit.test.ts test/v4/quiver-dividends.test.ts test/v4/venture.stress.test.ts",
+    "verify:blockscout": "hardhat run scripts/verify-blockscout-api.ts",
+    "test:venture": "hardhat test test/harness.test.ts test/v4/venture.unit.test.ts test/v4/venture.lock.test.ts test/v4/quiver-dividends.test.ts test/v4/venture.stress.test.ts",
     "test:harness": "hardhat test test/harness.test.ts",
     "test:canary": "EXPECT_FAIL=1 hardhat test test/harness.test.ts"
   },
@@ -21,6 +21,7 @@
     "@nomicfoundation/hardhat-verify": "^2.1.3",
     "@nomicfoundation/ignition-core": "^0.15.15",
     "@openzeppelin/contracts": "^5.1.0",
+    "@openzeppelin/merkle-tree": "^1.0.7",
     "@typechain/ethers-v6": "^0.5.1",
     "@typechain/hardhat": "^9.1.0",
     "@types/chai": "^4.3.20",

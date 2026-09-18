@@ -1,152 +1,400 @@
-# Safehood: Token Launchpad for Robinhood Chain
+# Launchpad monorepo — operations
 
-A production-grade token launchpad that launches tokens **directly into Uniswap V3**. No bonding curve, no simulation: one transaction deploys a real ERC-20, creates and initializes a real Uniswap V3 pool, seeds it single-sided with the full supply (launching is free, no upfront liquidity), and opens trading immediately. Anti-whale limits protect the market until the token reaches a 40,000 USD market cap, then lift automatically on-chain.
+Private repo. One codebase that builds **six launchpad brands** across four chains,
+selected at build time by `VITE_BRAND`. Every contract generation ever deployed
+still lives in `contracts/`, because the deployments are still live and the
+keepers still service them.
 
-## Live deployment (Robinhood Chain mainnet, chain id 4663)
+This file is the operations manual: what is running, how to deploy it, how to
+keep it alive. It does not explain the contracts — read those in
+`contracts/contracts/`, and the venture design rationale in
+`docs/curve-sell-side.md`.
 
-| Contract | Address |
-| --- | --- |
-| Launchpad | [`0xe893ca05D3F1235de22630504DcEa9e029294900`](https://robinhoodchain.blockscout.com/address/0xe893ca05D3F1235de22630504DcEa9e029294900) |
-| TokenFactory | [`0x5Cf777e19a6CD4B10c3Aa317a2B8E8bCC5F46364`](https://robinhoodchain.blockscout.com/address/0x5Cf777e19a6CD4B10c3Aa317a2B8E8bCC5F46364) |
-| FeeDistributor | [`0x8E0b175a36ee0854Cc2dC7AeC4B3f90857A059ca`](https://robinhoodchain.blockscout.com/address/0x8E0b175a36ee0854Cc2dC7AeC4B3f90857A059ca) |
-| Treasury | [`0xD401Ed3C128eaE756323e7EAE27B40407c7d499B`](https://robinhoodchain.blockscout.com/address/0xD401Ed3C128eaE756323e7EAE27B40407c7d499B) |
+---
 
-| Meridian One (MRD1) | [`0x5e64880D20d6b827096611C3C06D9BA38e2C2DAD`](https://robinhoodchain.blockscout.com/address/0x5e64880D20d6b827096611C3C06D9BA38e2C2DAD) |
-| MRD1 / WETH pool (1% tier) | `0x8795eeB0cc2203d01140F9340B9402b69b4eE077` |
+## What is live right now
 
-Pools are created on the chain's canonical Uniswap V3 at the 1% fee tier (factory `0x1f7d7550B1b028f7571E69A784071F0205FD2EfA`, SwapRouter02 `0xCaf681a66D020601342297493863E78C959E5cb2`, position manager `0x73991a25C818Bf1f1128dEAaB1492D45638DE0D3`) and pair against the canonical bridged WETH `0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73`, so every launch is visible to DexScreener, snipers and any tooling watching the standard event stream.
+| Flavor (`VITE_BRAND`) | Brand / domain | Chain | Contracts artifact | Keeper |
+| --- | --- | --- | --- | --- |
+| `copair` | **hoodheist.fun** — production | Robinhood 4663 | `robinhood-flywheel.json` | Vercel cron `/api/keeper`, 10 min |
+| `base` | basedstonk.fun | Base 8453 | `base-stockfly-v3.json` | GH Actions `base-keeper.yml`, 30 min |
+| `venture` | **doubleplus.fund** — active development | Robinhood **testnet** 46630 | `venture-testnet.json` | GH Actions `venture-keepers.yml`, 15 min + weekly |
+| `hammr` | hammr | Robinhood 4663 | `robinhood-hammr.json` | none |
+| `arc` | arcx.fun | Arc 5042 | `arc-v3-launchpad.json` | none (permissionless `harvestFees`) |
+| `steadypads` | steadypads.vercel.app | Stable 988 | `stable-launchpad.json` | none |
 
-All protocol contracts are source-verified on Blockscout. The Uniswap V3 stack was deployed from the canonical build artifacts because no adopted canonical deployment existed on the chain. Every admin role is held by the platform admin wallet; the deployer retains zero privileges. Web app: https://safehood.fun (the indexer backend still needs hosting for feed/chart data; launching and trading work directly against the chain).
+Also deployed on Robinhood 4663 and still reachable by address, without a
+current front end: `robinhood-diamond`, `robinhood-hood`, `robinhood-earn`,
+`robinhood-rh-final`, `robinhood-rh-buyback`, `robinhood-rh-fork`, `quiver-v4`,
+`robinhood-launchpad`.
 
-## How a launch works
+**doubleplus has no mainnet deployment.** `venture-testnet.json` is the only
+venture artifact that exists.
 
-1. The creator fills in name, symbol, description, logo, website, X, Telegram and optional links, plus an optional first buy. Everything else is a fixed protocol rule and launching costs only gas.
-2. `Launchpad.createToken` (single transaction, fixed protocol rules: 1B supply, 0.3% pool tier, 1% trading fee, 2% max transaction and 2% max wallet until the 40,000 USD market cap, 2,000 USD starting market cap):
-   - deploys the ERC-20 through the `TokenFactory` (full supply, 18 decimals)
-   - creates and initializes the Uniswap V3 pool at the fixed 2,000 USD starting market cap
-   - mints a single-sided position holding the full supply just above the starting price; the position NFT is held by the launchpad (protocol-managed liquidity), and buyers' native currency fills the pool as price moves into the range
-   - enables trading immediately, with anti-whale limits active
-3. Trading runs through `buy`/`sell` on the launchpad (fixed 1% fee, pushed 100% to the creator on every trade) or directly against the pool (limits still enforced by the token itself).
-4. The moment any trade pushes the market cap over the graduation threshold, the token contract permanently removes the max transaction limit, max wallet limit and buy cooldown. No admin involvement, no keeper: the check runs inside the token's own transfer path.
+### Two things the files get wrong
 
-## Repository layout
+1. `web/.env.production.local` is the production build config, and its comments
+   name `RhFinalFactory / RhFinalHook`. That is wrong. The addresses in it
+   (`0x44F0fEF2…`, `0xa775543d…`, start block `34558420`) are
+   **`robinhood-flywheel.json`** — `FlyFactory` + `FlywheelHook`. Production runs
+   the flywheel model: weekly buyback-and-burn of the epoch's top-3 coins, 30% of
+   fees to traders pro-rata by routed volume. Trust the addresses, not the comment.
+2. The `web/.env.*.example` files are stale. `.env.base.example` points at
+   StockFly **V2** while CI deploys V3; `.env.venture.example` points at a
+   superseded venture factory. **The deployment JSONs in `contracts/deployments/`
+   and the env block in `.github/workflows/deploy-base.yml` are authoritative.**
+   Regenerate an env file from the JSON, never the other way round.
 
-| Package | What it is |
-| --- | --- |
-| `contracts/` | Solidity 0.8.26 + Hardhat. `Launchpad`, `LaunchToken`, `TokenFactory`, `FeeDistributor`, `Treasury`, Uniswap V3 interfaces, 24 integration tests that run against the real Uniswap V3 factory/router/position manager bytecode, deploy + Blockscout verify scripts |
-| `backend/` | Blockchain indexer (viem), SQLite storage, OHLC candle aggregation (1m/5m/15m/1h/4h/1d), Express REST API, WebSocket streaming (`candle:update`, `trade:update`, `price:update`, `token:launched`) |
-| `sdk/` | TypeScript SDK: `createToken`, `buyToken`, `sellToken`, all read functions, WebSocket subscriptions, React hooks (`@launchpad/sdk/react`) |
-| `web/` | React + TypeScript + Tailwind + TradingView Lightweight Charts + TanStack Query + Zustand + wagmi. Explore feed, live trading page with real OHLC candles, single-step launch flow, hidden role-gated admin console |
+---
 
-## Contracts
+## Deploying the web app
 
-- **`LaunchToken`**: fixed-supply ERC-20. While `limitsActive`, every transfer enforces `maxTxAmount`, `maxWalletAmount` and the optional per-wallet buy cooldown (infrastructure addresses are exempt). Each transfer also checks the live pool market cap through the launchpad and flips limits off permanently once the graduation cap is crossed. `checkGraduation()` is public so anyone can trigger the check too.
-- **`Launchpad`**: factory + trading router + liquidity manager.
-  - Trading: `buy(token, minOut, deadline)` payable and `sell(token, amountIn, minOut, deadline)`; the fixed 1% fee is delivered in native currency to the creator through the `FeeDistributor`.
-  - Market data views: `marketCapWeth`, `marketCapUsd`, `tradingLimits`, `poolInfo`, `nativeUsdPrice` (Chainlink-compatible feed with manual fallback).
-  - Protocol-owned liquidity (role `LIQUIDITY_MANAGER_ROLE`): `collectFees(token)` collects accrued pool fees; `collectFees(token, liquidityBps)` additionally settles up to 100% of the position principal, at any time; `addLiquidity(token, tokenAmount)` payable deepens the position. All proceeds go to the `Treasury`; every action emits `FeesCollected` or `LiquidityAdded`.
-  - Admin (role-gated): pause/resume launches, feature tokens, set price feed.
-- **`FeeDistributor`**: pushes 100% of every trading fee to the token creator automatically, with a pull-payment fallback (`withdraw`) for contract wallets that reject transfers; lifetime accounting per creator and per token.
-- **`Treasury`**: role-gated custody for withdrawn liquidity, LP fees and platform revenue.
+One Vite app, one flavor per build. Config arrives as `VITE_*` variables, which
+are **inlined into the client bundle at build time** — nothing here is secret,
+and nothing secret may be added.
 
-Security: OpenZeppelin AccessControl + ReentrancyGuard, custom errors, checks-effects-interactions, no upgradeable proxies, no owner mint. **Disclosure shown in the UI: liquidity is protocol-managed, not locked or burned.** The graduation check reads the live pool spot price, which is manipulable within a block; it only gates anti-whale limits, never funds.
+### Production (copair / hoodheist)
 
-### Build and test
+`web/.env.production.local` is committed and is picked up automatically by any
+production build.
 
 ```bash
 npm install
-npm run compile          # hardhat compile
-npm test                 # 24 integration tests against real Uniswap V3 bytecode
+npm run build --workspace @launchpad/sdk
+cd web && npm run build
+bash deploy/assemble.sh
+npx vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"   # from web/, uses .vercel/output
 ```
 
-### Wallet architecture
+`assemble.sh` is required, not optional. It builds `.vercel/output` in Build
+Output API v3 form and is what attaches the serverless functions and the keeper
+cron:
 
-The protocol owns its infrastructure; no individual wallet can hold it hostage. Four concerns, each rotatable independently:
-
-| Concern | Holder | Rotation |
+| Route | Source | Purpose |
 | --- | --- | --- |
-| Deployments | Dedicated platform deployer wallet (`scripts/generate-deployer.ts`, key in gitignored `.env.deployer`) | Generate a new one any time; it has zero on-chain privileges after deployment |
-| Protocol admin | `PLATFORM_ADMIN` (team multisig) holds DEFAULT_ADMIN, liquidity manager, operator and treasurer roles | `scripts/transfer-admin.ts` grants to a new holder and revokes the old, grant-before-revoke |
-| Protocol assets | `Treasury` contract (LP withdrawals, collected pool fees) | Treasurer role moves with the admin rotation |
-| Trading fees | Pushed 100% to token creators by `FeeDistributor` | Never touch the deployer or the admin |
+| `/api/rpc` | `deploy/api-rpc/index.mjs` | same-origin JSON-RPC relay |
+| `/api/usd` | `deploy/api-usd/index.mjs` | same-origin USD price relay |
+| `/api/bridge-in` | `deploy/api-bridge-in/` | Base → Arc USDC leg |
+| `/api/bridge-out` | `deploy/api-bridge-out/` | Arc → Base USDC leg |
+| `/api/keeper` | `deploy/api-keeper/` | **cron `*/10 * * * *`** — production keeper |
 
-The deploy script deploys with the deployer as a temporary admin purely for wiring, then grants every role to `PLATFORM_ADMIN` and renounces the deployer's roles, verifying each step on-chain. If the deployer key leaks or is lost afterwards, nothing about the running protocol is affected.
+A plain `vercel deploy web/dist` ships the site **without the keeper cron**.
+Rewards stop flowing and nobody gets an error. Do not do it.
 
-### Deploy to Robinhood Chain
+Server-side env required on the Vercel project:
 
-Robinhood Chain is an Arbitrum Orbit chain; set the official RPC endpoint and chain id for the environment you target, plus the canonical Uniswap V3 deployment addresses on that chain:
+- `KEEPER_PK` — funded keeper wallet (gas, and the buyback pot)
+- `CRON_SECRET` — authenticates cron calls to `/api/keeper`
+- `RELAYER_PRIVATE_KEY` — bridge relayer, only if the bridge legs are in use
+- optional: `HARVEST_MIN_USD` (5), `PAYOUT_MIN_USD` (1), `BURN_TOKEN`,
+  `BURN_MIN_ETH`, `RH_RPC`
 
-```bash
-cd contracts
-npx hardhat run scripts/generate-deployer.ts   # one-time: platform deployer wallet
-cp .env.example .env     # fill in RPC, chain id, Uniswap V3 addresses, PLATFORM_ADMIN
-# fund the deployer address printed above, then:
-npx hardhat run scripts/deploy.ts --network robinhood
-```
+Every one of these is read from `process.env`; the functions return 503 when
+unset rather than running degraded.
 
-The script deploys TokenFactory, Treasury, FeeDistributor and Launchpad, wires them together, hands all roles to `PLATFORM_ADMIN`, strips the deployer, and writes `deployments/robinhood.json`.
+### Base (basedstonk)
 
-### Verify on Blockscout
+Fully automated in `.github/workflows/deploy-base.yml` — builds, adds the SPA
+rewrite, deploys and aliases `basedstonk`, `stonked`, `koifun`, `stonkpad`.
+All flavor config is in the workflow `env:` block.
 
-`hardhat.config.ts` registers the chain's Blockscout instance as a custom explorer (`BLOCKSCOUT_URL` in `.env`). After deploying:
+It triggers on pushes to `main`. If Base is not shipping, delete the
+workflow rather than leaving it armed.
 
-```bash
-npx hardhat run scripts/verify.ts --network robinhood
-```
+Needs repo secret `VERCEL_TOKEN`.
 
-This verifies all four protocol contracts with their constructor arguments. LaunchToken instances share bytecode, so verifying one verifies the code for all of them on Blockscout; the script prints the exact command.
-
-## Backend
-
-```bash
-cd backend
-cp .env.example .env     # RPC, contract addresses, start block
-npm run build && npm start
-```
-
-- REST: `GET /api/tokens`, `/api/tokens/:address`, `/api/candles?token=&interval=1m`, `/api/trades?token=`, `/api/holders?token=`, `/api/stats`, `/api/creators/:address`, `/api/creators/:address/revenue`, `/api/lp-events`
-- WebSocket `/ws`: subscribe with `{"op":"subscribe","channel":"candle:update","token":"0x...","interval":"1m"}`; channels are `candle:update`, `trade:update`, `price:update`, `token:launched`
-- Candles are aggregated from real on-chain trades at index time; the API only serves preaggregated data, and the active candle streams incrementally so charts update without refetching.
-
-## Web app
+### Any other flavor
 
 ```bash
 cd web
-cp .env.example .env.local   # chain, contract addresses, API/WS URLs
-npm run dev                  # or: npm run build && npm run preview
+cp .env.<flavor>.example .env.<flavor>     # then FIX IT against contracts/deployments/
+VITE_BRAND=<flavor> npx vite build --mode <flavor>
 ```
 
-Wallets: MetaMask and any injected EIP-1193 wallet out of the box; WalletConnect activates when `VITE_WALLETCONNECT_PROJECT_ID` is set. All transactions are signed by the user's wallet; the app never handles private keys and displays nothing that is not backed by chain or indexer state.
+`--mode X` makes Vite load `.env.X`. The Base workflow instead passes every
+`VITE_*` as a process env var, which overrides file config — either approach
+works, but do not mix them in one build.
 
-## Full local stack (end to end)
+Only `web/vercel.json`'s SPA rewrite is needed for a static flavor. Flavors with
+no serverless functions do not need `assemble.sh`.
+
+---
+
+## Deploying contracts
+
+Hardhat only. No Foundry. Solidity 0.8.26, `viaIR`, `runs: 400`, with
+`VentureFactory.sol` overridden to `runs: 1` — it sits at 22,661 of the 24,576
+byte limit, so **any addition to it must be size-checked before it can ship**.
+
+Network config is env-driven; the single `robinhood` network entry serves both
+Robinhood chains:
+
+```bash
+cd contracts
+cp .env.example .env    # NOTE: this file is gen-0 and half-obsolete, see below
+```
+
+`contracts/.env.example` documents `PLATFORM_ADMIN`, `UNISWAP_*` and
+`GRADUATION_CAP_USD_8` for contracts that no longer exist in this repo. What you
+actually need:
+
+```
+ROBINHOOD_RPC_URL=https://rpc.mainnet.chain.robinhood.com   # or .testnet.
+ROBINHOOD_CHAIN_ID=4663                                      # or 46630
+BLOCKSCOUT_URL=https://robinhoodchain.blockscout.com
+PRIVATE_KEY=                 # leave empty; use .env.deployer
+```
+
+The deployer key lives in gitignored `contracts/.env.deployer`, generated by
+`npx hardhat run scripts/generate-deployer.ts` and loaded automatically. It signs
+deployments and holds no privileges afterwards.
+
+### Venture (doubleplus)
+
+```bash
+ROBINHOOD_RPC_URL=https://rpc.testnet.chain.robinhood.com ROBINHOOD_CHAIN_ID=46630 \
+ADMIN=0x… TREASURY=0x… \
+npx hardhat run scripts/deploy-venture.ts --network robinhood
+```
+
+Writes `deployments/venture-testnet.json` (or `venture-robinhood.json` on 4663).
+The script mines a CREATE2 salt for the hook's flag bits, predicts the factory
+address two nonces ahead so the hook and token deployer can bake it in, asserts
+the prediction held, and renounces factory ownership at the end.
+
+**Immutable at deploy — you cannot change these later, only redeploy:**
+
+| Env | Default | Bound |
+| --- | --- | --- |
+| `PLATFORM_FEE_BPS` | 55 (0.55%) | 50–100 |
+| `REF_SHARE_BPS` | 2000 (20% of the fee) | ≤ 5000 |
+| `CURVE_BUY_FEE_BPS` | 50 (0.5%) | ≤ 300 |
+| `CURVE_SELL_FEE_BPS` | 100 (1%) | ≤ 300 |
+| `MIN_TARGET_ETH` | **0.5** | ≤ 1,000,000 |
+| `ADMIN`, `TREASURY` | deployer | — |
+
+The script's own header comment says `PLATFORM_FEE_BPS` defaults to 100; the code
+says 55. The code is right.
+
+`MIN_TARGET_ETH` is the one to think about. Testnet runs 0.002 so a faucet wallet
+can drive a raise to graduation; **mainnet must ship 0.5**, and it is coupled to
+the contract's `START_MCAP_USD_8` of $750 — changing either without the other
+strands one of them. `venture.lock.test.ts` pins the relationship.
+
+After deploying, regenerate `web/.env.venture.example` from the new JSON.
+
+### Robinhood family (production flavors)
+
+One script per generation, same shape: `deploy-rh-final.ts`, `deploy-flywheel.ts`,
+`deploy-hood.ts`, `deploy-diamond.ts`, `deploy-hammr.ts`, `deploy-rh-buyback.ts`,
+`deploy-earn.ts`. Each takes `ADMIN` (defaults to deployer) and `RENOUNCE=0` to
+skip renouncing, mines hook flags, and writes its own `deployments/*.json`.
+
+### Verification
+
+```bash
+cd contracts
+BLOCKSCOUT_URL=… npm run verify:blockscout -- --network robinhood
+```
+
+This posts the standard-JSON compiler input from `artifacts/build-info` to
+Blockscout's native API v2, which is more reliable on Blockscout instances than
+the etherscan-compatible endpoint. (The script this points at used to be
+`verify.ts`, which targeted a contract set that no longer exists; that file has
+been deleted and the npm script repointed.)
+
+---
+
+## Keepers
+
+Four scheduled jobs. Three are on GitHub Actions, one on Vercel. **All of them
+no-op silently when their key is unset** — check the run logs, not the exit code.
+
+| Job | Where | Schedule | Targets | Secret |
+| --- | --- | --- | --- | --- |
+| production keeper | Vercel cron | `*/10` | `robinhood-flywheel` (**live**) | `KEEPER_PK` |
+| `venture-keepers.yml` → ops | Actions | `*/15` | venture testnet | `VENTURE_KEEPER_PK` |
+| `venture-keepers.yml` → flywheel | Actions | Mon 12:00 UTC | venture testnet | `VENTURE_KEEPER_PK` |
+| `base-keeper.yml` | Actions | `*/30` | `base-stockfly-v3` | `KEEPER_PRIVATE_KEY` |
+| `keeper.yml` | Actions | **manual only** | `quiver-v4` (abandoned) | `KEEPER_PRIVATE_KEY` |
+
+`keeper.yml` services `quiver-v4.json`, the oldest V4 deployment on 4663, which
+nothing in the current front end points at. Its `*/30` cron was burning gas for
+no one and has been removed; the job is kept as `workflow_dispatch` in case that
+deployment still has holders with unharvested fees. Re-enable the cron only if
+that turns out to be true.
+
+Two keepers write back to the repo (`git push` of refreshed proof manifests into
+`web/public/rewards/`): `base-keeper.yml` and the venture flywheel. Those commits
+are what make the claim UI work, so a branch protection rule that blocks the
+keeper's push silently breaks claims.
+
+None of the keepers can divert funds. `claimFor`/`claimForMany` can only push a
+holder's rewards to that holder, and `StockRewardVault` only moves value into a
+posted Merkle epoch. They spend gas and nothing else.
+
+`DRY_RUN=1` on the venture keepers logs intended actions without sending
+transactions. Use it before any manual run.
+
+---
+
+## Routine maintenance
+
+### Tunable without redeploying — venture
+
+`setParams(creationFeeWei, graduationRaiseWei, sweepDelaySecs, creatorCurveShareBps)`,
+callable only by `protocolAdmin`:
+
+- `graduationRaiseWei` — bounded `[minTargetWei, 1_000_000 ether]`. Read at launch
+  and frozen per listing, so **a live raise never has its finish line moved**.
+- `sweepDelaySecs` — ≥ 180 days, currently 365.
+- `creatorCurveShareBps` — ≤ 5000, currently 1000.
+- `creationFeeWei` — no constructor default, so it is **0 on every fresh deploy**.
+
+`pause()` / `resume()` stop new launches only; live curves and pools are untouched.
+
+**`setParams` state does not survive a redeploy.** All four values are plain
+storage with no constructor initialisation, so a new factory starts at
+`creationFeeWei = 0`, `graduationRaiseWei = 0.5 ether`, `sweepDelaySecs = 365 days`,
+`creatorCurveShareBps = 1000`. The testnet creation fee was set to 0.0005 ETH in
+`9f0ffaf`, then the factory was redeployed in `c905d1c` and nothing re-applied it —
+so the live testnet factory is almost certainly charging nothing. **Re-run
+`setParams` as the last step of every deploy**, and read the values back before
+assuming otherwise.
+
+Instrument before tuning `graduationRaiseWei`: per-token curve fee accrued, pool
+fee accrued, time on curve, pool volume in the first 24h post-graduation, and the
+share of listings that never graduate. The optimum is empirical.
+
+### The lever that matters
+
+**`FlyFactory.collect(token, liquidityBps, recipient)` on the production factory
+can withdraw up to 100% of any graduated pool's liquidity**, gated to the
+immutable `protocolAdmin`, and it survives `renounceOwnership()`. The same lever
+exists on every generation in this repo except venture, where it was removed
+outright — there is no encoding of the callback that withdraws, and
+`venture.lock.test.ts` asserts its absence by ABI reflection.
+
+If a front end promises locked liquidity on a non-venture flavor, the bytecode
+does not back that promise. Know which one you are deploying.
+
+### Key inventory
+
+| Key | Holds | Rotation |
+| --- | --- | --- |
+| `0x5DdDEa56…2f4A0b` | admin / treasury / feeRecipient in **16 of 25** deployment artifacts, across chains 4663, 8453, 5042 and 988 | immutable on most contracts — rotation means redeploying |
+| `0x1B97531b…45Acce` | venture testnet admin + treasury | immutable |
+| `0xd6F0e894…29c8ac` | deployer of record | freely rotatable, zero privileges |
+| `0xe5b498a0…2552208` | bridge relayer, both legs | immutable in the payout contracts |
+| keeper wallets | gas only | rotate freely, update the secret |
+
+The first row is the one to plan around: a single key carries drain authority over
+nearly the entire live footprint, and it cannot be rotated in place.
+
+### Credentials to rotate now that this repo is private
+
+These were committed while the repo was public and should be treated as burned:
+
+- `web/.env.arc.example:19`, `web/deploy/api-bridge-in/index.ts:27`,
+  `web/deploy/api-bridge-out/index.ts:25` — `?key=7629f78c…` is the `ACCESS_KEY`
+  on your own Tor RPC gateway (`gateway/server.mjs:121`). Anyone with the repo can
+  use your gateway's egress.
+- `web/deploy/api-rpc/index.mjs:6` — a bearer-token-in-path RPC at
+  `real-pump-soon-trust-me-bro-again.poptyedev.com`, hardcoded as the default
+  upstream. Third-party; you may not control rotation.
+- `VITE_WALLETCONNECT_PROJECT_ID=e1bda672…` in four files — public by design
+  (it ships in the bundle), but tied to your Cloud account.
+
+No private keys are committed anywhere. Every signing key is read from
+`process.env` or Actions secrets. That part is done correctly.
+
+### Unattended surface
+
+`bridge/index.html` is a 62 KB standalone page outside the build system that moves
+real Ethereum-mainnet USDC to relayer `0xe5b498a0…2552208` — the same relayer as
+`web/deploy/api-bridge-*`. Nothing in `web/` references it, nothing builds or tests
+it, and it was last touched 2026-07-16. If that relayer still holds funds, audit it
+independently of whatever else is in flight.
+
+---
+
+## Local development
 
 ```bash
 npm install
-# 1. chain
-cd contracts && npx hardhat node
-# 2. deploy Uniswap V3 + launchpad + demo token with trades
-cd contracts && npx hardhat run scripts/localnet.ts --network localhost
-# 3. backend
-cd backend && cp .env.example .env  # point at localnet (see deployments/localnet.json)
-npm run build && npm start
-# 4. web
-cd web && npm run gen:env && npm run dev
+cd contracts && npx hardhat node                          # terminal 1
+npx hardhat run scripts/local-venture.ts --network localhost   # terminal 2
+cd web && npm run dev                                     # terminal 3
 ```
 
-## SDK
+`local-venture.ts` deploys the full venture stack locally and opens one
+Guaranteed raise with a live curve position, so the raise-phase UI can be driven
+for real. Pool seeding is never reached locally, so the placeholder
+`poolManager`/`v3Router` are fine.
 
-See `sdk/README.md` for the full API. Quick taste:
+Still gen-0 and not useful for venture work: `scripts/localnet.ts` (deploys
+`TokenFactory`/`Treasury`/`FeeDistributor`/`Launchpad`, none of which exist),
+`scripts/onebuy.ts`, and `web/scripts/gen-env.mjs` / `npm run gen:env`, which
+read the file `localnet.ts` writes. Delete them when someone has a minute.
 
-```ts
-const client = new LaunchpadClient({ chain, addresses, apiUrl, wsUrl });
-client.connectWallet(walletClient);
-await client.createToken({ name, symbol, initialLiquidityWei: parseEther("1") });
-await client.buyToken(token, parseEther("0.1"));
-client.subscribeToCandles(token, "1m", ({ candle }) => chartSeries.update(candle));
+### Tests
+
+```bash
+npm test                              # contracts + web
+npm test --workspace @launchpad/contracts   # hardhat, full suite
+npm test --workspace @launchpad/web         # vitest
+cd contracts && npm run test:venture  # venture unit + lock + stress + dividends
+cd contracts && npm run test:canary   # proves the harness reports red
 ```
 
-## Known operational notes
+CI runs the first of these on every push and PR to `main`
+(`.github/workflows/test.yml`). It does **not** gate on `tsc --noEmit`: there
+are ~344 pre-existing type errors in `contracts/` (implicit `any`,
+`BaseContract` property access) that Hardhat never surfaces because it runs
+transpile-only. Worth fixing, but not as a blocking gate.
 
-- The USD graduation threshold needs a native/USD price source: point `setPriceFeed` at a Chainlink-compatible aggregator when one exists on Robinhood Chain, otherwise keep the operator-updated fallback price fresh.
-- The 24h volume/holder counters come from the indexer; the source of truth for balances, fees and liquidity is always the chain.
-- This codebase has not been audited. Test on the Robinhood Chain testnet before deploying with real value.
+**All 20 `*.fork.test.ts` files self-skip unless `FORK=1` is set** (20 of 20,
+verified). A green `npm test` has therefore run none of the integration tests
+against real deployed infrastructure. To actually run them:
+
+```bash
+cd contracts
+FORK=1 ROBINHOOD_RPC_URL=… npx hardhat test test/v4/venture.fork.test.ts
+```
+
+`harness.test.ts` is a canary suite that tests the test runner itself — that
+`expect()` throws, that `revertedWith` fails on a passing call, that deployed
+bytecode is not a stub. Run `test:canary` after any Hardhat or toolchain upgrade;
+if it passes when it should fail, the whole suite is meaningless.
+
+---
+
+## Traps
+
+- **Deploying production without `assemble.sh`** drops the keeper cron. No error,
+  rewards just stop.
+- **`web/.env.*.example` files are stale.** Build from `contracts/deployments/*.json`.
+- **`setParams` does not survive a redeploy.** A fresh venture factory charges no
+  creation fee. Re-run it as the last step of every deploy.
+- **Two factories are at the bytecode limit.** `HammrFactory` is 24,524 of 24,576
+  — 52 bytes spare — and `HoodFactory` has 381. Neither can be modified again,
+  only redeployed. `VentureFactory` is at 22,793 and still growing; check the
+  size before adding to it.
+- **Nine `*.fork.test.ts` files and fourteen scripts mined CREATE2 salts against
+  a stale `QuiverToken` ABI** after the constructor gained two dividend
+  parameters. All 19 sites are fixed, but the fork tests have still never
+  executed — they need `FORK=1` and an RPC. Run the manual `fork` CI job before
+  trusting them.
+- **Git history is three unrelated root commits** grafted together; `contracts/`
+  has no history before 2026-08-20, when 421 files arrived in one commit labelled
+  `web: ETH is the default pool pairing`. `git log` on a contract will tell you
+  almost nothing. Do not rely on blame here.
+
+Fixed in the cleanup pass, recorded so they are not reintroduced: `npm install`
+used to fail on current Node because the unused `backend/` workspace pulled in
+`better-sqlite3` (backend is no longer a workspace); `npm test` used to exit 1
+without running anything because a test-only dependency lived in the
+non-workspace `keeper/` package; `web`'s vitest `--exclude` used single quotes,
+which `cmd.exe` does not treat as quotes, so the live DexScreener test ran in
+CI; `deploy-base.yml` pointed at a branch that does not exist; and `keeper.yml`
+ran a `*/30` cron against an abandoned deployment.

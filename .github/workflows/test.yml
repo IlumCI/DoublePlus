@@ -1,0 +1,95 @@
+name: Tests
+
+# The gate that was missing. Three separate failures accumulated unnoticed
+# because nothing ran the suites on push: a test-only dependency declared in a
+# non-workspace package, a vitest --exclude that never applied, and a token
+# constructor that gained two parameters while eighteen call sites kept mining
+# CREATE2 salts against the old ABI. All three were invisible to a green repo.
+#
+# Deliberately NOT gated here:
+#   - `tsc --noEmit` on contracts/: 344 pre-existing errors (implicit any,
+#     BaseContract property access). Hardhat runs tests transpile-only, so
+#     these never block execution. Worth fixing, but not as a blocking gate
+#     on day one — it would fail every PR immediately.
+#   - the FORK=1 suites: they need a live Robinhood Chain RPC. See the
+#     fork job below, which is manual-only until an RPC secret exists.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch: {}
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contracts:
+    name: Contracts (hardhat)
+    runs-on: ubuntu-latest
+    # The venture unit + stress suites mine a CREATE2 vanity salt in JS for
+    # every launch (~65k keccaks each), so the suite takes ~7 min rather than
+    # the seconds the assertions themselves need.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      # --ignore-scripts skips better-sqlite3's node-gyp build, which is a
+      # dependency of the unused backend/ workspace and fails on newer Node.
+      # Nothing in the contract path needs the native module.
+      - name: Install
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Compile
+        run: npm run compile --workspace @launchpad/contracts
+      - name: Test
+        run: npm test --workspace @launchpad/contracts
+
+  web:
+    name: Web (vitest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Build SDK
+        run: npm run build --workspace @launchpad/sdk
+      # NOTE: web's `test` script intends to exclude *.live.test.ts but the
+      # quoted glob does not always apply, so this step can make real calls to
+      # the DexScreener API and will fail on a network blip. Fix the exclude
+      # in web/package.json and this becomes hermetic.
+      - name: Test
+        run: npm test --workspace @launchpad/web
+
+  fork:
+    name: Fork tests (manual)
+    # Needs a Robinhood Chain RPC. Every *.fork.test.ts self-skips unless
+    # FORK=1, so without this job they never execute anywhere — which is how
+    # the constructor-ABI drift survived in nine of them.
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Fork suite
+        working-directory: contracts
+        env:
+          FORK: "1"
+          ROBINHOOD_RPC_URL: ${{ secrets.ROBINHOOD_RPC_URL }}
+          ROBINHOOD_CHAIN_ID: "4663"
+        run: |
+          if [ -z "$ROBINHOOD_RPC_URL" ]; then
+            echo "ROBINHOOD_RPC_URL secret not set; nothing to fork against."
+            exit 1
+          fi
+          npx hardhat test

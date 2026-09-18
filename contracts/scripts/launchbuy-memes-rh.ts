@@ -33,8 +33,8 @@ async function main() {
     const pairUsd8 = await fetchUsd8(m.pair);
     const params = { name: m.name, symbol: m.symbol, metadataURI: "", pair: m.pair, taxBps: 300, pairUsdPrice8: pairUsd8 };
     const args = ethers.AbiCoder.defaultAbiCoder().encode(
-      ["string", "string", "string", "uint256", "address", "address", "uint16", "address"],
-      [params.name, params.symbol, params.metadataURI, 10n ** 27n, signer.address, factoryAddr, params.taxBps, params.pair],
+      ["string", "string", "string", "uint256", "address", "address", "uint16", "address", "uint256", "uint8"],
+      [params.name, params.symbol, params.metadataURI, 10n ** 27n, signer.address, factoryAddr, params.taxBps, params.pair, 0n, 0],
     );
     const hash = ethers.keccak256(ethers.concat([Token.bytecode, args]));
     let salt = "";
