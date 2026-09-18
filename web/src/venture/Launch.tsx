@@ -20,7 +20,8 @@ import { useUi } from "../store";
 
 const TOTAL_SUPPLY = 10n ** 27n;
 const CURVE_SHARE = 0.6; // 60% of supply sells on the curve
-const START_FDV_USD = 3_000;
+const START_FDV_USD = 750; // mirrors VentureFactory.START_MCAP_USD_8
+const MIN_TARGET_ETH = 0.5; // mirrors VentureFactory.minTargetWei
 
 /** Found a startup: identity + the on-chain term sheet, in one transaction. */
 export function LaunchVenture() {
@@ -89,9 +90,11 @@ export function LaunchVenture() {
     }
   };
 
-  // The curve opens at a $3k FDV, so the smallest honest target is the cost of
-  // the whole curve at that floor: $1,800 worth of ETH.
-  const minTargetEth = ethUsd > 0 ? (START_FDV_USD * CURVE_SHARE) / ethUsd : 0;
+  // Two floors apply and the binding one is whichever is higher: the curve
+  // cannot raise less than its own supply costs at the start price, and the
+  // platform will not finish a raise below MIN_TARGET_ETH.
+  const curveFloorEth = ethUsd > 0 ? (START_FDV_USD * CURVE_SHARE) / ethUsd : 0;
+  const minTargetEth = Math.max(curveFloorEth, MIN_TARGET_ETH);
   const parsedTarget = useMemo(() => { try { return target ? parseEther(target) : 0n; } catch { return 0n; } }, [target]);
   const targetUsd = ethUsd > 0 && parsedTarget > 0n ? (Number(parsedTarget) / 1e18) * ethUsd : 0;
   const founderCutEth = parsedTarget > 0n ? (parsedTarget * BigInt(founderCut * 100)) / 10_000n : 0n;
@@ -102,7 +105,9 @@ export function LaunchVenture() {
     if (!wc || !me) return;
     if (parsedTarget === 0n) return pushToast({ kind: "error", title: "Set a funding target" });
     if (minTargetEth > 0 && Number(target) < minTargetEth * 0.999) {
-      return pushToast({ kind: "error", title: `Target too low`, body: `Minimum is ~${minTargetEth.toFixed(4)} ETH (the curve's $${START_FDV_USD} starting FDV).` });
+      return pushToast({ kind: "error", title: `Target too low`, body: curveFloorEth > MIN_TARGET_ETH
+          ? `Minimum is ~${minTargetEth.toFixed(4)} ETH (the curve's $${START_FDV_USD} starting valuation).`
+          : `Minimum is ${MIN_TARGET_ETH} ETH.` });
     }
     if (allocTotal !== 100) {
       return pushToast({ kind: "error", title: "Fee split must total 100%", body: `It totals ${allocTotal}% right now.` });

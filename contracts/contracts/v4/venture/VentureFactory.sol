@@ -78,7 +78,16 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
     uint256 public constant TOTAL_SUPPLY = 1_000_000_000 ether;
     uint256 public constant TOTAL_SUPPLY_WHOLE = 1_000_000_000;
     uint256 public constant CURVE_SUPPLY_WHOLE = 600_000_000; // 60% sold on the curve
-    uint256 public constant START_MCAP_USD_8 = 3_000 * 1e8; // FDV at the first buy
+    /// @notice Whole-supply FDV at the first curve buy. Coupled to
+    ///         `minTargetWei`: the cheapest raise that can exist is the whole
+    ///         curve supply bought at this start price
+    ///         (START * CURVE_SUPPLY/TOTAL_SUPPLY / ethUsd), because the curve
+    ///         only ever rises. At $750 that is 0.241 ETH at $1,865/ETH, which
+    ///         leaves a 0.5 ETH raise roughly doubling the price from the first
+    ///         backer to graduation. A higher start valuation would push the
+    ///         cheapest possible raise above the floor and make small raises
+    ///         unlaunchable.
+    uint256 public constant START_MCAP_USD_8 = 750 * 1e8;
     uint256 public constant MAX_TARGET_WEI = 1_000_000 ether;
     uint64 public constant MIN_RAISE_SECS = 1 days;
     uint64 public constant MAX_RAISE_SECS = 14 days;
@@ -100,6 +109,14 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
     VentureTokenDeployer public immutable tokenDeployer;
     address public immutable protocolAdmin;
 
+    /// @notice Smallest raise the platform will finish, in wei. A floor on both
+    ///         modes: a founder's own target in Guaranteed, and the graduation
+    ///         trigger in Open. Immutable rather than admin-settable — it is a
+    ///         business floor, and nothing about it should move under a live
+    ///         market. Testnets deploy it small so a raise can be driven to
+    ///         graduation for real; mainnet ships 0.5 ether.
+    uint256 public immutable minTargetWei;
+
     /// @notice Protocol fee on curve buys, taken off the incoming value before
     ///         the curve is quoted, so `spentWei` records net escrow.
     uint16 public immutable curveBuyFeeBps;
@@ -113,7 +130,7 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
     /// @notice Open-mode graduation trigger, in raised wei. Frozen per listing
     ///         at launch so a live curve never has its finish line moved. The
     ///         optimum is empirical, hence settable rather than immutable.
-    uint256 public graduationRaiseWei = 5 ether;
+    uint256 public graduationRaiseWei = 0.5 ether;
     /// @notice How long an aborted raise's escrow stays claimable.
     uint64 public sweepDelaySecs = 365 days;
     /// @notice Open-mode creator's share of the curve fee, in bps of the fee.
@@ -166,6 +183,9 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
     mapping(address token => Curve) internal _curves;
     mapping(address token => address) public vestingOf;
     mapping(address token => VentureFeeHook.FeePolicy) public feePolicyOf;
+    /// @notice What was locked into the pool at graduation, kept as a public
+    ///         record so anyone can read back the exact tick range and
+    ///         liquidity. Nothing in this contract can withdraw it.
     mapping(address token => Position) public tokenPositions;
     mapping(address token => Position) public pairPositions;
     mapping(address token => mapping(address buyer => uint256)) public spentWei;
@@ -220,7 +240,6 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
     event FeesWithdrawn(address indexed recipient, uint256 amount);
     event Swept(address indexed token, uint256 amount);
     event ParamsSet(uint256 creationFeeWei, uint256 graduationRaiseWei, uint64 sweepDelaySecs, uint16 creatorCurveShareBps);
-    event Collected(address indexed token, uint256 tokenAmount, uint256 pairAmount, address indexed recipient);
     event LaunchesPausedSet(bool paused);
 
     error LaunchesPaused_();
@@ -256,9 +275,12 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         VestingDeployer vestingDeployer_,
         VentureTokenDeployer tokenDeployer_,
         uint16 curveBuyFeeBps_,
-        uint16 curveSellFeeBps_
+        uint16 curveSellFeeBps_,
+        uint256 minTargetWei_
     ) Ownable(owner_) {
         require(protocolAdmin_ != address(0), "admin=0");
+        if (minTargetWei_ == 0 || minTargetWei_ > MAX_TARGET_WEI) revert InvalidParams();
+        minTargetWei = minTargetWei_;
         if (curveBuyFeeBps_ > MAX_CURVE_FEE_BPS || curveSellFeeBps_ > MAX_CURVE_FEE_BPS) revert FeeTooHigh();
         curveBuyFeeBps = curveBuyFeeBps_;
         curveSellFeeBps = curveSellFeeBps_;
@@ -296,7 +318,7 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         uint64 sweepDelaySecs_,
         uint16 creatorCurveShareBps_
     ) external onlyProtocolAdmin {
-        if (graduationRaiseWei_ == 0 || graduationRaiseWei_ > MAX_TARGET_WEI) revert InvalidParams();
+        if (graduationRaiseWei_ < minTargetWei || graduationRaiseWei_ > MAX_TARGET_WEI) revert InvalidParams();
         if (sweepDelaySecs_ < MIN_SWEEP_DELAY) revert InvalidParams();
         if (creatorCurveShareBps_ > 5_000) revert InvalidParams();
         creationFeeWei = creationFeeWei_;
@@ -373,7 +395,7 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         // One trigger serves both modes: Guaranteed uses the founder's target,
         // Open takes the protocol's graduation threshold, frozen here.
         uint256 target = open ? graduationRaiseWei : p.targetRaiseWei;
-        if (target == 0 || target > MAX_TARGET_WEI) revert InvalidParams();
+        if (target < minTargetWei || target > MAX_TARGET_WEI) revert InvalidParams();
 
         // p0: whole-supply FDV of START_MCAP_USD at the first curve buy.
         uint256 p0 = Math.mulDiv(START_MCAP_USD_8, 1e18, TOTAL_SUPPLY_WHOLE * p.ethUsdPrice8);
@@ -665,7 +687,7 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
                 );
             if (liq > 0) {
                 tokenPositions[token] = Position({tickLower: tl, tickUpper: tu, liquidity: liq});
-                poolManager.unlock(abi.encode(uint8(0), abi.encode(key, tl, tu, liq)));
+                poolManager.unlock(abi.encode(key, tl, tu, liq));
             }
         }
 
@@ -681,7 +703,7 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
                 );
             if (liq > 0) {
                 pairPositions[token] = Position({tickLower: tl, tickUpper: tu, liquidity: liq});
-                poolManager.unlock(abi.encode(uint8(0), abi.encode(key, tl, tu, liq)));
+                poolManager.unlock(abi.encode(key, tl, tu, liq));
             }
         }
 
@@ -766,36 +788,21 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
     // PoolManager callback: settle whatever the add owes
     // ---------------------------------------------------------------------
 
+    /// @notice Add-only by construction. `liquidityDelta` is built from a
+    ///         uint128 and cast positive, so there is no encoding of this
+    ///         payload that removes liquidity — not merely no caller that
+    ///         does. Graduated liquidity has no path out of the pool.
     function unlockCallback(bytes calldata data) external override returns (bytes memory) {
         if (msg.sender != address(poolManager)) revert NotPoolManager();
-        (uint8 action, bytes memory payload) = abi.decode(data, (uint8, bytes));
-
-        if (action == 0) {
-            (PoolKey memory key, int24 tl, int24 tu, uint128 liq) = abi.decode(payload, (PoolKey, int24, int24, uint128));
-            (BalanceDelta delta,) = poolManager.modifyLiquidity(
-                key,
-                ModifyLiquidityParams({tickLower: tl, tickUpper: tu, liquidityDelta: int256(uint256(liq)), salt: bytes32(0)}),
-                ""
-            );
-            _settleNegative(key.currency0, delta.amount0());
-            _settleNegative(key.currency1, delta.amount1());
-            return "";
-        }
-
-        (PoolKey memory k2, Position memory pos, address recipient) = abi.decode(payload, (PoolKey, Position, address));
-        (BalanceDelta d2,) = poolManager.modifyLiquidity(
-            k2,
-            ModifyLiquidityParams({
-                tickLower: pos.tickLower,
-                tickUpper: pos.tickUpper,
-                liquidityDelta: -int256(uint256(pos.liquidity)),
-                salt: bytes32(0)
-            }),
+        (PoolKey memory key, int24 tl, int24 tu, uint128 liq) = abi.decode(data, (PoolKey, int24, int24, uint128));
+        (BalanceDelta delta,) = poolManager.modifyLiquidity(
+            key,
+            ModifyLiquidityParams({tickLower: tl, tickUpper: tu, liquidityDelta: int256(uint256(liq)), salt: bytes32(0)}),
             ""
         );
-        uint256 amt0 = _takePositive(k2.currency0, d2.amount0(), recipient);
-        uint256 amt1 = _takePositive(k2.currency1, d2.amount1(), recipient);
-        return abi.encode(amt0, amt1);
+        _settleNegative(key.currency0, delta.amount0());
+        _settleNegative(key.currency1, delta.amount1());
+        return "";
     }
 
     function _settleNegative(Currency currency, int128 amount) internal {
@@ -805,45 +812,6 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         poolManager.settle();
     }
 
-    function _takePositive(Currency currency, int128 amount, address to) internal returns (uint256 value) {
-        if (amount <= 0) return 0;
-        value = uint256(uint128(amount));
-        poolManager.take(currency, to, value);
-    }
-
-    /// @notice LP recovery lever, gated to the immutable protocolAdmin; drains
-    ///         both factory-held positions of `token` to `recipient`.
-    function collect(address token, address recipient) external onlyProtocolAdmin nonReentrant {
-        if (recipient == address(0)) revert InvalidParams();
-        Listing storage l = listings[token];
-        bool tokenIsCurrency0 = token < l.pair;
-        PoolKey memory key = PoolKey({
-            currency0: Currency.wrap(tokenIsCurrency0 ? token : l.pair),
-            currency1: Currency.wrap(tokenIsCurrency0 ? l.pair : token),
-            fee: LP_FEE,
-            tickSpacing: TICK_SPACING,
-            hooks: IHooks(address(hook))
-        });
-        uint256 t;
-        uint256 p;
-        if (tokenPositions[token].liquidity > 0) {
-            Position memory pos = tokenPositions[token];
-            delete tokenPositions[token];
-            bytes memory r = poolManager.unlock(abi.encode(uint8(1), abi.encode(key, pos, recipient)));
-            (uint256 a0, uint256 a1) = abi.decode(r, (uint256, uint256));
-            (t, p) = tokenIsCurrency0 ? (a0, a1) : (a1, a0);
-        }
-        if (pairPositions[token].liquidity > 0) {
-            Position memory pos = pairPositions[token];
-            delete pairPositions[token];
-            bytes memory r = poolManager.unlock(abi.encode(uint8(1), abi.encode(key, pos, recipient)));
-            (uint256 a0, uint256 a1) = abi.decode(r, (uint256, uint256));
-            (uint256 t2, uint256 p2) = tokenIsCurrency0 ? (a0, a1) : (a1, a0);
-            t += t2;
-            p += p2;
-        }
-        emit Collected(token, t, p, recipient);
-    }
 
     // ---------------------------------------------------------------------
     // Pool start pricing (identical to the proven Hammr placement)

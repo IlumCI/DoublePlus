@@ -51,7 +51,7 @@ async function deployAll(admin: any, treasury: any) {
   const factory = await (await ethers.getContractFactory("VentureFactory")).deploy(
     admin.address, admin.address, POOL_MANAGER, hookAddr, WETH, V3_ROUTER,
     await vestingDeployer.getAddress(), await tokenDeployer.getAddress(),
-     50, 100,
+     50, 100, 1n,
   );
   await factory.waitForDeployment();
   expect(await factory.getAddress()).to.equal(predictedFactory);

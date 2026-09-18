@@ -113,6 +113,23 @@ finish line moved. Start it low, instrument graduated-pool revenue against
 time-on-curve, and tune. The ability to re-tune is worth more than any number
 chosen up front.
 
+**Settled: 0.5 ETH**, with an immutable `minTargetWei` of the same value that
+the admin setter can never go below — so the tuning range is one-directional
+and a live market cannot have the floor pulled out from under it.
+
+The floor is not free-standing. The curve sells 60% of supply starting at a
+fixed whole-supply valuation, and its price only rises, so the cheapest raise
+that can exist is that supply bought at the start price:
+
+    baseCost = START_MCAP_USD_8 x 0.6 / ethUsd
+
+At the original $3,000 start valuation that was 0.9651 ETH at $1,865/ETH —
+above the 0.5 ETH floor, making a 0.5 ETH raise unlaunchable at any ETH price
+below $3,600. The start valuation was therefore lowered to **$750**, putting
+baseCost at 0.2413 ETH and leaving a floor-sized raise roughly doubling the
+price from first backer to graduation. Changing either number without the
+other strands one of them; `venture.lock.test.ts` pins the relationship.
+
 Instrument these from day one, or the tuning is guesswork:
 per-token curve fee accrued, pool fee accrued, time on curve, pool volume in
 the first 24h post-graduation, and the share of listings that never graduate.
@@ -249,13 +266,19 @@ below target in the final block. Mode B has no target, so no lock applies.
 | `creatorCurveShareBps` | Mode B | 500–2000 of the fee | ≤ 5000 |
 | `refShareBps` | both | 2000 of the fee | existing hook value |
 | `sweepDelaySecs` | Mode A | 365 days | ≥ 180 days |
-| `graduationRaiseWei` | Mode B | start low, then tune | admin-settable, bounded |
+| `graduationRaiseWei` | Mode B | **0.5 ETH** | admin-settable, never below `minTargetWei` |
+| `minTargetWei` | both modes | **0.5 ETH** | immutable at factory deploy |
 
 Sell stays at 1% against the 0.5% buy. The asymmetry is deliberate and points
 the same way as the threshold analysis: exiting on the curve costs twice what
 entering does, so the cheap path is to hold to graduation and trade in the
-pool, which is the venue that pays the protocol more and never runs out of
-inventory.
+pool, which never runs out of inventory.
+
+**Settled: the pool platform fee is 0.55%**, down from the 1% assumed above,
+against Pons's verified 0.30%. That inverts one claim in this section — the
+pool is no longer the higher-rate venue than a curve sell — but not the
+conclusion: a 1% curve sell is a one-off on a finite inventory, while 0.55%
+on pool volume recurs for the life of the token.
 
 Curve fees route through the same referrer split the hook already uses, so a
 referred trader pays the referrer on curve volume too, not only pool volume.
@@ -274,7 +297,7 @@ profitable by design.
 | curve sell | `curveSellFeeBps` | `curveSellFeeBps` |
 | raise fails | entry fees already taken (+ sweep after 365d) | n/a |
 | graduation | — | — |
-| pool trades | 1% platform fee | 1% platform fee |
+| pool trades | 0.55% platform fee | 0.55% platform fee |
 
 Both modes now earn on every buy, every sell and every pool trade, so a
 listing that never graduates is no longer a zero-revenue listing. Mode B still

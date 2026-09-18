@@ -94,7 +94,10 @@ describe("Venture bonding-curve launchpad (unit)", function () {
       { founderSupplyBps: 1501, symbol: "X1" },
       { founderSupplyBps: 500, vestingSecs: 89 * DAY, symbol: "X2" },
       { raiseDurationSecs: DAY / 2, symbol: "X3" },
-      { targetRaiseWei: ethers.parseEther("0.5"), symbol: "X4" }, // below p0*C
+      // Below p0*C: the whole curve supply at the start price costs 0.2413 ETH
+      // at the $750 start valuation, so a target under that needs a downward
+      // slope. Tracks START_MCAP_USD_8 — see venture.lock.test.ts.
+      { targetRaiseWei: ethers.parseEther("0.2"), symbol: "X4" },
       { maxBuyWei: TARGET / 500n, symbol: "X5" }, // cap makes raise impossible
       { buyTaxBps: 401, symbol: "X6" }, // over the 4% per-side ceiling
       { sellTaxBps: 500, symbol: "X7" },

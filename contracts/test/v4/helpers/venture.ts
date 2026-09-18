@@ -9,7 +9,7 @@ export const ETH_USD_8 = 1865n * 10n ** 8n;
 export const TARGET = ethers.parseEther("2");
 export const DAY = 86_400;
 
-export async function deployStack() {
+export async function deployStack(minTargetWei: bigint = 1n) {
   const [admin] = await ethers.getSigners();
   const weth = await (await ethers.getContractFactory("WETH9")).deploy();
   await weth.waitForDeployment();
@@ -42,6 +42,7 @@ export async function deployStack() {
     await vestingDeployer.getAddress(),
     await tokenDeployer.getAddress(),
      50, 100,
+    minTargetWei,
   );
   await factory.waitForDeployment();
   expect(await factory.getAddress()).to.equal(predictedFactory);

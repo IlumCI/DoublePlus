@@ -44,14 +44,19 @@ async function main() {
   const [signer] = await ethers.getSigners();
   const admin = process.env.ADMIN ?? signer.address;
   const treasury = process.env.TREASURY ?? admin;
-  const platformFeeBps = Number(process.env.PLATFORM_FEE_BPS ?? 100);
+  const platformFeeBps = Number(process.env.PLATFORM_FEE_BPS ?? 55);
   const refShareBps = Number(process.env.REF_SHARE_BPS ?? 2000);
   // Curve-phase protocol fees. Immutable once deployed, so they are set here.
   const curveBuyFeeBps = Number(process.env.CURVE_BUY_FEE_BPS ?? 50);
   const curveSellFeeBps = Number(process.env.CURVE_SELL_FEE_BPS ?? 100);
+  // Smallest raise the platform will finish. Immutable on the factory, so it
+  // is a deploy-time decision: mainnet ships 0.5 ETH, testnets override it
+  // down so a raise can actually be driven to graduation.
+  const minTargetWei = ethers.parseEther(process.env.MIN_TARGET_ETH ?? "0.5");
   console.log(`network: ${network.name} (${chainId})  deployer: ${signer.address}`);
   console.log(`admin: ${admin}  treasury: ${treasury}  platformFeeBps: ${platformFeeBps}  refShareBps: ${refShareBps}`);
   console.log(`curveBuyFeeBps: ${curveBuyFeeBps}  curveSellFeeBps: ${curveSellFeeBps}`);
+  console.log(`minTargetWei: ${ethers.formatEther(minTargetWei)} ETH`);
 
   // 1) CREATE2 deployer + vesting deployer, then pin the factory address two
   //    creates ahead so the hook (immutable launcher) and the token deployer
@@ -93,7 +98,7 @@ async function main() {
   const factory = await (await ethers.getContractFactory("VentureFactory")).deploy(
     signer.address, admin, infra.poolManager, hookAddr, infra.weth, infra.v3Router,
     await vestingDeployer.getAddress(), await tokenDeployer.getAddress(),
-    curveBuyFeeBps, curveSellFeeBps,
+    curveBuyFeeBps, curveSellFeeBps, minTargetWei,
   );
   await factory.waitForDeployment();
   const factoryAddr = await factory.getAddress();

@@ -16,7 +16,7 @@ export const VENTURE = {
    *  The curve sizes its $3k start FDV from this when live pricing fails. */
   ethUsd8Fallback: BigInt(String(import.meta.env.VITE_ETH_USD_8_FALLBACK ?? "0")),
   /** Protocol fee charged on every trade, mirrors the hook's immutable value. */
-  platformFeeBps: Number(import.meta.env.VITE_PLATFORM_FEE_BPS ?? 100),
+  platformFeeBps: Number(import.meta.env.VITE_PLATFORM_FEE_BPS ?? 55),
   /** Referrer's cut of the protocol fee, mirrors the hook's immutable value. */
   refShareBps: Number(import.meta.env.VITE_REF_SHARE_BPS ?? 2000),
   updates: (import.meta.env.VITE_VENTURE_UPDATES ?? "0x0000000000000000000000000000000000000000") as Address,

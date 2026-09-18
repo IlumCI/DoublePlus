@@ -39,7 +39,7 @@ async function main() {
   await tokenDeployer.waitForDeployment();
   const factory = await (await ethers.getContractFactory("VentureFactory")).deploy(
     admin.address, admin.address, placeholder, await hook.getAddress(), placeholder, placeholder,
-    await vestingDeployer.getAddress(), await tokenDeployer.getAddress(), 50, 100,
+    await vestingDeployer.getAddress(), await tokenDeployer.getAddress(), 50, 100, 1n,
   );
   await factory.waitForDeployment();
   const router = await (await ethers.getContractFactory("VentureRouter")).deploy(
