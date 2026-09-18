@@ -8,7 +8,7 @@ import {
   routerAbi, SOCIAL_FIELDS, toCandles, VENTURE, venturePc, vestingAbi,
   type Fill, type PoolTrade, type Venture as VentureT,
 } from "./client";
-import { marketStats } from "./stats";
+import { marketStats } from "./marketStats";
 import { profileLinks, useDexProfile, type DexProfile } from "../lib/dexscreener";
 import { PriceChart, TradeTape, usePoolTrades } from "./Chart";
 import { refLink, storedRef } from "./referral";
@@ -283,12 +283,20 @@ function TermsPane({ v }: { v: VentureT }) {
     { label: "Pool liquidity", value: 40 - founderSupply },
     { label: "Founder, vesting", value: founderSupply },
   ];
+  // An open curve has no deadline (the factory stores type(uint64).max) and no
+  // founder cut, so both rows are meaningless there — and the deadline one
+  // renders as ~2.1e14 days if computed anyway.
+  const open = v.mode === 1;
   const rows: [string, string][] = [
-    ["Funding target", `${fmtEth(v.targetRaiseWei, 4)} ETH`],
+    [open ? "Graduates at" : "Funding target", `${fmtEth(v.targetRaiseWei, 4)} ETH`],
     // Progress belongs to the ring, and the vesting panel below states the
     // founder stake in full — both were being repeated here.
-    ["Founder cut of raise", `${(v.founderRaiseBps / 100).toFixed(1)}% — at graduation only`],
-    ["Round deadline", `${days} day${days === 1 ? "" : "s"}`],
+    ...(open
+      ? ([] as [string, string][])
+      : ([
+          ["Founder cut of raise", `${(v.founderRaiseBps / 100).toFixed(1)}% — at graduation only`],
+          ["Round deadline", `${days} day${days === 1 ? "" : "s"}`],
+        ] as [string, string][])),
     ["Anti-snipe", "15% premium for 5s, 5% to 15s → into the quote walls"],
   ];
   return (

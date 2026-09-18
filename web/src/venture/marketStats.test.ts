@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { PoolTrade } from "./client";
-import { isProtocolSwap, marketStats } from "./stats";
+import { isProtocolSwap, marketStats } from "./marketStats";
 import { fmtUsdPrice, pickInterval } from "./format";
 
 const NOW = 1_700_000_000;

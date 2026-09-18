@@ -7,6 +7,7 @@ import { BRAND } from "../lib/brand";
 import { env } from "../lib/env";
 import { useWallet } from "../lib/useWallet";
 import { Board } from "./Board";
+import { VENTURE } from "./client";
 import { Desk } from "./Desk";
 import { Docs } from "./Docs";
 import { Flywheel } from "./Flywheel";
@@ -179,7 +180,13 @@ function Footer() {
     <footer className="dp-footer">
       <div className="dp-shell">
         <span>{BRAND.name}{BRAND.tld} — {env.chainName}</span>
-        <span>protocol fee 1% per trade · 20% of it to referrers</span>
+        {/* Read from config, never hardcoded: this line is on every page, so a
+            stale number here is the fee statement most users actually see. It
+            said 1% for the whole period the hook charged 0.55%. */}
+        <span>
+          protocol fee {(VENTURE.platformFeeBps / 100).toFixed(2)}% per trade
+          {" · "}{VENTURE.refShareBps / 100}% of it to referrers
+        </span>
         {env.explorerUrl && <a href={env.explorerUrl} target="_blank" rel="noreferrer">explorer ↗</a>}
         <Link to="/docs" viewTransition>docs</Link>
         <Link to="/legal" viewTransition>terms</Link>

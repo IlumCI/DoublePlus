@@ -1,7 +1,7 @@
 import { createPublicClient, fallback, http, parseAbiItem, type Address, type PublicClient } from "viem";
 
 import { chain, env } from "../lib/env";
-import { isProtocolSwap } from "./stats";
+import { isProtocolSwap } from "./marketStats";
 
 /** VentureFactory deployment. Defaults target the Robinhood Chain testnet
  *  (46630) deployment; every address is overridable via env so the same build

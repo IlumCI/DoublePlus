@@ -103,8 +103,11 @@ export function LaunchVenture() {
     e.preventDefault();
     if (!isConnected) return connectFirst();
     if (!wc || !me) return;
-    if (parsedTarget === 0n) return pushToast({ kind: "error", title: "Set a funding target" });
-    if (minTargetEth > 0 && Number(target) < minTargetEth * 0.999) {
+    // Both target checks are Guaranteed-only. An open curve has no target of
+    // its own — the factory substitutes graduationRaiseWei and ignores the one
+    // sent — so demanding a figure here blocks a launch over an unused field.
+    if (!open && parsedTarget === 0n) return pushToast({ kind: "error", title: "Set a funding target" });
+    if (!open && minTargetEth > 0 && Number(target) < minTargetEth * 0.999) {
       return pushToast({ kind: "error", title: `Target too low`, body: curveFloorEth > MIN_TARGET_ETH
           ? `Minimum is ~${minTargetEth.toFixed(4)} ETH (the curve's $${START_FDV_USD} starting valuation).`
           : `Minimum is ${MIN_TARGET_ETH} ETH.` });
@@ -410,10 +413,15 @@ export function LaunchVenture() {
                 </p>
               )}
 
+              {/* Hidden on an open curve. `required` must track that: a required
+                  control inside a display:none wrapper blocks native form submit
+                  while being unfocusable, so the browser cannot report which
+                  field is at fault and the button just does nothing. */}
               <div style={{ display: open ? "none" : "grid", gridTemplateColumns: "1fr 1fr", gap: "0 22px" }}>
                 <div className="dp-field"><label htmlFor="v-target">How much do you want to raise?</label>
                   <input id="v-target" inputMode="decimal" value={target}
-                    onChange={(e) => setTarget(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="5.0" required />
+                    onChange={(e) => setTarget(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="5.0"
+                    required={!open} />
                   <span className="dp-hint">
                     In ETH{targetUsd > 0 ? ` — about ${fmtUsdV(targetUsd)} today` : ""}.
                     {minTargetEth > 0 ? ` Minimum ${minTargetEth.toFixed(4)} ETH.` : ""}
