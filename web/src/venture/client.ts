@@ -2,6 +2,7 @@ import { createPublicClient, fallback, http, parseAbiItem, type Address, type Pu
 
 import { chain, env } from "../lib/env";
 import { isProtocolSwap } from "./marketStats";
+import type { RaiseMode } from "./raiseMode";
 
 /** VentureFactory deployment. Defaults target the Robinhood Chain testnet
  *  (46630) deployment; every address is overridable via env so the same build
@@ -270,9 +271,12 @@ export interface Venture {
   phase: Phase;
 }
 
-export type RaiseMode = 0 | 1;
-export const GUARANTEED: RaiseMode = 0;
-export const OPEN: RaiseMode = 1;
+// Defined in raiseMode.ts, which is the one place that decides what differs
+// between the modes. Re-exported here so `import { GUARANTEED } from
+// "./client"` keeps working, but there is only one declaration.
+export { GUARANTEED, OPEN, type RaiseMode } from "./raiseMode";
+// Curve arithmetic lives in curve.ts so it can be tested without a chain.
+export { curveCostWei, quoteTokens, quoteSellWei, entryFeeWei, quoteBuy, capState, feePct, taxPct } from "./curve";
 
 function phaseOf(v: { finalized: boolean; aborted: boolean; deadline: number; raisedWei: bigint; targetRaiseWei: bigint; remainingWhole: bigint }): Phase {
   if (v.finalized) return "graduated";
@@ -398,50 +402,14 @@ export async function loadFills(token: Address): Promise<Fill[]> {
 
 /** Client-side mirror of the on-chain integral pricing, for instant quotes
  *  between polls. cost(q) = q*p0 + k*(2Sq + q^2)/2e18, all in whole tokens. */
-export function quoteTokens(v: Venture, valueWei: bigint): bigint {
-  const k = v.slopeQ;
-  if (valueWei <= 0n) return 0n;
-  if (k === 0n) return v.basePriceWei > 0n ? valueWei / v.basePriceWei : 0n;
-  const b = 10n ** 18n * v.basePriceWei + k * v.soldWhole;
-  const disc = b * b + 2n * k * 10n ** 18n * valueWei;
-  const q = (sqrtBig(disc) - b) / k;
-  return q > v.remainingWhole ? v.remainingWhole : q;
-}
 
 /** Mirror of VentureFactory.curveCost: the exact integral, so the sell quote
  *  the panel shows is the one the contract computes. */
-export function curveCostWei(v: Venture, qWhole: bigint, fromSoldWhole: bigint): bigint {
-  if (qWhole <= 0n) return 0n;
-  return qWhole * v.basePriceWei
-    + (v.slopeQ * (2n * fromSoldWhole * qWhole + qWhole * qWhole)) / (2n * 10n ** 18n);
-}
 
 /** What selling `qWhole` back to the curve pays, net of the protocol fee.
  *  Guaranteed mode caps the gross at the seller's pro-rata cost basis — that
  *  cap is what keeps the refund pot solvent, so the quote must respect it. */
-export function quoteSellWei(
-  v: Venture,
-  qWhole: bigint,
-  ownedWei: bigint,
-  basisWei: bigint,
-  sellFeeBps: number,
-): { gross: bigint; fee: bigint; out: bigint; capped: boolean } {
-  if (qWhole <= 0n || ownedWei === 0n) return { gross: 0n, fee: 0n, out: 0n, capped: false };
-  const q = qWhole > v.soldWhole ? v.soldWhole : qWhole;
-  const raw = curveCostWei(v, q, v.soldWhole - q);
-  const basis = (basisWei * (q * 10n ** 18n)) / ownedWei;
-  const capped = v.mode === GUARANTEED && raw > basis;
-  const gross = capped ? basis : raw;
-  const fee = (gross * BigInt(sellFeeBps)) / 10_000n;
-  return { gross, fee, out: gross - fee, capped };
-}
 
-function sqrtBig(n: bigint): bigint {
-  if (n < 2n) return n;
-  let x = n, y = (x + 1n) / 2n;
-  while (y < x) { x = y; y = (x + n / x) / 2n; }
-  return x;
-}
 
 // ---------------------------------------------------------------------------
 // Post-graduation market data, straight from the pool's V4 swap log.

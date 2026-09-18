@@ -10,6 +10,7 @@ import {
 } from "./client";
 import { marketStats } from "./marketStats";
 import { termSheetRows, type RaiseMode } from "./raiseMode";
+import { capState, feePct, quoteBuy, taxPct } from "./curve";
 import { profileLinks, useDexProfile, type DexProfile } from "../lib/dexscreener";
 import { PriceChart, TradeTape, usePoolTrades } from "./Chart";
 import { refLink, storedRef } from "./referral";
@@ -378,7 +379,7 @@ function ContractCard({ v }: { v: VentureT }) {
     ["raise type", v.mode === 1 ? "open curve" : "all-or-nothing"],
     ["fee policy", `${(v.policy.buyTaxBps / 100).toFixed(2)}% buy · ${(v.policy.sellTaxBps / 100).toFixed(2)}% sell`],
     ["fee split", `${v.policy.devBps / 100} / ${v.policy.dividendBps / 100} / ${v.policy.liquidityBps / 100} / ${v.policy.mmBps / 100}`],
-    ["protocol fee", `${(VENTURE.platformFeeBps / 100).toFixed(2)}%`],
+    ["protocol fee", `${feePct(VENTURE.platformFeeBps)}%`],
     ...(v.mode === 1 ? [] : ([["per-wallet cap", `${fmtEth(v.maxBuyWei, 3)} ETH`]] as [string, React.ReactNode][])),
     ["founder stake", vested ? "vested from graduation" : "none"],
     ...(v.phase === "graduated"
@@ -519,12 +520,11 @@ function RaisePanel({ v }: { v: VentureT }) {
 
   const parsed = useMemo(() => { try { return amt ? parseEther(amt) : 0n; } catch { return 0n; } }, [amt]);
   // The entry fee comes off before the curve is quoted, so the tokens you get
-  // are priced on what actually reaches the curve.
-  const entryFee = (parsed * BigInt(fees.buyBps)) / 10_000n;
-  const tokensOut = quoteTokens(v, parsed - entryFee);
+  // are priced on what actually reaches the curve. Both derivations live in
+  // curve.ts, where they are tested against the contract's own arithmetic.
+  const { fee: entryFee, tokensOut } = quoteBuy(v, parsed, fees.buyBps);
   const funded = pct(v.raisedWei, v.targetRaiseWei);
-  const capLeft = v.maxBuyWei > spent ? v.maxBuyWei - spent : 0n;
-  const overCap = v.maxBuyWei > 0n && parsed > capLeft;
+  const { capLeft, overCap } = capState(v.maxBuyWei, spent, parsed);
   const shortOnEth = eth.data !== undefined && parsed > eth.data.value;
   const ethUsdInPanel = useEthUsd();
 
@@ -610,7 +610,7 @@ function RaisePanel({ v }: { v: VentureT }) {
             </button>
             <div className="dp-tb-slip">
               <span>balance <b style={{ color: "var(--dim)" }}>{eth.data ? fmtEth(eth.data.value, 4) : "—"} ETH</b></span>
-              <span>entry fee {(fees.buyBps / 100).toFixed(2)}%{entryFee > 0n ? ` · ${fmtEth(entryFee, 5)} ETH` : ""}</span>
+              <span>entry fee {feePct(fees.buyBps)}%{entryFee > 0n ? ` · ${fmtEth(entryFee, 5)} ETH` : ""}</span>
             </div>
           </>
         ) : (
@@ -635,7 +635,7 @@ function RaisePanel({ v }: { v: VentureT }) {
             </button>
             <div className="dp-tb-slip">
               <span>your curve position <b style={{ color: "var(--dim)" }}>{fmtTok(bought)}</b></span>
-              <span>exit fee {(fees.sellBps / 100).toFixed(2)}%</span>
+              <span>exit fee {feePct(fees.sellBps)}%</span>
             </div>
           </>
         )}
@@ -899,7 +899,7 @@ function TradePanel({ v }: { v: VentureT }) {
               {side === "buy" ? `${eth.data ? fmtEth(eth.data.value, 4) : "—"} ETH` : `${fmtTok(bal)} $${v.symbol}`}
             </b>
           </span>
-          <span>fee {(tax / 100).toFixed(1)}% + {(VENTURE.platformFeeBps / 100).toFixed(2)}%</span>
+          <span>fee {taxPct(tax)}% + {feePct(VENTURE.platformFeeBps)}%</span>
         </div>
         <div className="dp-tb-slip">
           <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
