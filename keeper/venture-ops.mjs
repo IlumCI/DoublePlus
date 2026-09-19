@@ -14,7 +14,10 @@
 // Env:
 //   KEEPER_PRIVATE_KEY  (required) pays gas
 //   RPC_URL             (default https://rpc.testnet.chain.robinhood.com)
-//   DEPLOYMENT_FILE     (default ../contracts/deployments/venture-testnet.json)
+//   CHAIN_ID            (default 46630) picks the deployment file: 4663 ->
+//                       venture-robinhood.json, 46630 -> venture-testnet.json.
+//                       Must agree with RPC_URL or the run aborts.
+//   DEPLOYMENT_FILE     explicit override for the above
 //   MIN_DELIVER         (default 1e12 wei of the reward token)
 //   RECENTER_SPACINGS   (default 10) recenter walls whose near edge drifted
 //                       more than this many tick-spacings from the price
@@ -27,7 +30,16 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const depPath = process.env.DEPLOYMENT_FILE ?? join(here, "../contracts/deployments/venture-testnet.json");
+// Pick the deployment by chain rather than defaulting to testnet. The old
+// default meant pointing RPC_URL at mainnet silently kept the testnet
+// addresses, so every call went to a contract that does not exist there.
+const DEPLOYMENTS = {
+  4663: "venture-robinhood.json",
+  46630: "venture-testnet.json",
+};
+const CHAIN_ID = Number(process.env.CHAIN_ID ?? 46630);
+const depPath = process.env.DEPLOYMENT_FILE
+  ?? join(here, "../contracts/deployments", DEPLOYMENTS[CHAIN_ID] ?? "venture-testnet.json");
 const dep = JSON.parse(readFileSync(depPath, "utf8"));
 
 const RPC = process.env.RPC_URL ?? "https://rpc.testnet.chain.robinhood.com";
@@ -157,6 +169,19 @@ async function holdersOf(coin, toBlock) {
 }
 
 async function main() {
+  // The deployment file and the RPC must describe the same chain. Without this
+  // a mainnet RPC with testnet addresses reads zeroes from contracts that do
+  // not exist there, and the keeper reports "0 ventures" and exits clean —
+  // looking healthy while doing nothing.
+  const net = await provider.getNetwork();
+  if (Number(net.chainId) !== Number(dep.chainId)) {
+    console.error(
+      `chain mismatch: RPC is ${net.chainId}, ${depPath} is for ${dep.chainId}.
+` +
+      `Set CHAIN_ID=${net.chainId} (or DEPLOYMENT_FILE) to match RPC_URL.`,
+    );
+    process.exit(1);
+  }
   const head = (await provider.getBlockNumber()) - CONFIRMATIONS;
   const now = Math.floor(Date.now() / 1000);
   const total = Number(await factory.totalTokens());

@@ -15,7 +15,16 @@ import { env } from "../lib/env";
 
 // Stock-paired ventures need the self-deployed V3 stack, which exists on
 // mainnet (4663) only; the testnet build keeps every pool ETH-quoted.
-const STOCK_PAIRS_ENABLED = env.chainId === 4663;
+//
+// Opt-in rather than implied by the chain. finalize() routes a completed
+// raise's ETH through the V3 router to buy the pair asset before seeding the
+// pool, and that hop only runs when pair != WETH — so on testnet, where
+// v3Router is address(0), it cannot run at all. Tying the toggle to the chain
+// id meant mainnet day one was the first time that path had ever executed,
+// with real money, on the highest-value launch type offered. Turn this on
+// deliberately, after the fork suite has exercised it.
+const STOCK_PAIRS_ENABLED =
+  env.chainId === 4663 && String(import.meta.env.VITE_VENTURE_STOCK_PAIRS ?? "") === "true";
 import { errorText, useWallet } from "../lib/useWallet";
 import { useUi } from "../store";
 

@@ -43,6 +43,11 @@ jobs:
         env:
           KEEPER_PRIVATE_KEY: ${{ secrets.VENTURE_KEEPER_PK }}
           RPC_URL: ${{ secrets.VENTURE_RPC_URL || 'https://rpc.testnet.chain.robinhood.com' }}
+          # Picks the deployment file. Must match the chain RPC_URL points at —
+          # the keeper aborts on a mismatch rather than reading zeroes from
+          # addresses that do not exist on that chain. Set the VENTURE_CHAIN_ID
+          # variable to 4663 when moving to mainnet, alongside VENTURE_RPC_URL.
+          CHAIN_ID: ${{ vars.VENTURE_CHAIN_ID || '46630' }}
         run: |
           if [ -z "$KEEPER_PRIVATE_KEY" ]; then echo "VENTURE_KEEPER_PK not set; skipping"; exit 0; fi
           node venture-ops.mjs
