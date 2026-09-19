@@ -103,10 +103,11 @@ describe("Venture bonding-curve launchpad (unit)", function () {
       { sellTaxBps: 500, symbol: "X7" },
       { devBps: 3000, symbol: "X8" }, // buckets no longer sum to 100%
     ]) {
-      await expect(launch(factory, tokenDeployer, creator, wethAddr, bad)).to.be.revertedWithCustomError(
-        factory,
-        "InvalidParams",
-      );
+      // expectRevert: these never reach the vanity check, so skip mining a
+      // salt for each one. Cuts this test from ~5 minutes to well under one.
+      await expect(
+        launch(factory, tokenDeployer, creator, wethAddr, bad, 0n, true),
+      ).to.be.revertedWithCustomError(factory, "InvalidParams");
     }
   });
 

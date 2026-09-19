@@ -71,6 +71,7 @@ export async function launch(
   weth: string,
   overrides: Partial<Record<string, any>> = {},
   value: bigint = 0n,
+  expectRevert = false,
 ) {
   const params = {
     name: "Venture",
@@ -97,6 +98,13 @@ export async function launch(
     v3Path: "0x",
     ...overrides,
   };
+  // Every InvalidParams guard in launch() runs before deployToken(), so a call
+  // expected to revert on its terms never reaches the vanity check and does not
+  // need a mined salt. Mining one costs ~65k keccaks in JS, which is most of the
+  // runtime of any test that asserts a batch of rejections.
+  if (expectRevert) {
+    return factory.connect(creator).launch(params, ethers.ZeroHash, { value });
+  }
   const salt = await mineSalt(tokenDeployer, [
     params.name,
     params.symbol,
