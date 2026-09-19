@@ -53,10 +53,13 @@ async function main() {
   // is a deploy-time decision: mainnet ships 0.5 ETH, testnets override it
   // down so a raise can actually be driven to graduation.
   const minTargetWei = ethers.parseEther(process.env.MIN_TARGET_ETH ?? "0.5");
+  // The address mark, matched at either end: 0x2add… or 0x…2add. Immutable, so
+  // it is a deploy-time decision; 0 would disable it and is for tests only.
+  const VANITY = 0x2add;
   console.log(`network: ${network.name} (${chainId})  deployer: ${signer.address}`);
   console.log(`admin: ${admin}  treasury: ${treasury}  platformFeeBps: ${platformFeeBps}  refShareBps: ${refShareBps}`);
   console.log(`curveBuyFeeBps: ${curveBuyFeeBps}  curveSellFeeBps: ${curveSellFeeBps}`);
-  console.log(`minTargetWei: ${ethers.formatEther(minTargetWei)} ETH`);
+  console.log(`minTargetWei: ${ethers.formatEther(minTargetWei)} ETH  vanity: 0x${VANITY.toString(16)}`);
 
   // 1) CREATE2 deployer + vesting deployer, then pin the factory address two
   //    creates ahead so the hook (immutable launcher) and the token deployer
@@ -98,7 +101,7 @@ async function main() {
   const factory = await (await ethers.getContractFactory("VentureFactory")).deploy(
     signer.address, admin, infra.poolManager, hookAddr, infra.weth, infra.v3Router,
     await vestingDeployer.getAddress(), await tokenDeployer.getAddress(),
-    curveBuyFeeBps, curveSellFeeBps, minTargetWei,
+    curveBuyFeeBps, curveSellFeeBps, minTargetWei, VANITY,
   );
   await factory.waitForDeployment();
   const factoryAddr = await factory.getAddress();
@@ -129,6 +132,7 @@ async function main() {
     curveBuyFeeBps,
     curveSellFeeBps,
     minTargetWei: minTargetWei.toString(),
+    vanity: `0x${VANITY.toString(16)}`,
     startBlock,
     contracts: {
       hookDeployer: c2Addr,

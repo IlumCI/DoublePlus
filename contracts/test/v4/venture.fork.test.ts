@@ -1,5 +1,6 @@
 import { expect } from "chai";
 import { ethers, network } from "hardhat";
+import { isVanity, TEST_VANITY } from "./helpers/venture";
 
 // Defaults are Robinhood mainnet (4663). For a testnet-fork run (46630) the
 // PoolManager address is identical; override WETH with the testnet's canonical
@@ -51,7 +52,7 @@ async function deployAll(admin: any, treasury: any) {
   const factory = await (await ethers.getContractFactory("VentureFactory")).deploy(
     admin.address, admin.address, POOL_MANAGER, hookAddr, WETH, V3_ROUTER,
     await vestingDeployer.getAddress(), await tokenDeployer.getAddress(),
-     50, 100, 1n,
+     50, 100, 1n, TEST_VANITY, // mark off: no salt grind against a forked chain
   );
   await factory.waitForDeployment();
   expect(await factory.getAddress()).to.equal(predictedFactory);
@@ -84,7 +85,7 @@ async function launch(factory: any, tokenDeployer: any, signer: any, pair: strin
   let salt = "";
   for (let i = 0n; i < 6_000_000n; i++) {
     const s = ethers.zeroPadValue(ethers.toBeHex(i), 32);
-    if ((BigInt(ethers.getCreate2Address(depAddr, s, hash)) & 0xffffn) === 0x4663n) { salt = s; break; }
+    if (isVanity(ethers.getCreate2Address(depAddr, s, hash), TEST_VANITY)) { salt = s; break; }
   }
   if (!salt) throw new Error("no vanity");
   await (await factory.connect(signer).launch(params, salt)).wait();
@@ -233,7 +234,7 @@ describe("Venture bonding-curve launchpad (fork)", function () {
     let salt = "";
     for (let i = 0n; i < 6_000_000n; i++) {
       const s = ethers.zeroPadValue(ethers.toBeHex(i), 32);
-      if ((BigInt(ethers.getCreate2Address(depAddr, s, hash)) & 0xffffn) === 0x4663n) { salt = s; break; }
+      if (isVanity(ethers.getCreate2Address(depAddr, s, hash), TEST_VANITY)) { salt = s; break; }
     }
     await (await factory.connect(founder).launch(params, salt)).wait();
     const coin = await factory.allTokens((await factory.totalTokens()) - 1n);

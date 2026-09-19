@@ -123,6 +123,21 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
     /// @notice Protocol fee on curve sells, taken out of the proceeds.
     uint16 public immutable curveSellFeeBps;
 
+    /// @notice The four-hex mark every launched token carries, matched at
+    ///         EITHER end of the address: `0x2add…` or `0x…2add` — "2-add",
+    ///         double plus. Both ends are accepted because it halves the
+    ///         client's search (two targets, same odds each) and truncated
+    ///         displays show both ends anyway, so the mark stays visible
+    ///         whichever way it lands.
+    ///
+    ///         Immutable rather than a compile-time constant so tests can
+    ///         deploy a cheap mark and skip the CREATE2 grind entirely; every
+    ///         real deployment passes 0x2add. The checksum case (2add vs 2ADD)
+    ///         is a display convention derived off-chain from the address hash
+    ///         and cannot be enforced here — miners additionally require the
+    ///         tail to be all-lower or all-upper so no token reads 0x…2AdD.
+    uint16 public immutable vanity;
+
     bool public launchesPaused;
 
     /// @notice Flat fee to open a listing. Prices out spam as much as it earns.
@@ -276,7 +291,8 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         VentureTokenDeployer tokenDeployer_,
         uint16 curveBuyFeeBps_,
         uint16 curveSellFeeBps_,
-        uint256 minTargetWei_
+        uint256 minTargetWei_,
+        uint16 vanity_
     ) Ownable(owner_) {
         require(protocolAdmin_ != address(0), "admin=0");
         if (minTargetWei_ == 0 || minTargetWei_ > MAX_TARGET_WEI) revert InvalidParams();
@@ -284,6 +300,7 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         if (curveBuyFeeBps_ > MAX_CURVE_FEE_BPS || curveSellFeeBps_ > MAX_CURVE_FEE_BPS) revert FeeTooHigh();
         curveBuyFeeBps = curveBuyFeeBps_;
         curveSellFeeBps = curveSellFeeBps_;
+        vanity = vanity_;
         protocolAdmin = protocolAdmin_;
         poolManager = poolManager_;
         hook = hook_;
@@ -430,7 +447,18 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
             salt, p.name, p.symbol, p.metadataURI, TOTAL_SUPPLY, msg.sender, p.buyTaxBps, p.pair,
             p.minHoldForDividends, p.dividendMode, p.dividendBps
         );
-        if (uint160(token) & 0xffff != 0x4663) revert BadVanity();
+        // doubleplus tokens end 0x…2add — "2-add", double plus. The checksum
+        // case (2add vs 2ADD) is a display convention computed off-chain from
+        // the address hash, so it cannot be enforced here; the miners additionally
+        // require the tail to be all-lower or all-upper, never mixed. A salt
+        // mined without that extra constraint still passes this check, which is
+        // fine: the casing is branding, not a security property.
+        uint160 a = uint160(token);
+        // vanity == 0 disables the mark entirely, which is how the test suite
+        // skips the CREATE2 grind. A smaller mark would not help: any non-zero
+        // value is still a 16-bit compare, so 0x000f costs exactly what 0x2add
+        // does. Every real deployment passes 0x2add; the value is public.
+        if (vanity != 0 && a & 0xffff != vanity && a >> 144 != vanity) revert BadVanity();
         if (token == p.pair) revert InvalidParams();
 
         // Vesting escrow first, so it can go on the dividend exclusion list.

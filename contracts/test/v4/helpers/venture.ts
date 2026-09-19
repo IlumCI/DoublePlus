@@ -1,6 +1,34 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
 
+/** The mark every real deployment ships: "2-add", double plus. */
+export const VANITY = 0x2add;
+
+/** Tests deploy with the mark disabled, so no salt has to be mined at all.
+ *  A "cheaper" mark would not work: any non-zero value is still a 16-bit
+ *  compare, so 0x000f costs exactly what 0x2add does. The factory takes the
+ *  mark as a constructor immutable precisely so the suite can switch it off. */
+export const TEST_VANITY = 0;
+
+/** Does this address carry `mark` at either end?
+ *
+ *  Both ends count: two targets at the same odds halves the client's search,
+ *  and truncated displays (0x2add…9C6f / 0xcD04…2add) show both ends anyway.
+ *
+ *  Case: EIP-55 casing is derived off-chain from the address hash, so the
+ *  contract cannot enforce it. Require all-lower or all-upper here so no token
+ *  ever reads 0x…2AdD. Compared as strings — a slice beats parsing 40 hex
+ *  characters into a BigInt, and it carries the checksum case for free. */
+export function isVanity(addr: string, mark: number = VANITY): boolean {
+  if (mark === 0) return true; // mark disabled (tests)
+  const lo = mark.toString(16).padStart(4, "0");
+  const hi = lo.toUpperCase();
+  const head = addr.slice(2, 6);
+  if (head === lo || head === hi) return true;
+  const tail = addr.slice(-4);
+  return tail === lo || tail === hi;
+}
+
 // Shared fixtures for the venture suites. Kept in one place so the stress
 // runs exercise exactly the stack the unit tests do — a second, drifting copy
 // of deployStack would quietly test a different contract.
@@ -43,6 +71,7 @@ export async function deployStack(minTargetWei: bigint = 1n) {
     await tokenDeployer.getAddress(),
      50, 100,
     minTargetWei,
+    TEST_VANITY, // mark off: the suite mines no salts
   );
   await factory.waitForDeployment();
   expect(await factory.getAddress()).to.equal(predictedFactory);
@@ -55,11 +84,13 @@ export async function mineSalt(tokenDeployer: any, args: any[]) {
     ["string", "string", "string", "uint256", "address", "address", "uint16", "address", "uint256", "uint8"],
     args,
   );
+  // With the mark disabled any salt is valid, so skip the grind entirely.
+  if (TEST_VANITY === 0) return ethers.ZeroHash;
   const hash = ethers.keccak256(ethers.concat([Token.bytecode, encoded]));
   const depAddr = await tokenDeployer.getAddress();
   for (let i = 0n; i < 6_000_000n; i++) {
     const s = ethers.zeroPadValue(ethers.toBeHex(i), 32);
-    if ((BigInt(ethers.getCreate2Address(depAddr, s, hash)) & 0xffffn) === 0x4663n) return s;
+    if (isVanity(ethers.getCreate2Address(depAddr, s, hash), TEST_VANITY)) return s;
   }
   throw new Error("no vanity salt");
 }

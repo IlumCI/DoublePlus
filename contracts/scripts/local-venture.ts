@@ -3,6 +3,7 @@
 // driven for real. Pool seeding is never reached, so the placeholder
 // poolManager/v3Router are fine — same arrangement the unit tests use.
 import { ethers } from "hardhat";
+import { isVanity, VANITY } from "../test/v4/helpers/venture";
 
 const ETH_USD_8 = 1865n * 10n ** 8n;
 const DAY = 86_400;
@@ -16,7 +17,7 @@ async function mineSalt(tokenDeployer: any, args: any[]) {
   const depAddr = await tokenDeployer.getAddress();
   for (let i = 0n; i < 6_000_000n; i++) {
     const s = ethers.zeroPadValue(ethers.toBeHex(i), 32);
-    if ((BigInt(ethers.getCreate2Address(depAddr, s, hash)) & 0xffffn) === 0x4663n) return s;
+    if (isVanity(ethers.getCreate2Address(depAddr, s, hash))) return s;
   }
   throw new Error("no vanity salt");
 }
@@ -39,7 +40,7 @@ async function main() {
   await tokenDeployer.waitForDeployment();
   const factory = await (await ethers.getContractFactory("VentureFactory")).deploy(
     admin.address, admin.address, placeholder, await hook.getAddress(), placeholder, placeholder,
-    await vestingDeployer.getAddress(), await tokenDeployer.getAddress(), 50, 100, 1n,
+    await vestingDeployer.getAddress(), await tokenDeployer.getAddress(), 50, 100, 1n, VANITY,
   );
   await factory.waitForDeployment();
   const router = await (await ethers.getContractFactory("VentureRouter")).deploy(

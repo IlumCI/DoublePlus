@@ -186,7 +186,15 @@ export function LaunchVenture() {
       for (let i = 0n; i < 3_000_000n; i++) {
         const s = `0x${i.toString(16).padStart(64, "0")}` as `0x${string}`;
         const addr = getContractAddress({ opcode: "CREATE2", from: VENTURE.tokenDeployer, salt: s, bytecodeHash: initCodeHash });
-        if ((BigInt(addr) & 0xffffn) === 0x4663n) { salt = s; break; }
+        // The mark counts at EITHER end — 0x2add… or 0x…2add — which halves
+        // the search (two targets, same odds each) and keeps it inside the
+        // visible half of a truncated address whichever way it lands.
+        // viem returns a checksummed address, so these slices carry EIP-55
+        // casing: require all-lower or all-upper so nothing reads 0x…2AdD.
+        const head = addr.slice(2, 6);
+        if (head === "2add" || head === "2ADD") { salt = s; break; }
+        const tail = addr.slice(-4);
+        if (tail === "2add" || tail === "2ADD") { salt = s; break; }
       }
       setMining(false);
       if (!salt) throw new Error("Could not mine a launch address. Try again.");

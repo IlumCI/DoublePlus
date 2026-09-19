@@ -1,6 +1,7 @@
 import { ethers } from "hardhat";
 import { readFileSync } from "fs";
 import { join } from "path";
+import { isVanity } from "../test/v4/helpers/venture";
 
 // End-to-end smoke of a deployed venture stack, single funded key:
 // launch -> curve buy -> (small target) graduate -> router round-trip ->
@@ -69,7 +70,7 @@ async function main() {
   let salt = "";
   for (let i = 0n; i < 8_000_000n; i++) {
     const s = ethers.zeroPadValue(ethers.toBeHex(i), 32);
-    if ((BigInt(ethers.getCreate2Address(dep.contracts.tokenDeployer, s, hash)) & 0xffffn) === 0x4663n) { salt = s; break; }
+    if (isVanity(ethers.getCreate2Address(dep.contracts.tokenDeployer, s, hash))) { salt = s; break; }
   }
   if (!salt) throw new Error("no vanity salt");
   const creationFee = await factory.creationFeeWei();

@@ -1,6 +1,7 @@
 import { ethers } from "hardhat";
 import { readFileSync } from "fs";
 import { join } from "path";
+import { isVanity } from "../test/v4/helpers/venture";
 
 // Drives one raise all the way to a graduated Uniswap V4 pool against a live
 // deployment, then trades in that pool so the token page has a real chart,
@@ -23,7 +24,7 @@ async function mineSalt(tokenDeployer: any, args: any[]) {
   const depAddr = await tokenDeployer.getAddress();
   for (let i = 0n; i < 6_000_000n; i++) {
     const s = ethers.zeroPadValue(ethers.toBeHex(i), 32);
-    if ((BigInt(ethers.getCreate2Address(depAddr, s, hash)) & 0xffffn) === 0x4663n) return s;
+    if (isVanity(ethers.getCreate2Address(depAddr, s, hash))) return s;
   }
   throw new Error("no vanity salt");
 }
