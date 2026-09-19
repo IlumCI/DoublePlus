@@ -100,6 +100,7 @@ export const factoryAbi = [
   { type: "function", name: "curveSellFeeBps", stateMutability: "view", inputs: [], outputs: [{ type: "uint16" }] },
   { type: "function", name: "creationFeeWei", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
   { type: "function", name: "graduationRaiseWei", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "minTargetWei", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
   { type: "function", name: "feesAccrued", stateMutability: "view", inputs: [{ type: "address" }], outputs: [{ type: "uint256" }] },
   { type: "function", name: "withdrawFees", stateMutability: "nonpayable", inputs: [], outputs: [{ type: "uint256" }] },
   { type: "function", name: "finalize", stateMutability: "nonpayable", inputs: [{ type: "address" }], outputs: [{ type: "bytes32" }] },

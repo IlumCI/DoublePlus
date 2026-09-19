@@ -6,6 +6,7 @@ import {
   hasDeadline,
   hasWalletCap,
   isOpen,
+  minGrossTargetEth,
   raiseFields,
   requiresTarget,
   takesFounderCut,
@@ -61,6 +62,45 @@ describe("targetIssue", () => {
   it("accepts any positive target when there is no floor", () => {
     expect(targetIssue(GUARANTEED, 0.000001, 0)).toBeNull();
     expect(targetIssue(GUARANTEED, 0, 0)).toBe("missing");
+  });
+});
+
+describe("minGrossTargetEth", () => {
+  const CURVE = 0.2413; // whole curve supply at the $750 start valuation
+  const FLOOR = 0.5; // the platform's pool floor
+
+  it("grosses the platform floor up by the founder's cut", () => {
+    // The bug this encodes: a 0.5 ETH raise with the maximum 30% cut graduates
+    // into 0.35 ETH. To put 0.5 ETH in the pool the founder must ask for more.
+    expect(minGrossTargetEth(GUARANTEED, CURVE, FLOOR, 0)).toBeCloseTo(0.5, 10);
+    expect(minGrossTargetEth(GUARANTEED, CURVE, FLOOR, 20)).toBeCloseTo(0.625, 10);
+    expect(minGrossTargetEth(GUARANTEED, CURVE, FLOOR, 30)).toBeCloseTo(0.714285714, 8);
+  });
+
+  it("leaves the pool at or above the floor at every cut the factory allows", () => {
+    for (let cut = 0; cut <= 30; cut++) {
+      const gross = minGrossTargetEth(GUARANTEED, CURVE, FLOOR, cut);
+      const pool = gross * (1 - cut / 100);
+      expect(pool, `cut ${cut}%`).toBeGreaterThanOrEqual(FLOOR - 1e-9);
+    }
+  });
+
+  it("uses the curve's own base cost when that is the binding floor", () => {
+    // A low platform floor does not license a raise the curve cannot price:
+    // below baseCost the slope would go negative and launch() reverts.
+    expect(minGrossTargetEth(GUARANTEED, CURVE, 0.01, 0)).toBeCloseTo(CURVE, 10);
+    // …and the higher of the two always wins.
+    expect(minGrossTargetEth(GUARANTEED, 2, FLOOR, 30)).toBe(2);
+  });
+
+  it("does not apply to an open curve, which has no founder-set target", () => {
+    expect(minGrossTargetEth(OPEN, CURVE, FLOOR, 0)).toBe(0);
+    expect(minGrossTargetEth(OPEN, CURVE, FLOOR, 30)).toBe(0);
+  });
+
+  it("clamps a nonsense cut rather than dividing by zero", () => {
+    expect(Number.isFinite(minGrossTargetEth(GUARANTEED, CURVE, FLOOR, 100))).toBe(true);
+    expect(minGrossTargetEth(GUARANTEED, CURVE, FLOOR, -5)).toBeCloseTo(0.5, 10);
   });
 });
 

@@ -70,14 +70,53 @@ describe("VentureFactory: locked liquidity and the raise floor", function () {
       const w = await weth.getAddress();
 
       await expect(
-        launch(factory, tokenDeployer, creator, w, { targetRaiseWei: FLOOR - 1n, maxBuyWei: FLOOR }),
+        launch(factory, tokenDeployer, creator, w, {
+          targetRaiseWei: FLOOR - 1n, maxBuyWei: FLOOR, founderRaiseBps: 0,
+        }),
       ).to.be.revertedWithCustomError(factory, "InvalidParams");
 
       // Exactly at the floor is allowed: the floor is a minimum, not a gap.
       const coin = await launch(factory, tokenDeployer, creator, w, {
-        targetRaiseWei: FLOOR, maxBuyWei: FLOOR, name: "AtFloor", symbol: "ATF",
+        targetRaiseWei: FLOOR, maxBuyWei: FLOOR, founderRaiseBps: 0,
+        name: "AtFloor", symbol: "ATF",
       });
       expect((await factory.curveState(coin)).targetRaiseWei).to.equal(FLOOR);
+    });
+
+    it("binds the floor to pool depth, not the headline raise", async () => {
+      // The floor exists to guarantee a tradeable pool. finalize() pays the
+      // founder's cut first and seeds the pool with what is left, so a floor
+      // checked against the gross let a floor-sized raise with the maximum 30%
+      // cut graduate into 0.35 ETH — against an interface offering a 1 ETH
+      // quick-buy. The floor now binds the remainder.
+      const [, creator] = await ethers.getSigners();
+      const { factory, tokenDeployer, weth } = await deployStack(FLOOR);
+      const w = await weth.getAddress();
+      const CUT = 3000n; // 30%, the maximum
+
+      // A floor-sized raise that would net only 70% of the floor: rejected.
+      await expect(
+        launch(factory, tokenDeployer, creator, w, {
+          targetRaiseWei: FLOOR, maxBuyWei: FLOOR, founderRaiseBps: Number(CUT),
+        }),
+      ).to.be.revertedWithCustomError(factory, "InvalidParams");
+
+      // Grossed up so the remainder is exactly the floor: accepted.
+      const grossed = (FLOOR * 10_000n) / (10_000n - CUT);
+      expect(grossed - (grossed * CUT) / 10_000n).to.equal(FLOOR); // net is exact
+      const coin = await launch(factory, tokenDeployer, creator, w, {
+        targetRaiseWei: grossed, maxBuyWei: grossed, founderRaiseBps: Number(CUT),
+        name: "NetFloor", symbol: "NTF",
+      });
+      expect((await factory.curveState(coin)).targetRaiseWei).to.equal(grossed);
+
+      // One wei under that gross nets one wei under the floor: rejected.
+      await expect(
+        launch(factory, tokenDeployer, creator, w, {
+          targetRaiseWei: grossed - 1n, maxBuyWei: grossed, founderRaiseBps: Number(CUT),
+          name: "JustUnder", symbol: "JUS",
+        }),
+      ).to.be.revertedWithCustomError(factory, "InvalidParams");
     });
 
     it("is still bounded below by what the curve's own start price costs", async () => {

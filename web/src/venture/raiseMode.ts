@@ -52,6 +52,33 @@ export function targetIssue(mode: RaiseMode, targetEth: number, minTargetEth: nu
   return null;
 }
 
+/** The smallest headline raise a founder can ask for.
+ *
+ *  Two floors apply and the binding one is whichever is higher:
+ *
+ *  - the curve cannot raise less than its own supply costs at the start price
+ *    (`baseCost`), which binds the gross target, and
+ *  - the platform will not finish a raise whose *pool* is below the floor,
+ *    which binds the raise net of the founder's cut.
+ *
+ *  The second is why this takes the cut at all: `finalize()` pays the founder
+ *  first and seeds the pool with the remainder, so a founder taking 30% must
+ *  raise ~1.43x the floor for the pool to clear it. Quoting the bare floor here
+ *  would let the wizard submit a launch the factory rejects. */
+export function minGrossTargetEth(
+  mode: RaiseMode,
+  curveFloorEth: number,
+  platformFloorEth: number,
+  founderCutPct: number,
+): number {
+  // An open curve has no founder-set target and no cut; the protocol's own
+  // graduation threshold applies instead.
+  if (isOpen(mode)) return 0;
+  const keep = 1 - Math.min(Math.max(founderCutPct, 0), 99) / 100;
+  const grossedForPool = keep > 0 ? platformFloorEth / keep : Infinity;
+  return Math.max(curveFloorEth, grossedForPool);
+}
+
 export interface RaiseInput {
   targetWei: bigint;
   days: number;

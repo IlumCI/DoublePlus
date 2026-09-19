@@ -4,7 +4,7 @@ import { useWalletClient } from "wagmi";
 import { concatHex, encodeAbiParameters, getContractAddress, keccak256, parseEther } from "viem";
 
 import { factoryAbi, VENTURE, venturePc } from "./client";
-import { raiseFields, requiresTarget, targetIssue } from "./raiseMode";
+import { minGrossTargetEth, raiseFields, requiresTarget, targetIssue } from "./raiseMode";
 import { fmtEth, fmtUsdV } from "./ui";
 import { Donut, Legend, SPLIT_COLORS, type Slice } from "./charts";
 import { usePageMeta } from "./seo";
@@ -47,7 +47,7 @@ export function LaunchVenture() {
   const [capPct, setCapPct] = useState(2); // per-wallet, % of target
   const [mode, setMode] = useState<0 | 1>(0); // 0 = funded raise, 1 = open curve
   const open = !requiresTarget(mode);
-  const [chain, setChain] = useState<{ creation: bigint; grad: bigint; buyBps: number; sellBps: number } | null>(null);
+  const [chain, setChain] = useState<{ creation: bigint; grad: bigint; buyBps: number; sellBps: number; minTarget: bigint } | null>(null);
   const [pairMode, setPairMode] = useState<"eth" | "stock">("eth");
   const [stock, setStock] = useState<string>(STOCKS[0]?.address ?? "");
   const [buyTaxPct, setBuyTaxPct] = useState(2); // 0-4, founder trade tax on buys
@@ -95,7 +95,13 @@ export function LaunchVenture() {
   // cannot raise less than its own supply costs at the start price, and the
   // platform will not finish a raise below MIN_TARGET_ETH.
   const curveFloorEth = ethUsd > 0 ? (START_FDV_USD * CURVE_SHARE) / ethUsd : 0;
-  const minTargetEth = Math.max(curveFloorEth, MIN_TARGET_ETH);
+  // The platform floor binds the ETH that reaches the pool, so a founder
+  // taking a cut must raise enough that the remainder still clears it. This
+  // moves with the cut slider, which is the point: the coupling is visible.
+  // The deployment's own floor when it is known — testnets ship it far lower
+  // than mainnet, and a hardcoded 0.5 over-restricts them.
+  const platformFloorEth = chain ? Number(chain.minTarget) / 1e18 : MIN_TARGET_ETH;
+  const minTargetEth = minGrossTargetEth(mode, curveFloorEth, platformFloorEth, founderCut);
   const parsedTarget = useMemo(() => { try { return target ? parseEther(target) : 0n; } catch { return 0n; } }, [target]);
   const targetUsd = ethUsd > 0 && parsedTarget > 0n ? (Number(parsedTarget) / 1e18) * ethUsd : 0;
   const founderCutEth = parsedTarget > 0n ? (parsedTarget * BigInt(founderCut * 100)) / 10_000n : 0n;
@@ -109,9 +115,14 @@ export function LaunchVenture() {
     const issue = targetIssue(mode, Number(target), minTargetEth);
     if (issue === "missing") return pushToast({ kind: "error", title: "Set a funding target" });
     if (issue === "below-floor") {
-      return pushToast({ kind: "error", title: `Target too low`, body: curveFloorEth > MIN_TARGET_ETH
-          ? `Minimum is ~${minTargetEth.toFixed(4)} ETH (the curve's $${START_FDV_USD} starting valuation).`
-          : `Minimum is ${MIN_TARGET_ETH} ETH.` });
+      // Say which of the two floors is binding, because the fix differs: one
+      // is fixed by asking for more, the other by taking a smaller cut.
+      const body = curveFloorEth >= minTargetEth
+        ? `Minimum is ~${minTargetEth.toFixed(4)} ETH — what the curve's own supply costs at the $${START_FDV_USD} starting valuation.`
+        : founderCut > 0
+          ? `Minimum is ~${minTargetEth.toFixed(4)} ETH, so ${platformFloorEth} ETH still reaches the pool after your ${founderCut}% cut. Lower the cut to ask for less.`
+          : `Minimum is ${platformFloorEth} ETH.`;
+      return pushToast({ kind: "error", title: `Target too low`, body });
     }
     if (allocTotal !== 100) {
       return pushToast({ kind: "error", title: "Fee split must total 100%", body: `It totals ${allocTotal}% right now.` });
@@ -266,11 +277,11 @@ export function LaunchVenture() {
     : "steep — you will need to earn this one";
 
   useEffect(() => {
-    const read = (fn: "creationFeeWei" | "graduationRaiseWei" | "curveBuyFeeBps" | "curveSellFeeBps") =>
+    const read = (fn: "creationFeeWei" | "graduationRaiseWei" | "curveBuyFeeBps" | "curveSellFeeBps" | "minTargetWei") =>
       venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: fn });
-    Promise.all([read("creationFeeWei"), read("graduationRaiseWei"), read("curveBuyFeeBps"), read("curveSellFeeBps")])
-      .then(([c, g, b, sl]) =>
-        setChain({ creation: c as bigint, grad: g as bigint, buyBps: Number(b), sellBps: Number(sl) }))
+    Promise.all([read("creationFeeWei"), read("graduationRaiseWei"), read("curveBuyFeeBps"), read("curveSellFeeBps"), read("minTargetWei")])
+      .then(([c, g, b, sl, mt]) =>
+        setChain({ creation: c as bigint, grad: g as bigint, buyBps: Number(b), sellBps: Number(sl), minTarget: mt as bigint }))
       .catch(() => undefined);
   }, []);
 

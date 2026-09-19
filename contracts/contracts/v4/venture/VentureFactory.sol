@@ -395,7 +395,15 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         // One trigger serves both modes: Guaranteed uses the founder's target,
         // Open takes the protocol's graduation threshold, frozen here.
         uint256 target = open ? graduationRaiseWei : p.targetRaiseWei;
-        if (target < minTargetWei || target > MAX_TARGET_WEI) revert InvalidParams();
+        if (target > MAX_TARGET_WEI) revert InvalidParams();
+        // The floor is a promise about pool depth, so it binds the ETH that
+        // actually becomes liquidity, not the headline raise. finalize() pays
+        // founderRaiseBps out first and seeds the pool with the remainder, so a
+        // floor checked against the gross let a floor-sized raise with the
+        // maximum cut graduate into 70% of the floor — a pool too thin to
+        // absorb the quick-buy amounts the interface offers. Open mode forces
+        // founderRaiseBps to 0 above, so there the two are the same number.
+        if (target - (target * p.founderRaiseBps) / BPS < minTargetWei) revert InvalidParams();
 
         // p0: whole-supply FDV of START_MCAP_USD at the first curve buy.
         uint256 p0 = Math.mulDiv(START_MCAP_USD_8, 1e18, TOTAL_SUPPLY_WHOLE * p.ethUsdPrice8);
