@@ -17,3 +17,6 @@ contracts/deployments/localnet.json
 .vercel/
 .vercel
 .env*
+
+# Flywheel keeper dry runs (DRY_RUN=1); the real epoch-<n>.json manifests are published.
+web/public/rewards/venture/*.dryrun.json

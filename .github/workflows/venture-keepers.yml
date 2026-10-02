@@ -71,10 +71,16 @@ jobs:
         env:
           KEEPER_PRIVATE_KEY: ${{ secrets.VENTURE_KEEPER_PK }}
           RPC_URL: ${{ secrets.VENTURE_RPC_URL || 'https://rpc.testnet.chain.robinhood.com' }}
+          # Same variable as the ops job; the keeper aborts if it disagrees with RPC_URL.
+          CHAIN_ID: ${{ vars.VENTURE_CHAIN_ID || '46630' }}
         run: |
           if [ -z "$KEEPER_PRIVATE_KEY" ]; then echo "VENTURE_KEEPER_PK not set; skipping"; exit 0; fi
           node venture-flywheel.mjs
+      # Runs even when the epoch failed: a half-paid epoch leaves its pending
+      # journal (every tx hash already sent), and the next run must see it to
+      # resume instead of paying the same recipients again.
       - name: Commit the epoch manifest
+        if: ${{ !cancelled() }}
         run: |
           git config user.name "doubleplus-keeper"
           git config user.email "keeper@users.noreply.github.com"
