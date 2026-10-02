@@ -117,6 +117,19 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
     ///         graduation for real; mainnet ships 0.5 ether.
     uint256 public immutable minTargetWei;
 
+    /// @notice Accepted range for the ETH/USD price a launcher passes in, 8dp.
+    ///         The price sizes the curve's start (`START_MCAP_USD_8` at the
+    ///         first buy), and it is caller-supplied because a critical state
+    ///         transition must not hang on an oracle. Unbounded, a launcher
+    ///         could pass an absurd price, open their own curve near zero and
+    ///         buy the cheap end first; in Open mode, with no per-wallet cap,
+    ///         that is most of the supply. The band caps how far the start can
+    ///         be pushed off the honest one. Immutable: testnets deploy it wide
+    ///         (their fallback price is scaled up so faucet wallets can
+    ///         graduate a raise), mainnet ships a band around the live price.
+    uint64 public immutable minEthUsd8;
+    uint64 public immutable maxEthUsd8;
+
     /// @notice Protocol fee on curve buys, taken off the incoming value before
     ///         the curve is quoted, so `spentWei` records net escrow.
     uint16 public immutable curveBuyFeeBps;
@@ -292,11 +305,16 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         uint16 curveBuyFeeBps_,
         uint16 curveSellFeeBps_,
         uint256 minTargetWei_,
-        uint16 vanity_
+        uint16 vanity_,
+        uint64 minEthUsd8_,
+        uint64 maxEthUsd8_
     ) Ownable(owner_) {
         require(protocolAdmin_ != address(0), "admin=0");
         if (minTargetWei_ == 0 || minTargetWei_ > MAX_TARGET_WEI) revert InvalidParams();
         minTargetWei = minTargetWei_;
+        if (minEthUsd8_ == 0 || minEthUsd8_ > maxEthUsd8_) revert InvalidParams();
+        minEthUsd8 = minEthUsd8_;
+        maxEthUsd8 = maxEthUsd8_;
         if (curveBuyFeeBps_ > MAX_CURVE_FEE_BPS || curveSellFeeBps_ > MAX_CURVE_FEE_BPS) revert FeeTooHigh();
         curveBuyFeeBps = curveBuyFeeBps_;
         curveSellFeeBps = curveSellFeeBps_;
@@ -394,7 +412,7 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         if (bytes(p.name).length == 0 || bytes(p.symbol).length == 0) revert InvalidParams();
         if (p.buyTaxBps > hook.MAX_SIDE_TAX_BPS() || p.sellTaxBps > hook.MAX_SIDE_TAX_BPS()) revert InvalidParams();
         if (uint256(p.devBps) + p.dividendBps + p.liquidityBps + p.mmBps != BPS) revert InvalidParams();
-        if (p.ethUsdPrice8 == 0) revert InvalidParams();
+        if (p.ethUsdPrice8 < minEthUsd8 || p.ethUsdPrice8 > maxEthUsd8) revert InvalidParams();
         if (p.pair == address(0) || p.pair.code.length == 0) revert InvalidParams();
         if (p.pair != address(weth) && p.v3Path.length == 0) revert InvalidParams();
         bool open = p.mode == RaiseMode.Open;

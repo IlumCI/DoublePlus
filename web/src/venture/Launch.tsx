@@ -140,6 +140,21 @@ export function LaunchVenture() {
     try {
       const ethUsd8 = BigInt(Math.round(ethUsd * 1e8));
       if (ethUsd8 <= 0n) throw new Error("Could not read the ETH price. Try again in a moment.");
+      // The factory only accepts an ETH/USD price inside its deployed band, so
+      // a launcher cannot open their own curve near zero. Check before
+      // signing so the founder gets a reason instead of a bare revert. A
+      // factory that predates the band has no getters; the call then fails
+      // and the contract stays the only judge.
+      const band = await Promise.all([
+        venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "minEthUsd8" }),
+        venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "maxEthUsd8" }),
+      ]).catch(() => null);
+      if (band && (ethUsd8 < band[0] || ethUsd8 > band[1])) {
+        throw new Error(
+          `The ETH price we read ($${ethUsd.toFixed(0)}) is outside the range the launchpad accepts ` +
+          `($${Number(band[0] / 10n ** 8n)}–$${Number(band[1] / 10n ** 8n)}). Refresh and try again.`,
+        );
+      }
 
       const pair = (STOCK_PAIRS_ENABLED && pairMode === "stock" ? stock : VENTURE.weth) as `0x${string}`;
       let v3Path: `0x${string}` = "0x";

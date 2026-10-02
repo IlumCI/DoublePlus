@@ -9,10 +9,13 @@ import { join } from "path";
 //   testnet: ROBINHOOD_RPC_URL=https://rpc.testnet.chain.robinhood.com ROBINHOOD_CHAIN_ID=46630
 //
 // Env:
-//   ADMIN            protocolAdmin for the factory's LP-recovery lever (default: deployer)
+//   ADMIN            protocolAdmin: pause/resume and setParams only; it has no
+//                    power over pools (default: deployer)
 //   TREASURY         protocol fee treasury baked into the hook (default: ADMIN)
-//   PLATFORM_FEE_BPS protocol fee on every trade, 50..100 (default 100 = 1%)
+//   PLATFORM_FEE_BPS protocol fee on every trade, 50..100 (default 55 = 0.55%)
 //   REF_SHARE_BPS    referrer's cut of the protocol fee, 0..5000 (default 2000 = 20%)
+//   ETH_USD_MIN/MAX  accepted band for the launcher-supplied ETH/USD price, whole
+//                    dollars (mainnet default 1000..10000, see ETH_USD_BAND)
 //
 // The V4 PoolManager sits at the same address on both networks. WETH differs;
 // the testnet has no self-deployed V3 stack, so venture launches there are
@@ -30,6 +33,17 @@ const INFRA: Record<number, { poolManager: string; weth: string; v3Router: strin
     v3Router: ethers.ZeroAddress,
     file: "venture-testnet.json",
   },
+};
+
+// Default band for the ETH/USD price a launcher passes to launch(), in whole
+// dollars. Immutable on the factory. Mainnet is a band around the live price:
+// wide enough to survive the market for the factory's life, narrow enough that
+// a launcher cannot open their own curve near zero. The testnet fallback price
+// is deliberately scaled up (~$1.86M) so faucet wallets can graduate a raise,
+// so the testnet band is wide.
+const ETH_USD_BAND: Record<number, [number, number]> = {
+  4663: [1_000, 10_000],
+  46630: [1, 10_000_000],
 };
 
 // beforeInitialize | afterSwap | afterSwapReturnDelta
@@ -56,10 +70,14 @@ async function main() {
   // The address mark, matched at either end: 0x2add… or 0x…2add. Immutable, so
   // it is a deploy-time decision; 0 would disable it and is for tests only.
   const VANITY = 0x2add;
+  const [bandMin, bandMax] = ETH_USD_BAND[chainId];
+  const minEthUsd8 = BigInt(process.env.ETH_USD_MIN ?? bandMin) * 10n ** 8n;
+  const maxEthUsd8 = BigInt(process.env.ETH_USD_MAX ?? bandMax) * 10n ** 8n;
   console.log(`network: ${network.name} (${chainId})  deployer: ${signer.address}`);
   console.log(`admin: ${admin}  treasury: ${treasury}  platformFeeBps: ${platformFeeBps}  refShareBps: ${refShareBps}`);
   console.log(`curveBuyFeeBps: ${curveBuyFeeBps}  curveSellFeeBps: ${curveSellFeeBps}`);
   console.log(`minTargetWei: ${ethers.formatEther(minTargetWei)} ETH  vanity: 0x${VANITY.toString(16)}`);
+  console.log(`ETH/USD band: $${minEthUsd8 / 10n ** 8n} .. $${maxEthUsd8 / 10n ** 8n}`);
 
   // 1) CREATE2 deployer + vesting deployer, then pin the factory address two
   //    creates ahead so the hook (immutable launcher) and the token deployer
@@ -101,7 +119,7 @@ async function main() {
   const factory = await (await ethers.getContractFactory("VentureFactory")).deploy(
     signer.address, admin, infra.poolManager, hookAddr, infra.weth, infra.v3Router,
     await vestingDeployer.getAddress(), await tokenDeployer.getAddress(),
-    curveBuyFeeBps, curveSellFeeBps, minTargetWei, VANITY,
+    curveBuyFeeBps, curveSellFeeBps, minTargetWei, VANITY, minEthUsd8, maxEthUsd8,
   );
   await factory.waitForDeployment();
   const factoryAddr = await factory.getAddress();
@@ -133,6 +151,7 @@ async function main() {
     curveSellFeeBps,
     minTargetWei: minTargetWei.toString(),
     vanity: `0x${VANITY.toString(16)}`,
+    ethUsdBand8: [minEthUsd8.toString(), maxEthUsd8.toString()],
     startBlock,
     contracts: {
       hookDeployer: c2Addr,

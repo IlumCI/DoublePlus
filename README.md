@@ -112,7 +112,7 @@ no serverless functions do not need `assemble.sh`.
 ## Deploying contracts
 
 Hardhat only. No Foundry. Solidity 0.8.26, `viaIR`, `runs: 400`, with
-`VentureFactory.sol` overridden to `runs: 1` — it sits at 22,661 of the 24,576
+`VentureFactory.sol` overridden to `runs: 1` — it sits at 23,218 of the 24,576
 byte limit, so **any addition to it must be size-checked before it can ship**.
 
 Network config is env-driven; the single `robinhood` network entry serves both
@@ -160,7 +160,14 @@ the prediction held, and renounces factory ownership at the end.
 | `CURVE_BUY_FEE_BPS` | 50 (0.5%) | ≤ 300 |
 | `CURVE_SELL_FEE_BPS` | 100 (1%) | ≤ 300 |
 | `MIN_TARGET_ETH` | **0.5** | ≤ 1,000,000 |
+| `ETH_USD_MIN` / `ETH_USD_MAX` | 1,000 / 10,000 on 4663; 1 / 10,000,000 on 46630 | min > 0, min ≤ max |
 | `ADMIN`, `TREASURY` | deployer | — |
+
+`ETH_USD_MIN`/`MAX` bound the ETH/USD price a launcher passes to `launch()`,
+which sizes the curve's start price. Without the band a launcher could pass an
+absurd price, open their own curve near zero and buy the cheap end. If ETH
+trades outside the band, every launch reverts until a redeploy, so pick it with
+the factory's expected lifetime in mind.
 
 The script's own header comment says `PLATFORM_FEE_BPS` defaults to 100; the code
 says 55. The code is right.
@@ -367,7 +374,7 @@ if it passes when it should fail, the whole suite is meaningless.
   creation fee. Re-run it as the last step of every deploy.
 - **Two factories are at the bytecode limit.** `HammrFactory` is 24,524 of 24,576
   — 52 bytes spare — and `HoodFactory` has 381. Neither can be modified again,
-  only redeployed. `VentureFactory` is at 22,793 and still growing; check the
+  only redeployed. `VentureFactory` is at 23,218 and still growing; check the
   size before adding to it.
 - **Nine `*.fork.test.ts` files and fourteen scripts mined CREATE2 salts against
   a stale `QuiverToken` ABI** after the constructor gained two dividend

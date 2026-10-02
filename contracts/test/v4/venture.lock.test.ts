@@ -5,7 +5,7 @@ import { ethers } from "hardhat";
 // contract rather than the copy: graduated liquidity has no way out, and no
 // raise finishes below the platform's floor.
 
-import { deployStack, launch, TARGET } from "./helpers/venture";
+import { deployStack, launch, TARGET, ETH_USD_MIN_8, ETH_USD_MAX_8 } from "./helpers/venture";
 
 describe("VentureFactory: locked liquidity and the raise floor", function () {
   this.timeout(300_000);
@@ -163,6 +163,39 @@ describe("VentureFactory: locked liquidity and the raise floor", function () {
 
     it("cannot be deployed with a zero floor", async () => {
       await expect(deployStack(0n)).to.be.reverted;
+    });
+  });
+
+  describe("a launcher cannot price their own curve's start", () => {
+    // ethUsdPrice8 sizes the start price and is caller-supplied (no oracle in
+    // the launch path). Unbounded, a launcher passes an absurd price, opens
+    // the curve near zero and buys the cheap end first. The band is immutable.
+    it("rejects an ETH/USD price outside the deployed band", async () => {
+      const [, creator] = await ethers.getSigners();
+      const { factory, tokenDeployer, weth } = await deployStack();
+      const w = await weth.getAddress();
+      expect(await factory.minEthUsd8()).to.equal(ETH_USD_MIN_8);
+      expect(await factory.maxEthUsd8()).to.equal(ETH_USD_MAX_8);
+      for (const px of [ETH_USD_MIN_8 - 1n, ETH_USD_MAX_8 + 1n, 10n ** 20n, 0n]) {
+        await expect(
+          launch(factory, tokenDeployer, creator, w, { ethUsdPrice8: px }, 0n, true),
+        ).to.be.revertedWithCustomError(factory, "InvalidParams");
+      }
+    });
+
+    it("accepts a price at either edge of the band", async () => {
+      const [, creator] = await ethers.getSigners();
+      const { factory, tokenDeployer, weth } = await deployStack();
+      const w = await weth.getAddress();
+      await launch(factory, tokenDeployer, creator, w, { ethUsdPrice8: ETH_USD_MIN_8 });
+      // distinct symbol: same creator + same args would collide on the CREATE2 address
+      await launch(factory, tokenDeployer, creator, w, { ethUsdPrice8: ETH_USD_MAX_8, symbol: "VNT2" });
+      expect(await factory.totalTokens()).to.equal(2n);
+    });
+
+    it("cannot be deployed with an empty or inverted band", async () => {
+      await expect(deployStack(1n, [0n, ETH_USD_MAX_8])).to.be.reverted;
+      await expect(deployStack(1n, [ETH_USD_MAX_8, ETH_USD_MIN_8])).to.be.reverted;
     });
   });
 

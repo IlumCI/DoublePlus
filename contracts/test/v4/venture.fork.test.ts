@@ -1,6 +1,6 @@
 import { expect } from "chai";
 import { ethers, network } from "hardhat";
-import { isVanity, TEST_VANITY } from "./helpers/venture";
+import { isVanity, TEST_VANITY, ETH_USD_MIN_8, ETH_USD_MAX_8 } from "./helpers/venture";
 
 // Defaults are Robinhood mainnet (4663). For a testnet-fork run (46630) the
 // PoolManager address is identical; override WETH with the testnet's canonical
@@ -53,6 +53,7 @@ async function deployAll(admin: any, treasury: any) {
     admin.address, admin.address, POOL_MANAGER, hookAddr, WETH, V3_ROUTER,
     await vestingDeployer.getAddress(), await tokenDeployer.getAddress(),
      50, 100, 1n, TEST_VANITY, // mark off: no salt grind against a forked chain
+    ETH_USD_MIN_8, ETH_USD_MAX_8,
   );
   await factory.waitForDeployment();
   expect(await factory.getAddress()).to.equal(predictedFactory);

@@ -41,6 +41,7 @@ async function main() {
   const factory = await (await ethers.getContractFactory("VentureFactory")).deploy(
     admin.address, admin.address, placeholder, await hook.getAddress(), placeholder, placeholder,
     await vestingDeployer.getAddress(), await tokenDeployer.getAddress(), 50, 100, 1n, VANITY,
+    1n, 2n ** 63n, // ETH/USD band wide open: local dev passes whatever price it likes
   );
   await factory.waitForDeployment();
   const router = await (await ethers.getContractFactory("VentureRouter")).deploy(
