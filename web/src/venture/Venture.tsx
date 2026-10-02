@@ -14,6 +14,7 @@ import { capState, feePct, quoteBuy, taxPct } from "./curve";
 import { profileLinks, useDexProfile, type DexProfile } from "../lib/dexscreener";
 import { PriceChart, TradeTape, usePoolTrades } from "./Chart";
 import { refLink, storedRef } from "./referral";
+import { ShareBar } from "./share";
 import { Donut, Legend, Ring, SplitBar, type Slice } from "./charts";
 import { usePageMeta } from "./seo";
 import { ago, BuySellStrength, Change, changePct, CopyButton, Countdown, CurveBar, Delta, DexBadge, fmtEth, fmtMcap,
@@ -130,6 +131,7 @@ function VentureBody({ v, fills, ethUsd }: { v: VentureT; fills: Fill[]; ethUsd:
           {v.phase === "failed" && <FailPanel v={v} />}
           {v.phase === "graduated" && <TradePanel v={v} />}
 
+          <ShareBar v={v} />
           <DexPanel v={v} dex={dex} />
           <ContractCard v={v} />
           <WhoEarns v={v} />

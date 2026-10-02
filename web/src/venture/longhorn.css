@@ -663,3 +663,14 @@ input[type="range"]::-moz-range-thumb { background: var(--gel-blue); border: 1px
   background: rgb(110 155 255 / .18); border: 1px solid rgb(110 155 255 / .35);
 }
 .dp-links-push { margin: -4px 0 12px; padding: 8px 10px; border-left: 3px solid var(--up); background: rgb(79 220 124 / .06); color: #c9f5d6 !important; }
+
+/* ---------- share bar ---------- */
+.dp-share { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 12px 0; }
+.dp-share button {
+  height: 30px; padding: 0 12px; border-radius: 3px; cursor: pointer; font: 600 12.5px var(--body); color: #dce6ff;
+  background: var(--plex-glass), #172347; border: 1px solid #000; box-shadow: inset 0 0 0 1px rgb(255 255 255 / .14);
+}
+.dp-share button:hover { color: #fff; box-shadow: inset 0 0 0 1px rgb(255 255 255 / .25), 0 0 10px rgb(110 170 255 / .45); }
+.dp-share .dp-share-x { color: #fff; background: linear-gradient(#3a3a3a, #111 50%, #000 51%, #1a1a1a); }
+.dp-share-note { font: 12px var(--body); color: var(--up); }
+.dp-share-tip { flex-basis: 100%; font-size: 11px; color: var(--faint); }
