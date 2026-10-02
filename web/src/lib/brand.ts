@@ -66,11 +66,11 @@ const FLAVORS: Record<string, Brand> = {
   // scope); the brand is doubleplus — Orwell's newspeak "doubleplusgood".
   venture: {
     name: "doubleplus",
-    tld: ".fund",
-    domain: "doubleplus.fund",
-    url: "https://doubleplus.fund",
-    twitter: "https://x.com/",
-    twitterHandle: "",
+    tld: ".fun",
+    domain: "doubleplus.fun",
+    url: "https://doubleplus.fun",
+    twitter: "https://x.com/DoublePlusFund",
+    twitterHandle: "DoublePlusFund",
     tagline: "day-zero funding for startups and research projects",
     description:
       "Back startups and research projects at day zero on Robinhood Chain. Every raise publishes its terms on-chain before any money moves, returns every wei on the curve if it misses target, and pays holders a share of every trade in ETH.",

@@ -18,7 +18,7 @@ keep it alive. It does not explain the contracts — read those in
 | --- | --- | --- | --- | --- |
 | `copair` | **hoodheist.fun** — production | Robinhood 4663 | `robinhood-flywheel.json` | Vercel cron `/api/keeper`, 10 min |
 | `base` | basedstonk.fun | Base 8453 | `base-stockfly-v3.json` | GH Actions `base-keeper.yml`, 30 min |
-| `venture` | **doubleplus.fund** — active development | Robinhood **testnet** 46630 | `venture-testnet.json` | GH Actions `venture-keepers.yml`, 15 min + weekly |
+| `venture` | **doubleplus.fun** — active development, mainnet launch pending | Robinhood **testnet** 46630 | `venture-testnet.json` | GH Actions `venture-keepers.yml`, 15 min + weekly |
 | `hammr` | hammr | Robinhood 4663 | `robinhood-hammr.json` | none |
 | `arc` | arcx.fun | Arc 5042 | `arc-v3-launchpad.json` | none (permissionless `harvestFees`) |
 | `steadypads` | steadypads.vercel.app | Stable 988 | `stable-launchpad.json` | none |
