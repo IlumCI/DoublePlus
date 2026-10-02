@@ -9,14 +9,17 @@ import { useVentures } from "./useVentures";
 import { hotTokens, useLiveFeed, type FeedItem } from "./feed";
 
 type Filter = "all" | "research" | "startup" | "raising" | "soon" | "graduated" | "dexpaid" | "failed";
-type Sort = "new" | "mcap" | "funded";
+type Sort = "new" | "trending" | "mcap" | "funded";
 
 const FILTERS: [Filter, string][] = [
   ["all", "All"], ["startup", "Startups"], ["research", "Research"],
   ["raising", "Raising"], ["soon", "About to graduate"], ["graduated", "Trading"],
   ["dexpaid", "DEX paid"], ["failed", "Refunding"],
 ];
-const SORTS: [Sort, string][] = [["new", "Newest"], ["mcap", "Market cap"], ["funded", "% funded"]];
+const SORTS: [Sort, string][] = [["new", "Newest"], ["trending", "🔥 Trending"], ["mcap", "Market cap"], ["funded", "% funded"]];
+
+/** Fresh lane window: launches younger than this get the lane at the top. */
+const FRESH_SECS = 86_400;
 
 const isResearch = (v: Venture) => /research|science|lab|open.?source|academic/i.test(v.meta.sector ?? "");
 
@@ -33,6 +36,24 @@ export function Board() {
   const [params, setParams] = useSearchParams();
   const feed = useLiveFeed();
   const hot = useMemo(() => hotTokens(feed.items), [feed.items]);
+  // Buy volume per token over the last hour: the trending sort's only input.
+  const heat = useMemo(() => {
+    const cutoff = Date.now() / 1000 - 3600;
+    const m = new Map<string, bigint>();
+    for (const i of feed.items) if (i.kind === "buy" && i.ts >= cutoff) m.set(i.token.toLowerCase(), (m.get(i.token.toLowerCase()) ?? 0n) + i.eth);
+    return m;
+  }, [feed.items]);
+  // Each creator's record across the board: launches and how many graduated.
+  const records = useMemo(() => {
+    const m = new Map<string, { launched: number; graduated: number }>();
+    for (const v of ventures ?? []) {
+      const r = m.get(v.creator.toLowerCase()) ?? { launched: 0, graduated: 0 };
+      r.launched++;
+      if (v.phase === "graduated") r.graduated++;
+      m.set(v.creator.toLowerCase(), r);
+    }
+    return m;
+  }, [ventures]);
   usePageMeta(null);
 
   const filter = (params.get("show") as Filter) || "all";
@@ -61,11 +82,14 @@ export function Board() {
         (v.meta.pitch ?? "").toLowerCase().includes(needle) || (v.meta.sector ?? "").toLowerCase().includes(needle) ||
         v.address.toLowerCase().includes(needle));
     }
-    if (sort === "mcap") list.sort((a, b) => (b.priceWei > a.priceWei ? 1 : b.priceWei < a.priceWei ? -1 : 0));
+    if (sort === "trending") {
+      const h = (v: Venture) => heat.get(v.address.toLowerCase()) ?? 0n;
+      list.sort((a, b) => (h(b) > h(a) ? 1 : h(b) < h(a) ? -1 : b.createdAt - a.createdAt));
+    } else if (sort === "mcap") list.sort((a, b) => (b.priceWei > a.priceWei ? 1 : b.priceWei < a.priceWei ? -1 : 0));
     else if (sort === "funded") list.sort((a, b) => pct(b.raisedWei, b.targetRaiseWei) - pct(a.raisedWei, a.targetRaiseWei));
     else list.sort((a, b) => b.createdAt - a.createdAt);
     return list;
-  }, [ventures, filter, sort, q, dex]);
+  }, [ventures, filter, sort, q, dex, heat]);
 
   return (
     <div className="dp-shell" style={{ paddingBottom: 60 }}>
@@ -84,7 +108,9 @@ export function Board() {
       </div>
 
       <LiveTape ventures={ventures} feed={feed.items} loaded={feed.loaded} />
+      <GradBurst ventures={ventures} feed={feed.items} loaded={feed.loaded} />
       <King ventures={ventures} hot={hot} />
+      {filter === "all" && !q && <FreshLane ventures={ventures} />}
       <Proof ventures={ventures} ethUsd={ethUsd} feed={feed.items} />
       <TrustStrip />
 
@@ -123,7 +149,7 @@ export function Board() {
       ) : (
         <div className="dp-grid">
           {filter === "all" && !q && <YourCoinCard />}
-          {shown.map((v) => <TokenCard key={v.address} v={v} ethUsd={ethUsd} dex={dex.get(v.address.toLowerCase())} hot={hot.has(v.address.toLowerCase())} />)}
+          {shown.map((v) => <TokenCard key={v.address} v={v} ethUsd={ethUsd} dex={dex.get(v.address.toLowerCase())} hot={hot.has(v.address.toLowerCase())} record={records.get(v.creator.toLowerCase())} />)}
         </div>
       )}
     </div>
@@ -242,13 +268,78 @@ function YourCoinCard() {
   );
 }
 
-function TokenCard({ v, ethUsd, dex, hot }: { v: Venture; ethUsd: number; dex?: DexProfile; hot: boolean }) {
+/** Launches from the last day, newest first, age up front: fresh coins are
+ *  where the moves happen. Hidden when nothing launched in the window. */
+function FreshLane({ ventures }: { ventures: Venture[] | null }) {
+  const fresh = useMemo(() => {
+    const cutoff = Date.now() / 1000 - FRESH_SECS;
+    return (ventures ?? []).filter((v) => v.createdAt >= cutoff && v.phase !== "failed")
+      .sort((a, b) => b.createdAt - a.createdAt).slice(0, 10);
+  }, [ventures]);
+  if (fresh.length === 0) return null;
+  return (
+    <section className="dp-fresh" aria-label="Just launched">
+      <h2 className="dp-fresh-h"><span className="dp-fresh-dot" aria-hidden /> Just launched</h2>
+      <div className="dp-fresh-row">
+        {fresh.map((v) => {
+          const p = v.phase === "graduated" ? 100 : pct(v.raisedWei, v.targetRaiseWei);
+          return (
+            <Link key={v.address} className="dp-fresh-card" to={`/venture/${v.address}`} viewTransition>
+              <span className="dp-fresh-age">{ago(v.createdAt)}</span>
+              <div className="dp-fresh-id"><Monogram v={v} /><b>${v.symbol}</b></div>
+              <span className="dp-fresh-bar"><i style={{ width: `${Math.min(100, p)}%` }} /></span>
+              <span className="dp-fresh-pct">{v.phase === "graduated" ? "on Uniswap" : `${p.toFixed(0)}% funded`}</span>
+            </Link>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+/** A token reaching Uniswap gets a moment: a gold banner for graduations that
+ *  land while the board is open. It celebrates the token, never a user's own
+ *  trading, and history already on the tape when the page loaded stays quiet. */
+function GradBurst({ ventures, feed, loaded }: { ventures: Venture[] | null; feed: FeedItem[]; loaded: boolean }) {
+  const seen = useRef<Set<string> | null>(null);
+  const [shown, setShown] = useState<{ key: string; v: Venture } | null>(null);
+  useEffect(() => {
+    if (!loaded) return;
+    const grads = feed.filter((i) => i.kind === "graduate");
+    if (seen.current === null) { seen.current = new Set(grads.map((g) => g.key)); return; }
+    const fresh = grads.find((g) => !seen.current!.has(g.key));
+    grads.forEach((g) => seen.current!.add(g.key));
+    const v = fresh && ventures?.find((x) => x.address.toLowerCase() === fresh.token.toLowerCase());
+    if (fresh && v) setShown({ key: fresh.key, v });
+  }, [feed, loaded, ventures]);
+  useEffect(() => {
+    if (!shown) return;
+    const id = setTimeout(() => setShown(null), 7000);
+    return () => clearTimeout(id);
+  }, [shown]);
+  if (!shown) return null;
+  return (
+    <Link key={shown.key} className="dp-gradburst" to={`/venture/${shown.v.address}`} viewTransition role="status">
+      <span className="dp-gradburst-sparks" aria-hidden>{Array.from({ length: 12 }, (_, i) => <i key={i} style={{ ["--i" as string]: i }} />)}</span>
+      <span className="dp-gradburst-cap" aria-hidden>🎓</span>
+      <span><b>${shown.v.symbol}</b> just graduated to Uniswap. Trading is live.</span>
+      <span className="dp-gradburst-go">Trade it →</span>
+    </Link>
+  );
+}
+
+function TokenCard({ v, ethUsd, dex, hot, record }: {
+  v: Venture; ethUsd: number; dex?: DexProfile; hot: boolean; record?: { launched: number; graduated: number };
+}) {
   const funded = pct(v.raisedWei, v.targetRaiseWei);
+  const left = v.targetRaiseWei > v.raisedWei ? v.targetRaiseWei - v.raisedWei : 0n;
+  // The last stretch gets a glow: people push hardest when the goal is close.
+  const close = v.phase === "raising" && funded >= 75;
   const pitch = v.meta.pitch || v.meta.description || "";
   const flash = useFlashOnChange(v.raisedWei);
 
   return (
-    <Link className={`dp-tcard ${flash ? "dp-flash" : ""}`} to={`/venture/${v.address}`} viewTransition>
+    <Link className={`dp-tcard${flash ? " dp-flash" : ""}${close ? " dp-close" : ""}`} to={`/venture/${v.address}`} viewTransition>
       <div className="dp-row1">
         <Monogram v={v} />
         <div style={{ minWidth: 0 }}>
@@ -272,7 +363,7 @@ function TokenCard({ v, ethUsd, dex, hot }: { v: Venture; ethUsd: number; dex?: 
         ) : v.phase === "failed" ? (
           <><span>closed at {funded.toFixed(0)}%</span><span>refunds open</span></>
         ) : (
-          <><span><b>{funded.toFixed(0)}%</b> to graduation</span><span>{fmtEth(v.raisedWei, 3)} / {fmtEth(v.targetRaiseWei, 3)} ETH</span></>
+          <><span><b>{funded.toFixed(0)}%</b>{close ? " · almost there" : " to graduation"}</span><span><b className="dp-togo">{fmtEth(left, 3)} ETH</b> to go</span></>
         )}
       </div>
 
@@ -280,6 +371,11 @@ function TokenCard({ v, ethUsd, dex, hot }: { v: Venture; ethUsd: number; dex?: 
         <span>by <b>{short(v.creator)}</b> · {ago(v.createdAt)} ago</span>
         <span>founder takes {(v.founderRaiseBps / 100).toFixed(0)}%</span>
       </div>
+      {record && (
+        <div className="dp-record-line">
+          {record.launched === 1 ? "first launch" : <>{record.launched} launches · <b>{record.graduated} graduated</b></>}
+        </div>
+      )}
     </Link>
   );
 }

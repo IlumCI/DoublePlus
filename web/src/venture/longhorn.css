@@ -587,3 +587,63 @@ input[type="range"]::-moz-range-thumb { background: var(--gel-blue); border: 1px
 @media (prefers-reduced-motion: reduce) {
   .dp-tape-live, .dp-tape-new { animation: none; }
 }
+
+/* ---------- fresh lane ---------- */
+.dp-fresh { margin: 0 0 16px; }
+.dp-fresh-h { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font: 700 12px var(--body); letter-spacing: .08em; text-transform: uppercase; color: #9fc4ff; }
+.dp-fresh-dot { width: 8px; height: 8px; border-radius: 50%; background: #6fa8ff; box-shadow: 0 0 8px #6fa8ff; animation: dp-pulse-blue 1.6s ease-in-out infinite; }
+@keyframes dp-pulse-blue { 50% { box-shadow: 0 0 1px #6fa8ff; opacity: .6; } }
+.dp-fresh-row { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
+.dp-fresh-card {
+  flex: none; width: 150px; display: grid; gap: 6px; padding: 10px 11px; border-radius: 6px; text-decoration: none; color: var(--text);
+  background: linear-gradient(#14204a, #0d1530); border: 1px solid #2f4a8a; box-shadow: inset 0 1px 0 rgb(255 255 255 / .07);
+}
+.dp-fresh-card:hover { border-color: #6fa8ff; box-shadow: 0 0 14px rgb(90 150 255 / .35); text-decoration: none; }
+.dp-fresh-age { font: 700 18px/1 var(--mono); color: #fff; }
+.dp-fresh-id { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.dp-fresh-id b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.dp-fresh-id .dp-monogram { flex: none; width: 22px; min-width: 0; height: 22px; padding: 0; font-size: 11px; }
+.dp-fresh-bar { height: 5px; border-radius: 3px; background: #060a18; overflow: hidden; box-shadow: inset 0 1px 1px rgb(0 0 0 / .6); }
+.dp-fresh-bar i { display: block; height: 100%; background: linear-gradient(#7ff09a, #2fb150); }
+.dp-fresh-pct { font: 11px var(--mono); color: var(--dim); }
+
+/* ---------- goal gradient: the last stretch glows ---------- */
+.dp-togo { color: #fff !important; font-weight: 600 !important; }
+.dp-tcard.dp-close { border-color: #3fae5a; box-shadow: inset 0 0 0 1px rgb(79 220 124 / .25), 0 0 18px rgb(79 220 124 / .22); animation: dp-close-glow 2.4s ease-in-out infinite; }
+@keyframes dp-close-glow { 50% { box-shadow: inset 0 0 0 1px rgb(79 220 124 / .4), 0 0 26px rgb(79 220 124 / .38); } }
+.dp-tcard.dp-close .dp-curvebar > i { box-shadow: 0 0 12px rgb(79 220 124 / .7); }
+
+/* ---------- creator record ---------- */
+.dp-record-line { margin-top: 6px; font: 10.5px var(--mono); color: var(--faint); }
+.dp-record-line b { color: #9fe8b4; font-weight: 400; }
+
+/* ---------- graduation banner ---------- */
+.dp-gradburst {
+  position: sticky; top: 8px; z-index: 6; display: flex; align-items: center; gap: 12px; margin: 14px 0 0; padding: 12px 16px;
+  border-radius: 7px; overflow: visible; text-decoration: none; color: #2a1d00; font: 14px var(--body);
+  background: linear-gradient(#ffe48a 0%, #f5c53a 48%, #dfa514 52%, #f2c040 100%);
+  border: 1px solid #7a5a00; box-shadow: inset 0 1px 0 rgb(255 255 255 / .6), 0 0 30px rgb(255 200 60 / .45);
+  animation: dp-grad-in .6s cubic-bezier(.2, 1.5, .4, 1) both;
+}
+.dp-gradburst:hover { text-decoration: none; filter: brightness(1.06); }
+.dp-gradburst b { font-weight: 800; }
+.dp-gradburst-cap { font-size: 22px; }
+.dp-gradburst-go { margin-left: auto; font-weight: 700; white-space: nowrap; }
+@keyframes dp-grad-in { from { transform: translateY(-10px) scale(.96); opacity: 0; } }
+.dp-gradburst-sparks { position: absolute; left: 30px; top: 50%; pointer-events: none; }
+.dp-gradburst-sparks i {
+  position: absolute; width: 6px; height: 6px; border-radius: 1px; background: #ffd23f;
+  animation: dp-spark 1.1s ease-out both; animation-delay: calc(var(--i) * 25ms);
+  --a: calc(var(--i) * 30deg);
+}
+.dp-gradburst-sparks i:nth-child(3n) { background: #7ff09a; }
+.dp-gradburst-sparks i:nth-child(3n+1) { background: #9fc4ff; }
+@keyframes dp-spark {
+  from { transform: rotate(var(--a)) translateX(0) scale(1); opacity: 1; }
+  to { transform: rotate(var(--a)) translateX(70px) scale(.3); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dp-fresh-dot, .dp-tcard.dp-close, .dp-gradburst { animation: none; }
+  .dp-gradburst-sparks { display: none; }
+}
