@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { BrowserRouter, Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import type { Venture } from "./client";
 import { useSwitchChain } from "wagmi";
@@ -9,13 +9,6 @@ import { env } from "../lib/env";
 import { useWallet } from "../lib/useWallet";
 import { Board } from "./Board";
 import { VENTURE } from "./client";
-import { Desk } from "./Desk";
-import { Docs } from "./Docs";
-import { Flywheel } from "./Flywheel";
-import Legal from "./Legal";
-import { LaunchVenture } from "./Launch";
-import { Stats } from "./Stats";
-import { VenturePage } from "./Venture";
 import { captureRef } from "./referral";
 import { FilterDefs } from "./ui";
 import { Sidebar } from "./longhorn/Sidebar";
@@ -25,6 +18,22 @@ import "./venture.css";
 import "./longhorn.css";
 
 captureRef();
+
+// The board is the landing page and ships with the app; every other page is
+// its own chunk, so the chart libraries (klinecharts, recharts) and the
+// trade/launch flows only download when someone opens them.
+const VenturePage = lazy(() => import("./Venture").then((m) => ({ default: m.VenturePage })));
+const LaunchVenture = lazy(() => import("./Launch").then((m) => ({ default: m.LaunchVenture })));
+const Desk = lazy(() => import("./Desk").then((m) => ({ default: m.Desk })));
+const Flywheel = lazy(() => import("./Flywheel").then((m) => ({ default: m.Flywheel })));
+const Stats = lazy(() => import("./Stats").then((m) => ({ default: m.Stats })));
+const Docs = lazy(() => import("./Docs").then((m) => ({ default: m.Docs })));
+const Legal = lazy(() => import("./Legal"));
+
+/** Shown in the window body while a page chunk loads. */
+function PageLoading() {
+  return <div className="lh-loading" role="status"><i /><span>Loading…</span></div>;
+}
 
 const NAV: [string, string][] = [
   ["/", "Raises"],
@@ -42,7 +51,7 @@ export function VentureApp() {
         {/* The legal document renders outside the app chrome on purpose: no
             desktop, no window, no marketing furniture. It is a document that
             happens to live at a URL. */}
-        <Route path="/legal" element={<Legal />} />
+        <Route path="/legal" element={<Suspense fallback={null}><Legal /></Suspense>} />
         <Route path="*" element={<Shell />} />
       </Routes>
       <Toasts />
@@ -119,6 +128,7 @@ function Shell() {
           <div className="lh-body">
             <TaskPane />
             <main ref={mainRef} className="lh-client">
+              <Suspense fallback={<PageLoading />}>
               <Routes>
                 <Route path="/" element={<Board />} />
                 <Route path="/venture/:address" element={<VenturePage />} />
@@ -129,6 +139,7 @@ function Shell() {
                 <Route path="/docs" element={<Docs />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
+              </Suspense>
             </main>
           </div>
           <StatusBar />

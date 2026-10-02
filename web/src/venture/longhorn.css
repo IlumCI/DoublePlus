@@ -60,7 +60,15 @@
 
 /* ---------- desktop ---------- */
 [data-brand="venture"] body {
-  background: radial-gradient(120% 90% at 20% 0%, #10224a 0%, #050a18 55%, #02040b 100%) fixed, #02040b;
+  /* The no-WebGL desktop: the same three ribbons as soft CSS gradients. Also
+     what shows while the shader fades in, and on Save-Data / low-end devices. */
+  background:
+    radial-gradient(60% 18% at 35% 58%, rgb(77 219 148 / .22), transparent 70%),
+    radial-gradient(70% 22% at 60% 46%, rgb(84 120 220 / .2), transparent 70%),
+    radial-gradient(50% 10% at 70% 30%, rgb(178 235 255 / .1), transparent 70%),
+    radial-gradient(120% 90% at 20% 0%, #10224a 0%, #050a18 55%, #02040b 100%);
+  background-attachment: fixed;
+  background-color: #02040b;
   color: var(--text);
   -webkit-font-smoothing: antialiased;
 }
@@ -90,10 +98,10 @@
 .lh-window {
   flex: 1; min-width: 0; display: flex; flex-direction: column;
   border-radius: 8px 8px 5px 5px; overflow: hidden;
-  background: rgb(7 11 24 / .9);
+  /* Near-opaque instead of backdrop-blurred: re-blurring a window-sized patch
+     of an animated canvas on every frame costs more than the shader itself. */
+  background: rgb(7 11 24 / .96);
   box-shadow: 0 0 0 1px #000, 0 0 0 2px rgb(110 140 210 / .28), 0 18px 50px rgb(0 0 0 / .6);
-  backdrop-filter: blur(18px) saturate(1.2);
-  -webkit-backdrop-filter: blur(18px) saturate(1.2);
 }
 .lh-window.is-min { visibility: hidden; }
 
@@ -457,7 +465,8 @@ input[type="range"]::-moz-range-thumb { background: var(--gel-blue); border: 1px
   [data-brand="venture"] body { padding-bottom: 48px; }
   [data-brand="venture"] #root:has(.lh-desk) { display: block; height: auto; }
   .lh-desk { display: block; padding: 0; }
-  .lh-window { border-radius: 0; min-height: calc(100dvh - 48px); overflow: visible; backdrop-filter: none; -webkit-backdrop-filter: none; background: rgb(7 11 24 / .94); }
+  .lh-window { border-radius: 0; min-height: calc(100dvh - 48px); overflow: visible; }
+  .lh-startmenu { backdrop-filter: none; -webkit-backdrop-filter: none; background: rgb(10 16 36 / .98); }
   .lh-window.is-min { visibility: visible; }
   .lh-title { position: sticky; top: 0; z-index: 4; }
   .lh-caps { display: none; }
@@ -480,3 +489,17 @@ input[type="range"]::-moz-range-thumb { background: var(--gel-blue); border: 1px
 @media (prefers-reduced-transparency: reduce) {
   .lh-window, .lh-sidebar, .lh-startmenu { backdrop-filter: none; -webkit-backdrop-filter: none; background-color: #0a1022; }
 }
+
+/* page chunk loading: Longhorn's indeterminate green bar */
+.lh-loading { display: grid; justify-items: center; gap: 10px; padding: 80px 20px; color: var(--faint); font: 12.5px var(--body); }
+.lh-loading i {
+  width: 180px; height: 9px; border-radius: 3px; background: #060a18; border: 1px solid #000; overflow: hidden; position: relative;
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / .7), 0 0 0 1px rgb(93 125 181 / .25);
+}
+.lh-loading i::after {
+  content: ""; position: absolute; inset: 0 auto 0 0; width: 40%;
+  background: linear-gradient(90deg, transparent, #45d64a 30%, #7ff09a 50%, #45d64a 70%, transparent);
+  animation: lh-marquee 1.2s linear infinite;
+}
+@keyframes lh-marquee { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+@media (prefers-reduced-motion: reduce) { .lh-loading i::after { animation: none; width: 100%; opacity: .5; } }

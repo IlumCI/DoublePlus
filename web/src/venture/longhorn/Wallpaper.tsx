@@ -66,8 +66,22 @@ void main() {
   gl_FragColor = vec4(col, 1.0);
 }`;
 
-const SCALE = 0.6; // render resolution relative to CSS pixels
-const FRAME_MS = 1000 / 30;
+/**
+ * How hard this device should work for a background. "off" leaves the CSS
+ * aurora on <body> (no WebGL context at all): no WebGL, Save-Data, or a
+ * low-end device. Touch devices get a lighter animated tier.
+ */
+type Tier = "off" | "lite" | "full";
+function tier(): Tier {
+  const nav = navigator as Navigator & { connection?: { saveData?: boolean }; deviceMemory?: number };
+  if (nav.connection?.saveData) return "off";
+  if ((nav.deviceMemory ?? 8) <= 2 || (nav.hardwareConcurrency ?? 8) <= 2) return "off";
+  return window.matchMedia("(pointer: coarse)").matches ? "lite" : "full";
+}
+const SETTINGS = {
+  lite: { scale: 0.35, frameMs: 1000 / 20 },
+  full: { scale: 0.6, frameMs: 1000 / 30 },
+} as const;
 
 export function Wallpaper({ pulse }: { pulse: number }) {
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -78,6 +92,9 @@ export function Wallpaper({ pulse }: { pulse: number }) {
   useEffect(() => {
     const cv = canvas.current;
     if (!cv) return;
+    const t = tier();
+    if (t === "off") return;
+    const { scale: SCALE, frameMs: FRAME_MS } = SETTINGS[t];
     const gl = cv.getContext("webgl", { antialias: false, alpha: false, powerPreference: "low-power", preserveDrawingBuffer: false });
     if (!gl) return;
 
@@ -133,11 +150,19 @@ export function Wallpaper({ pulse }: { pulse: number }) {
       gl.uniform2f(uMouse, mouse[0], mouse[1]);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     };
+    // If the device cannot keep up (frames arriving far slower than asked
+    // for, over a couple of seconds), stop animating and keep the last frame:
+    // a still wallpaper beats a page that stutters while someone trades.
+    let slow = 0;
     const loop = (now: number) => {
       raf = requestAnimationFrame(loop);
-      if (now - last < FRAME_MS) return;
+      const gap = now - last;
+      if (gap < FRAME_MS) return;
+      if (last && gap > FRAME_MS * 2.5 && !document.hidden) slow++;
+      else slow = Math.max(0, slow - 1);
       last = now;
       draw(now);
+      if (slow > 40) { stop(); window.removeEventListener("pointermove", onMove); }
     };
     const start = () => { if (!raf && !lost && !document.hidden) raf = requestAnimationFrame(loop); };
     const stop = () => { cancelAnimationFrame(raf); raf = 0; };
