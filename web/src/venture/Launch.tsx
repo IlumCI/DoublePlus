@@ -35,7 +35,7 @@ const MIN_TARGET_ETH = 0.5; // mirrors VentureFactory.minTargetWei
 
 /** Found a startup: identity + the on-chain term sheet, in one transaction. */
 export function LaunchVenture() {
-  usePageMeta("Launch your idea");
+  usePageMeta("Launch a coin");
   const { isConnected, connectFirst, address: me } = useWallet();
   const { data: wc } = useWalletClient();
   const pushToast = useUi((s) => s.pushToast);
@@ -347,9 +347,9 @@ export function LaunchVenture() {
   return (
     <div className="dp-shell" style={{ paddingBottom: 70, maxWidth: 1120 }}>
       <div className="dp-page-head">
-        <h1 className="dp-page-title">Launch your idea.</h1>
+        <h1 className="dp-page-title">Launch a coin. Get paid on every trade.</h1>
         <p style={{ maxWidth: "64ch", color: "var(--dim)", fontSize: 13.5 }}>
-          Four steps, one transaction. The defaults work — change nothing and you get a sensible raise.
+          You set your cut: up to 4% of every trade, forever, plus up to 30% of the raise when it graduates. Four steps, one transaction. The defaults work — change nothing and you get a sensible launch.
         </p>
       </div>
 
@@ -403,7 +403,13 @@ export function LaunchVenture() {
                   click; this is what someone reads before they commit.</span></div>
 
               <p className="dp-sec" style={{ marginTop: 18 }}>Links and media
-                <span className="dp-agate">all optional — traders check these first</span></p>
+                <span className="dp-agate">optional, but don't skip them</span></p>
+              {/* pump.fun data: launches with Telegram, X and a site graduate
+                  roughly 9–17x as often as bare ones (correlation, not a promise). */}
+              <p className="dp-hint dp-links-push">
+                Coins with X, Telegram and a website graduate many times more often than bare ones.
+                Traders check these before they buy, and your card shows which ones you filled in.
+              </p>
               <div className="dp-field"><label htmlFor="v-sector">Sector</label>
                 <input id="v-sector" value={form.sector} onChange={set("sector")} placeholder="research · open source" />
                 <span className="dp-hint">Include “research” to file under Research.</span></div>
@@ -436,7 +442,7 @@ export function LaunchVenture() {
 
               <div className="dp-presets" style={{ gridTemplateColumns: "1fr 1fr" }}>
                 {([
-                  [0, "Funded raise", "Ask for an amount", "Hit the target and the money is yours. Miss it and backers take theirs back — nobody is stuck."],
+                  [0, "Refund or Rocket", "Ask for an amount", "Fill the target and it rockets to Uniswap with the raise. Miss it and every backer gets their ETH back: nobody is exit liquidity."],
                   [1, "Open curve", "Trade from second one", "No target, no deadline. It graduates on its own once the curve fills."],
                 ] as const).map(([m, title, line, why]) => (
                   <button type="button" key={m} className={mode === m ? "on" : ""} onClick={() => setMode(m)}>
@@ -585,8 +591,8 @@ export function LaunchVenture() {
 
               {paysDividends && (
                 <>
-                  <p className="dp-sec" style={{ marginTop: 20 }}>Dividends
-                    <span className="dp-agate">{alloc.dividends}% of the fee goes to holders</span></p>
+                  <p className="dp-sec" style={{ marginTop: 20 }}>ETH drip
+                    <span className="dp-agate">{alloc.dividends}% of the fee drips to holders</span></p>
 
                   {STOCK_PAIRS_ENABLED ? (
                     <div className="dp-field"><label htmlFor="v-payout">Paid out in</label>
@@ -609,7 +615,7 @@ export function LaunchVenture() {
 
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 22px" }}>
                     <div className="dp-field">
-                      <label htmlFor="v-minhold">Minimum ${(form.symbol || "TOKEN").toUpperCase()} to earn dividends</label>
+                      <label htmlFor="v-minhold">Minimum ${(form.symbol || "TOKEN").toUpperCase()} to earn the ETH drip</label>
                       <input id="v-minhold" inputMode="numeric" value={minHoldInput}
                         onChange={(e) => setMinHoldInput(e.target.value.replace(/[^0-9]/g, ""))} placeholder="10000" />
                       <span className="dp-hint">
@@ -654,7 +660,7 @@ export function LaunchVenture() {
                   {!open && <><dt>Per-wallet cap</dt><dd>{capPct}% of target</dd></>}
                   <dt>Trading fee</dt><dd>{buyTaxPct}% buy / {sellTaxPct}% sell</dd>
                   <dt>Fee split</dt><dd>dev {alloc.dev} · holders {alloc.dividends} · liquidity {alloc.liquidity} · market-making {alloc.mm}</dd>
-                  <dt>Dividends</dt><dd>{paysDividends
+                  <dt>ETH drip</dt><dd>{paysDividends
                     ? `${alloc.dividends}% of the fee, paid in ${payoutAsset}${minHold > 0
                         ? `, to wallets holding ${minHold.toLocaleString("en-US")}+ $${(form.symbol || "TICK").toUpperCase()}`
                         : ", to every holder"}${divMode === 1 ? ", tiered up to 2x for larger stakes" : ""}`

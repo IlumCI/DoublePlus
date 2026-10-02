@@ -376,7 +376,7 @@ function ContractCard({ v }: { v: VentureT }) {
   });
   const rows: [string, React.ReactNode][] = [
     ["deployed", deployed],
-    ["raise type", v.mode === 1 ? "open curve" : "all-or-nothing"],
+    ["raise type", v.mode === 1 ? "open curve" : "refund or rocket"],
     ["fee policy", `${(v.policy.buyTaxBps / 100).toFixed(2)}% buy · ${(v.policy.sellTaxBps / 100).toFixed(2)}% sell`],
     ["fee split", `${v.policy.devBps / 100} / ${v.policy.dividendBps / 100} / ${v.policy.liquidityBps / 100} / ${v.policy.mmBps / 100}`],
     ["protocol fee", `${feePct(VENTURE.platformFeeBps)}%`],
@@ -649,7 +649,7 @@ function RaisePanel({ v }: { v: VentureT }) {
             : side === "sell"
             ? "Exit any time, at the live curve price."
             : guaranteed
-            ? "All-or-nothing. Miss the target and your curve spend comes back."
+            ? "Refund or rocket. Miss the target and your curve spend comes back."
             : "No target, no deadline. It graduates once the curve fills."}
         </p>
       </div>
@@ -850,7 +850,7 @@ function TradePanel({ v }: { v: VentureT }) {
     try {
       const hash = await wc.writeContract({ address: v.address, abi: ercAbi, functionName: "claim", args: [], chain: wc.chain, account: wc.account });
       await venturePc.waitForTransactionReceipt({ hash });
-      pushToast({ kind: "success", title: "Dividends claimed", txHash: hash });
+      pushToast({ kind: "success", title: "ETH drip claimed", txHash: hash });
       setPending(0n);
     } catch (e) {
       pushToast({ kind: "error", title: "Claim failed", body: errorText(e) });
@@ -916,7 +916,7 @@ function TradePanel({ v }: { v: VentureT }) {
 
         {isConnected && pending > 0n && (
           <div className="dp-chit" style={{ marginTop: 12, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-            <span>your dividends<br /><b style={{ color: "var(--up)", fontFamily: "var(--mono)" }}>{fmtEth(pending, 6)} ETH</b></span>
+            <span>your ETH drip<br /><b style={{ color: "var(--up)", fontFamily: "var(--mono)" }}>{fmtEth(pending, 6)} ETH</b></span>
             <button className="dp-action" style={{ padding: "8px 14px", fontSize: 11 }} disabled={busy} onClick={claim}>Claim</button>
           </div>
         )}

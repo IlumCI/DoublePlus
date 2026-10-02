@@ -103,7 +103,7 @@ export function Desk() {
           await venturePc.waitForTransactionReceipt({ hash });
         }
       }
-      pushToast({ kind: "success", title: "All dividends claimed" });
+      pushToast({ kind: "success", title: "ETH drip claimed" });
     } catch (e) {
       pushToast({ kind: "error", title: "Claim failed", body: errorText(e) });
     } finally { setBusy(false); }

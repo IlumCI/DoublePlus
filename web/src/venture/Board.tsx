@@ -7,6 +7,7 @@ import { usePageMeta } from "./seo";
 import { ago, CardSkeletons, CurveBar, DexBadge, fmtEth, fmtMcap, fmtUsdV, Monogram, pct, short, StatusBadge, useEthUsd } from "./ui";
 import { useVentures } from "./useVentures";
 import { hotTokens, useLiveFeed, type FeedItem } from "./feed";
+import { useCurveStats, type CurveStats } from "./boardStats";
 
 type Filter = "all" | "research" | "startup" | "raising" | "soon" | "graduated" | "dexpaid" | "failed";
 type Sort = "new" | "trending" | "mcap" | "funded";
@@ -35,6 +36,7 @@ export function Board() {
   const dex = useDexProfiles(dexTokens);
   const [params, setParams] = useSearchParams();
   const feed = useLiveFeed();
+  const curve = useCurveStats();
   const hot = useMemo(() => hotTokens(feed.items), [feed.items]);
   // Buy volume per token over the last hour: the trending sort's only input.
   const heat = useMemo(() => {
@@ -103,7 +105,7 @@ export function Board() {
         </div>
         <div className="dp-hero-cta">
           <Link className="dp-action dp-action-xl" to="/launch" viewTransition>Launch a coin</Link>
-          <span className="dp-hero-link">two minutes · one transaction</span>
+          <span className="dp-hero-link">earn up to 4% of every trade, forever</span>
         </div>
       </div>
 
@@ -149,7 +151,7 @@ export function Board() {
       ) : (
         <div className="dp-grid">
           {filter === "all" && !q && <YourCoinCard />}
-          {shown.map((v) => <TokenCard key={v.address} v={v} ethUsd={ethUsd} dex={dex.get(v.address.toLowerCase())} hot={hot.has(v.address.toLowerCase())} record={records.get(v.creator.toLowerCase())} />)}
+          {shown.map((v) => <TokenCard key={v.address} v={v} ethUsd={ethUsd} dex={dex.get(v.address.toLowerCase())} hot={hot.has(v.address.toLowerCase())} record={records.get(v.creator.toLowerCase())} stats={curve.get(v.address.toLowerCase())} />)}
         </div>
       )}
     </div>
@@ -160,9 +162,9 @@ export function Board() {
 function TrustStrip() {
   return (
     <p className="dp-trust">
+      <span>Refund or rocket: miss the target, everyone gets their ETH back</span>
       <span>Liquidity locked at graduation</span>
-      <span>Terms fixed on-chain</span>
-      <span>Raise misses? Curve buyers get their ETH back</span>
+      <span>Dev bags unlock on a public clock</span>
       <Link to="/docs" viewTransition>How it works →</Link>
     </p>
   );
@@ -262,7 +264,7 @@ function YourCoinCard() {
     <Link className="dp-tcard dp-yours" to="/launch" viewTransition>
       <span className="dp-yours-plus" aria-hidden>+</span>
       <h3>Your coin here</h3>
-      <p>Name it, set the target, ship it. Two minutes, one transaction.</p>
+      <p>Set your cut: up to <b>4% of every trade, forever</b>. Two minutes, one transaction.</p>
       <span className="dp-action">Launch a coin</span>
     </Link>
   );
@@ -328,8 +330,8 @@ function GradBurst({ ventures, feed, loaded }: { ventures: Venture[] | null; fee
   );
 }
 
-function TokenCard({ v, ethUsd, dex, hot, record }: {
-  v: Venture; ethUsd: number; dex?: DexProfile; hot: boolean; record?: { launched: number; graduated: number };
+function TokenCard({ v, ethUsd, dex, hot, record, stats }: {
+  v: Venture; ethUsd: number; dex?: DexProfile; hot: boolean; record?: { launched: number; graduated: number }; stats?: CurveStats;
 }) {
   const funded = pct(v.raisedWei, v.targetRaiseWei);
   const left = v.targetRaiseWei > v.raisedWei ? v.targetRaiseWei - v.raisedWei : 0n;
@@ -345,6 +347,7 @@ function TokenCard({ v, ethUsd, dex, hot, record }: {
         <div style={{ minWidth: 0 }}>
           <h3>{v.name}</h3>
           <span className="dp-tick">${v.symbol}{v.meta.sector ? ` · ${v.meta.sector}` : ""}</span>
+          <Socials v={v} />
         </div>
         <span style={{ marginLeft: "auto", alignSelf: "flex-start", display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>
           {hot && <span className="dp-badge dp-hot" title="Bought in the last 15 minutes">🔥 hot</span>}
@@ -371,12 +374,45 @@ function TokenCard({ v, ethUsd, dex, hot, record }: {
         <span>by <b>{short(v.creator)}</b> · {ago(v.createdAt)} ago</span>
         <span>founder takes {(v.founderRaiseBps / 100).toFixed(0)}%</span>
       </div>
+      {stats && <DueDiligence s={stats} />}
       {record && (
         <div className="dp-record-line">
           {record.launched === 1 ? "first launch" : <>{record.launched} launches · <b>{record.graduated} graduated</b></>}
         </div>
       )}
     </Link>
+  );
+}
+
+/** The terminal columns, on the card: buyers, concentration, dev holdings,
+ *  first-minute momentum and a sniper flag. Curve activity only. */
+function DueDiligence({ s }: { s: CurveStats }) {
+  const pctTxt = (n: number) => `${n < 10 ? n.toFixed(1) : n.toFixed(0)}%`;
+  // Concentration means nothing with a handful of buyers; only flag it once
+  // there is a crowd for the top ten to dominate.
+  const concentrated = s.buyers >= 10 && s.top10Pct > 70;
+  return (
+    <div className="dp-dd" title="Measured on the bonding curve">
+      <span title="Unique buyers">👥 {s.buyers}</span>
+      {s.buyers > 0 && <span className={concentrated ? "dp-dd-warn" : ""} title="Top 10 buyers' share of the curve">top10 {pctTxt(s.top10Pct)}</span>}
+      <span className={s.devPct > 10 ? "dp-dd-bad" : s.devPct > 0 ? "dp-dd-warn" : "dp-dd-ok"} title="Creator's own share of the curve">dev {pctTxt(s.devPct)}</span>
+      {s.firstMinBuyers > 0 && <span className="dp-dd-ok" title="Buyers in the first 60 seconds">⚡ {s.firstMinBuyers} in 1st min</span>}
+      {s.sniped && <span className="dp-dd-bad" title="Someone bought in the launch block">sniped</span>}
+    </div>
+  );
+}
+
+/** Which links the project has filled in. Indicators, not links: the whole
+ *  card is already a link, and the coin page lists them properly. */
+function Socials({ v }: { v: Venture }) {
+  const m = v.meta;
+  if (!m.twitter && !m.telegram && !m.website) return null;
+  return (
+    <span className="dp-socials" aria-label="Has links">
+      {m.twitter && <i title="X">𝕏</i>}
+      {m.telegram && <i title="Telegram">TG</i>}
+      {m.website && <i title="Website">WEB</i>}
+    </span>
   );
 }
 

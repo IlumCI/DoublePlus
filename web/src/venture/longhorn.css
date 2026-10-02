@@ -647,3 +647,19 @@ input[type="range"]::-moz-range-thumb { background: var(--gel-blue); border: 1px
   .dp-fresh-dot, .dp-tcard.dp-close, .dp-gradburst { animation: none; }
   .dp-gradburst-sparks { display: none; }
 }
+
+/* ---------- due-diligence row and link indicators on cards ---------- */
+.dp-dd { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.dp-dd span {
+  font: 10.5px var(--mono); color: #b9c8ea; padding: 2px 6px; border-radius: 3px;
+  background: rgb(255 255 255 / .04); border: 1px solid rgb(93 125 181 / .28);
+}
+.dp-dd .dp-dd-ok { color: #8ff0ae; border-color: rgb(79 220 124 / .35); }
+.dp-dd .dp-dd-warn { color: #ffcf6b; border-color: rgb(255 200 80 / .45); }
+.dp-dd .dp-dd-bad { color: #ff8a80; border-color: rgb(255 107 107 / .55); background: rgb(255 80 80 / .08); }
+.dp-socials { display: inline-flex; gap: 3px; margin-left: 6px; vertical-align: 1px; }
+.dp-socials i {
+  font: normal 700 9px/1 var(--body); color: #dce6ff; padding: 2px 4px; border-radius: 2px;
+  background: rgb(110 155 255 / .18); border: 1px solid rgb(110 155 255 / .35);
+}
+.dp-links-push { margin: -4px 0 12px; padding: 8px 10px; border-left: 3px solid var(--up); background: rgb(79 220 124 / .06); color: #c9f5d6 !important; }
