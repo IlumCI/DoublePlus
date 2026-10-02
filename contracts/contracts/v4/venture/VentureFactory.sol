@@ -676,12 +676,14 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         }
         c.finalized = true;
 
-        // 1) Founder's declared cut of the raise, straight to the founder.
+        // 1) Founder's declared cut of the raise, credited to the founder's
+        //    fee balance and pulled with withdrawFees(). It used to be pushed
+        //    here, so a creator contract that rejects ETH made finalize()
+        //    revert forever, and abort() is closed once the target is
+        //    crossed: every backer's escrow stuck with no exit. Crediting it
+        //    means no recipient can block graduation.
         uint256 founderCut = (c.raisedWei * c.founderRaiseBps) / BPS;
-        if (founderCut > 0) {
-            (bool ok,) = payable(l.creator).call{value: founderCut}("");
-            if (!ok) revert EthTransferFailed();
-        }
+        if (founderCut > 0) _accrue(token, l.creator, founderCut);
 
         // 2) Remaining ETH -> pair token (liquidity side).
         uint256 poolEth = c.raisedWei - founderCut;

@@ -55,8 +55,8 @@ export function Docs() {
 
           <H id="graduate">3 · Graduate</H>
           <p>
-            When the target is reached, anyone can trigger graduation. The founder's declared cut pays out as
-            funding and everything else — the remaining supply and the remaining ETH — becomes protocol-managed
+            When the target is reached, anyone can trigger graduation. The founder's declared cut is credited to
+            them as funding, withdrawn from their portfolio whenever they like, and everything else — the remaining supply and the remaining ETH — becomes protocol-managed
             liquidity in a Uniswap V4 pool. Trading opens immediately, the curve closes forever, and the
             liquidity stays locked.
           </p>

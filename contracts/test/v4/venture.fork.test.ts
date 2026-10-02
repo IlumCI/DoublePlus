@@ -115,12 +115,15 @@ describe("Venture bonding-curve launchpad (fork)", function () {
     expect(st.remainingWhole).to.equal(0n);
     expect(st.raisedWei).to.be.closeTo(TARGET, ethers.parseEther("0.001"));
 
-    // Graduation: founder receives their declared 30% cut, pool goes live,
-    // vesting clock starts.
-    const founderEthBefore = await ethers.provider.getBalance(founder.address);
+    // Graduation: founder's declared 30% cut is credited (pulled, never
+    // pushed), pool goes live, vesting clock starts.
     await (await factory.finalize(coin)).wait();
-    const founderCut = (await ethers.provider.getBalance(founder.address)) - founderEthBefore;
+    const founderCut = await factory.feesAccrued(founder.address);
     expect(founderCut).to.be.closeTo((st.raisedWei * 3000n) / 10000n, ethers.parseEther("0.001"));
+    const founderEthBefore = await ethers.provider.getBalance(founder.address);
+    const wr = await (await factory.connect(founder).withdrawFees()).wait();
+    expect((await ethers.provider.getBalance(founder.address)) - founderEthBefore + wr!.gasUsed * wr!.gasPrice)
+      .to.equal(founderCut);
     expect((await factory.listings(coin)).poolId).to.not.equal(ethers.ZeroHash);
     await expect(factory.connect(whale).buy(coin, { value: 10n ** 15n })).to.be.revertedWithCustomError(
       factory, "CurveClosed",
@@ -195,6 +198,41 @@ describe("Venture bonding-curve launchpad (fork)", function () {
     expect(claimable).to.be.closeTo(10n ** 26n / 2n, 10n ** 22n);
     await (await vesting.connect(founder).claim()).wait();
     expect(await erc.balanceOf(founder.address)).to.be.greaterThanOrEqual(claimable);
+  });
+
+  it("graduates even when the creator cannot receive ETH", async () => {
+    // The founder cut used to be pushed inside finalize(). A creator contract
+    // with no receive() made finalize revert forever, and abort() is closed
+    // once the target is crossed, so every backer's escrow was stranded.
+    const [admin, , , whale, , treasury] = await ethers.getSigners();
+    const { factory } = await deployAll(admin, treasury);
+    const rejecter = await (await ethers.getContractFactory("EthRejecter")).deploy();
+    await rejecter.waitForDeployment();
+    const creator = await rejecter.getAddress();
+    const params = {
+      name: "Rejects", symbol: "REJ", metadataURI: "", pair: WETH,
+      buyTaxBps: 200, sellTaxBps: 400, devWallet: ethers.ZeroAddress,
+      devBps: 2500, dividendBps: 2500, liquidityBps: 2500, mmBps: 2500,
+      ethUsdPrice8: ETH_USD_8, targetRaiseWei: TARGET, raiseDurationSecs: 3 * DAY,
+      maxBuyWei: TARGET, founderRaiseBps: 3000, founderSupplyBps: 0,
+      vestingSecs: 0, mode: 0, minHoldForDividends: 0, dividendMode: 0, v3Path: "0x",
+    };
+    const factoryAddr = await factory.getAddress();
+    // Vanity is off in this suite, so any salt is accepted.
+    await (await rejecter.exec(factoryAddr, factory.interface.encodeFunctionData("launch", [params, ethers.ZeroHash]))).wait();
+    const coin = await factory.allTokens((await factory.totalTokens()) - 1n);
+    expect((await factory.listings(coin)).creator).to.equal(creator);
+
+    await (await factory.connect(whale).buy(coin, { value: ethers.parseEther("2.1") })).wait();
+    await (await factory.finalize(coin)).wait();
+    expect((await factory.listings(coin)).poolId).to.not.equal(ethers.ZeroHash);
+
+    const raised = (await factory.curveState(coin)).raisedWei;
+    expect(await factory.feesAccrued(creator)).to.equal((raised * 3000n) / 10000n);
+    // Only the creator's own withdrawal can fail, and it fails on them alone.
+    await expect(
+      rejecter.exec(factoryAddr, factory.interface.encodeFunctionData("withdrawFees")),
+    ).to.be.revertedWithCustomError(factory, "EthTransferFailed");
   });
 
   it("launches a stock-paired venture: dividends paid in the tokenized stock", async function () {

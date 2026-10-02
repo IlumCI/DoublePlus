@@ -726,7 +726,7 @@ export function LaunchVenture() {
                   <span>of every curve exit, plus your cut of the pool fee once it graduates</span></div>
               ) : (
                 <div><b className="dp-up">{cutEth > 0 ? `${cutEth.toFixed(4)} ETH` : "—"}</b>
-                  <span>your {founderCut}% of the {target || "—"} ETH backers put in, paid at graduation</span></div>
+                  <span>your {founderCut}% of the {target || "—"} ETH backers put in, yours to withdraw at graduation</span></div>
               )}
               <div><b className="dp-up">{(avgTax * alloc.dev / 100).toFixed(2)}%</b><span>of every trade, forever</span></div>
               <div><b className="dp-up">{founderStake}%</b><span>of supply, vesting {vestDays} days</span></div>

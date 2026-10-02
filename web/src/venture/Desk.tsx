@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { useWalletClient } from "wagmi";
 
 import {
-  ercAbi, loadReferralEarnings, loadVentures, updatesAbi, VENTURE, venturePc, vestingAbi, type Venture,
+  ercAbi, factoryAbi, loadReferralEarnings, loadVentures, updatesAbi, VENTURE, venturePc, vestingAbi, type Venture,
 } from "./client";
 import { fmtEth, fmtTok, pct, short } from "./ui";
 import { usePageMeta } from "./seo";
@@ -28,6 +28,10 @@ export function Desk() {
   const pushToast = useUi((s) => s.pushToast);
   const [rows, setRows] = useState<Holding[] | null>(null);
   const [refEarned, setRefEarned] = useState<Map<string, bigint>>(new Map());
+  // ETH credited to this wallet inside the factory: a founder's cut of a
+  // graduated raise, referral shares of curve fees, and an Open-mode creator's
+  // share of curve fees. Nothing pushes it; it waits for withdrawFees().
+  const [factoryOwed, setFactoryOwed] = useState(0n);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -53,6 +57,8 @@ export function Desk() {
           }
         }
         if (live) setRows(out);
+        const owed = (await venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "feesAccrued", args: [me] }).catch(() => 0n)) as bigint;
+        if (live) setFactoryOwed(owed);
         const earned = await loadReferralEarnings(me);
         if (live) setRefEarned(earned);
       } catch {
@@ -100,6 +106,18 @@ export function Desk() {
       pushToast({ kind: "success", title: "All dividends claimed" });
     } catch (e) {
       pushToast({ kind: "error", title: "Claim failed", body: errorText(e) });
+    } finally { setBusy(false); }
+  };
+
+  const withdrawOwed = async () => {
+    if (!wc) return;
+    setBusy(true);
+    try {
+      const hash = await wc.writeContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "withdrawFees", args: [], chain: wc.chain, account: wc.account });
+      await venturePc.waitForTransactionReceipt({ hash });
+      pushToast({ kind: "success", title: `${fmtEth(factoryOwed, 6)} ETH withdrawn`, txHash: hash });
+    } catch (e) {
+      pushToast({ kind: "error", title: "Withdraw failed", body: errorText(e) });
     } finally { setBusy(false); }
   };
 
@@ -164,6 +182,18 @@ export function Desk() {
           <p className="dp-foot dp-agate">{(rows ?? []).filter((r) => r.spent > 0n).length} raises backed</p>
         </div>
       </div>
+
+      {factoryOwed > 0n && (
+        <div className="dp-form-sheet" style={{ marginTop: 16 }}>
+          <p className="dp-sec">Ready to withdraw <span className="dp-agate">held for you by the launchpad</span></p>
+          <p style={{ margin: "0 0 12px", fontSize: 13, color: "var(--dim)", maxWidth: "62ch" }}>
+            <b style={{ fontSize: 20, color: "var(--text)" }}>{fmtEth(factoryOwed, 6)} ETH</b>
+            {" "}— your cut of graduated raises and your share of curve fees. It is credited, not sent,
+            so no wallet can hold up a graduation. Only this wallet can withdraw it.
+          </p>
+          <button className="dp-action" onClick={withdrawOwed} disabled={busy}>Withdraw</button>
+        </div>
+      )}
 
       <div className="dp-two-col" style={{ marginTop: 16, alignItems: "start" }}>
         <div className="dp-form-sheet">
