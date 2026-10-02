@@ -251,18 +251,13 @@ function WalletButton({ className }: { className: string }) {
   );
 }
 
-/** The taskbar: Start, the running window, and the tray (wallet, clock). */
+/** The taskbar: Start, the running window, and the tray (wallet, network). No clock. */
 function Taskbar({ title, minimized, onTask }: { title: string; minimized: boolean; onTask: () => void }) {
   const [open, setOpen] = useState(false);
   const { pathname } = useLocation();
   const ref = useRef<HTMLDivElement>(null);
-  const [time, setTime] = useState(() => new Date());
 
   useEffect(() => { setOpen(false); }, [pathname]);
-  useEffect(() => {
-    const id = setInterval(() => setTime(new Date()), 15_000);
-    return () => clearInterval(id);
-  }, []);
   useEffect(() => {
     if (!open) return;
     const away = (e: Event) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
@@ -289,7 +284,6 @@ function Taskbar({ title, minimized, onTask }: { title: string; minimized: boole
       <div className="lh-tray">
         <WalletButton className="lh-tray-wallet" />
         <span className="lh-tray-net" title={env.chainName}><i className="lh-dot" /></span>
-        <time className="lh-tray-clock">{time.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>
       </div>
     </div>
   );

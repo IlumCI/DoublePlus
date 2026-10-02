@@ -247,7 +247,6 @@
 .lh-tile > header a::after { content: " ›"; color: #8ba8dd; }
 .lh-tile > header a:hover { color: #fff; }
 .lh-tile-body { padding: 8px 10px 10px; font: 12.5px var(--body); color: var(--text); }
-.lh-clock { font: 300 32px/1.05 var(--body); color: #fff; text-shadow: 0 0 14px rgb(140 190 255 / .45); }
 .lh-count { font: 600 17px/1.3 var(--mono); color: #fff; margin: 2px 0; }
 .lh-sub { font-size: 11.5px; color: #9fb0d8; }
 .lh-kv { display: flex; justify-content: space-between; padding: 2px 0; color: #b9c8ea; }
@@ -290,7 +289,6 @@
   background: rgb(4 8 24 / .6); border: 1px solid #000; border-radius: 3px;
   box-shadow: inset 0 0 0 1px rgb(59 80 151 / .7);
 }
-.lh-tray-clock { font: 12.5px var(--body); color: #fff; padding: 0 6px; }
 .lh-tray-net { display: grid; place-items: center; }
 
 .lh-wallet {

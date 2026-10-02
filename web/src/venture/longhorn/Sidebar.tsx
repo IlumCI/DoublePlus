@@ -30,9 +30,9 @@ function Tile({ title, children, to }: { title: string; children: React.ReactNod
 }
 
 /**
- * Longhorn's Sidebar, reissued as market gadgets: the clock tile keeps its
- * place, the slideshow and RSS tiles become the hottest and newest raises,
- * and the sync tile counts down to the next rewards epoch.
+ * Longhorn's Sidebar, reissued as market gadgets: the slideshow and RSS
+ * tiles become the hottest and newest raises, and the sync tile counts down
+ * to the next rewards epoch. No clock: the floor has no time of day.
  */
 export function Sidebar({ ventures }: { ventures: Venture[] | null }) {
   const now = useTick();
@@ -40,15 +40,9 @@ export function Sidebar({ ventures }: { ventures: Venture[] | null }) {
   const live = (ventures ?? []).filter((v) => v.phase === "raising");
   const hot = [...live].sort((a, b) => pct(b.raisedWei, b.targetRaiseWei) - pct(a.raisedWei, a.targetRaiseWei)).slice(0, 4);
   const fresh = [...(ventures ?? [])].sort((a, b) => b.createdAt - a.createdAt).slice(0, 4);
-  const d = new Date(now);
 
   return (
     <aside className="lh-sidebar" aria-label="Market sidebar">
-      <Tile title="Clock">
-        <div className="lh-clock">{d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
-        <div className="lh-sub">{d.toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" })}</div>
-      </Tile>
-
       <Tile title="Market">
         <div className="lh-kv"><span>ETH</span><b>{ethUsd > 0 ? `$${ethUsd.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "—"}</b></div>
         <div className="lh-kv"><span>Live raises</span><b>{ventures ? live.length : "—"}</b></div>
