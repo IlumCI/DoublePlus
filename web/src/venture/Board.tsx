@@ -6,6 +6,7 @@ import { useDexProfiles, type DexProfile } from "../lib/dexscreener";
 import { usePageMeta } from "./seo";
 import { ago, CardSkeletons, CurveBar, DexBadge, fmtEth, fmtMcap, fmtUsdV, Monogram, pct, short, StatusBadge, useEthUsd } from "./ui";
 import { useVentures } from "./useVentures";
+import { hotTokens, useLiveFeed, type FeedItem } from "./feed";
 
 type Filter = "all" | "research" | "startup" | "raising" | "soon" | "graduated" | "dexpaid" | "failed";
 type Sort = "new" | "mcap" | "funded";
@@ -30,6 +31,8 @@ export function Board() {
     [ventures]);
   const dex = useDexProfiles(dexTokens);
   const [params, setParams] = useSearchParams();
+  const feed = useLiveFeed();
+  const hot = useMemo(() => hotTokens(feed.items), [feed.items]);
   usePageMeta(null);
 
   const filter = (params.get("show") as Filter) || "all";
@@ -68,17 +71,22 @@ export function Board() {
     <div className="dp-shell" style={{ paddingBottom: 60 }}>
       <div className="dp-hero">
         <div>
-          <h1>Back an idea. Own a stake in its market.</h1>
-          <p className="dp-sub">Fund startups and research at day zero. Keep earning after the raise closes.</p>
+          <h1>Launch a coin. Fill the curve. <span className="dp-hl">Hit Uniswap.</span></h1>
+          <p className="dp-sub">
+            Every buy pushes the price up the curve. Fill it and the coin graduates into its own Uniswap pool,
+            and every holder gets paid ETH on every trade after that.
+          </p>
         </div>
         <div className="dp-hero-cta">
-          <Link className="dp-action" to="/launch" viewTransition>Launch your idea</Link>
-          <Link className="dp-mono dp-hero-link" to="/docs" viewTransition>See how it works →</Link>
+          <Link className="dp-action dp-action-xl" to="/launch" viewTransition>Launch a coin</Link>
+          <span className="dp-hero-link">two minutes · one transaction</span>
         </div>
       </div>
 
-      <Edge />
-      <Proof ventures={ventures} ethUsd={ethUsd} />
+      <LiveTape ventures={ventures} feed={feed.items} loaded={feed.loaded} />
+      <King ventures={ventures} hot={hot} />
+      <Proof ventures={ventures} ethUsd={ethUsd} feed={feed.items} />
+      <TrustStrip />
 
       <div className="dp-board-search">
         <input value={q} onChange={(e) => set("q", e.target.value, "")} placeholder="Search projects…" aria-label="Search projects" />
@@ -113,53 +121,128 @@ export function Board() {
       ) : shown.length === 0 ? (
         <EmptyBoard any={ventures.length > 0} onClear={() => setParams(new URLSearchParams(), { replace: true })} />
       ) : (
-        <div className="dp-grid">{shown.map((v) => <TokenCard key={v.address} v={v} ethUsd={ethUsd} dex={dex.get(v.address.toLowerCase())} />)}</div>
+        <div className="dp-grid">
+          {filter === "all" && !q && <YourCoinCard />}
+          {shown.map((v) => <TokenCard key={v.address} v={v} ethUsd={ethUsd} dex={dex.get(v.address.toLowerCase())} hot={hot.has(v.address.toLowerCase())} />)}
+        </div>
       )}
     </div>
   );
 }
 
-/** The wedge: what you get here that a meme launchpad cannot give you. */
-function Edge() {
-  const rows: [string, string, string][] = [
-    ["\u25A4", "Terms locked on-chain", "Set at launch. Never editable."],
-    ["\u21BA", "Your curve spend back if it misses", "All-or-nothing. Founder stake burns."],
-    ["\u25C9", "Holders paid every trade", "In ETH, forever. Liquidity locked."],
-  ];
+/** The guarantees, kept to one quiet line: the board leads with the action. */
+function TrustStrip() {
   return (
-    <div className="dp-edge">
-      {rows.map(([icon, h, b]) => (
-        <div className="dp-edge-item" key={h}>
-          <span className="dp-edge-icon" aria-hidden>{icon}</span>
-          <div><h3>{h}</h3><p>{b}</p></div>
-        </div>
-      ))}
+    <p className="dp-trust">
+      <span>Liquidity locked at graduation</span>
+      <span>Terms fixed on-chain</span>
+      <span>Raise misses? Curve buyers get their ETH back</span>
+      <Link to="/docs" viewTransition>How it works →</Link>
+    </p>
+  );
+}
+
+/** Tape amounts: small trades keep two significant digits instead of rounding to 0. */
+function tapeEth(wei: bigint): string {
+  const n = Number(wei) / 1e18;
+  if (n >= 1) return n.toFixed(2);
+  if (n >= 0.001) return n.toFixed(3);
+  return n > 0 ? n.toPrecision(2) : "0";
+}
+
+const VERB: Record<FeedItem["kind"], string> = { buy: "bought", sell: "sold", launch: "launched", graduate: "graduated" };
+
+/** The tape: the latest real launches, buys, sells and graduations. The
+ *  newest entry flashes in; a quiet chain shows a quiet tape. */
+function LiveTape({ ventures, feed, loaded }: { ventures: Venture[] | null; feed: FeedItem[]; loaded: boolean }) {
+  const bySym = useMemo(() => new Map((ventures ?? []).map((v) => [v.address.toLowerCase(), v])), [ventures]);
+  const latest = feed[0]?.key;
+  if (!loaded) return <div className="dp-tape dp-tape-wait"><span className="dp-tape-live">LIVE</span><span className="dp-tape-quiet">tuning in…</span></div>;
+  if (feed.length === 0) return null;
+  return (
+    <div className="dp-tape" aria-label="Live activity">
+      <span className="dp-tape-live">LIVE</span>
+      <div className="dp-tape-row">
+        {feed.slice(0, 10).map((i) => {
+          const v = bySym.get(i.token.toLowerCase());
+          if (!v) return null;
+          return (
+            <Link key={i.key} to={`/venture/${v.address}`} viewTransition
+              className={`dp-tape-item dp-t-${i.kind}${i.key === latest ? " dp-tape-new" : ""}`}>
+              {i.who ? <span className="dp-tape-who">{short(i.who)}</span> : null}
+              <span>{VERB[i.kind]}</span>
+              {i.kind === "buy" || i.kind === "sell" ? <b>{tapeEth(i.eth)} ETH</b> : null}
+              <span className="dp-tape-sym">${v.symbol}</span>
+              <span className="dp-tape-ago">{ago(i.ts)}</span>
+            </Link>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
-/** Live totals only. The guarantee itself is the Edge band's second row;
- *  stating it again here was the same sentence twice, 100px apart. */
-function Proof({ ventures, ethUsd }: { ventures: Venture[] | null; ethUsd: number }) {
+/** King of the hill: the live raise closest to graduation, shown big. */
+function King({ ventures, hot }: { ventures: Venture[] | null; hot: Set<string> }) {
+  const king = useMemo(() => {
+    const live = (ventures ?? []).filter((v) => v.phase === "raising" && v.raisedWei > 0n);
+    return live.sort((a, b) => pct(b.raisedWei, b.targetRaiseWei) - pct(a.raisedWei, a.targetRaiseWei))[0];
+  }, [ventures]);
+  if (!king) return null;
+  const funded = pct(king.raisedWei, king.targetRaiseWei);
+  const left = king.targetRaiseWei > king.raisedWei ? king.targetRaiseWei - king.raisedWei : 0n;
+  return (
+    <Link className="dp-throne" to={`/venture/${king.address}`} viewTransition>
+      <span className="dp-crown" aria-hidden>👑</span>
+      <Monogram v={king} size="lg" />
+      <div className="dp-throne-main">
+        <div className="dp-throne-tag">King of the hill{hot.has(king.address.toLowerCase()) ? " · 🔥 buying now" : ""}</div>
+        <h2>{king.name} <span className="dp-tick">${king.symbol}</span></h2>
+        <CurveBar v={king} />
+        <div className="dp-curvelabel">
+          <span><b>{funded.toFixed(0)}%</b> to graduation</span>
+          <span>{fmtEth(left, 3)} ETH left to fill</span>
+        </div>
+      </div>
+      <span className="dp-action dp-throne-cta">Ape in →</span>
+    </Link>
+  );
+}
+
+/** Live totals, all read from the chain. */
+function Proof({ ventures, ethUsd, feed }: { ventures: Venture[] | null; ethUsd: number; feed: FeedItem[] }) {
   if (!ventures || ventures.length === 0) return null;
   const raised = ventures.reduce((a, v) => a + v.raisedWei, 0n);
   const trading = ventures.filter((v) => v.phase === "graduated").length;
   const raisedEth = Number(raised) / 1e18;
+  const weekAgo = Date.now() / 1000 - 7 * 86_400;
+  const launches = ventures.filter((v) => v.createdAt >= weekAgo).length;
+  const dayAgo = Date.now() / 1000 - 86_400;
+  const vol = feed.filter((i) => (i.kind === "buy" || i.kind === "sell") && i.ts >= dayAgo).reduce((a, i) => a + i.eth, 0n);
+  const usd = (wei: bigint) => (ethUsd > 0 ? fmtUsdV((Number(wei) / 1e18) * ethUsd) : `${fmtEth(wei, 3)} ETH`);
   return (
     <div className="dp-proof">
-      <span className="dp-item">
-        <span className="dp-n">{ethUsd > 0 ? fmtUsdV(raisedEth * ethUsd) : `${fmtEth(raised, 3)} ETH`}</span>
-        <span className="dp-l">committed to projects</span>
-      </span>
-      <span className="dp-item">
-        <span className="dp-n">{trading}</span>
-        <span className="dp-l">{trading === 1 ? "project trading" : "projects trading"}</span>
-      </span>
+      <span className="dp-item"><span className="dp-n">{ethUsd > 0 ? fmtUsdV(raisedEth * ethUsd) : `${fmtEth(raised, 3)} ETH`}</span><span className="dp-l">committed</span></span>
+      {vol > 0n && <span className="dp-item"><span className="dp-n">{usd(vol)}</span><span className="dp-l">traded today</span></span>}
+      <span className="dp-item"><span className="dp-n">{launches}</span><span className="dp-l">{launches === 1 ? "launch" : "launches"} this week</span></span>
+      <span className="dp-item"><span className="dp-n">{trading}</span><span className="dp-l">on Uniswap</span></span>
     </div>
   );
 }
 
-function TokenCard({ v, ethUsd, dex }: { v: Venture; ethUsd: number; dex?: DexProfile }) {
+/** The empty seat at the front of the board. */
+function YourCoinCard() {
+  return (
+    <Link className="dp-tcard dp-yours" to="/launch" viewTransition>
+      <span className="dp-yours-plus" aria-hidden>+</span>
+      <h3>Your coin here</h3>
+      <p>Name it, set the target, ship it. Two minutes, one transaction.</p>
+      <span className="dp-action">Launch a coin</span>
+    </Link>
+  );
+}
+
+function TokenCard({ v, ethUsd, dex, hot }: { v: Venture; ethUsd: number; dex?: DexProfile; hot: boolean }) {
   const funded = pct(v.raisedWei, v.targetRaiseWei);
   const pitch = v.meta.pitch || v.meta.description || "";
   const flash = useFlashOnChange(v.raisedWei);
@@ -173,6 +256,8 @@ function TokenCard({ v, ethUsd, dex }: { v: Venture; ethUsd: number; dex?: DexPr
           <span className="dp-tick">${v.symbol}{v.meta.sector ? ` · ${v.meta.sector}` : ""}</span>
         </div>
         <span style={{ marginLeft: "auto", alignSelf: "flex-start", display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          {hot && <span className="dp-badge dp-hot" title="Bought in the last 15 minutes">🔥 hot</span>}
+          {Date.now() / 1000 - v.createdAt < 86_400 && <span className="dp-badge dp-new">new</span>}
           {dex && <DexBadge profile={dex} />}
           <StatusBadge v={v} />
         </span>
