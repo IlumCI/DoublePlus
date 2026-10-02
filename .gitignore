@@ -20,3 +20,9 @@ contracts/deployments/localnet.json
 
 # Flywheel keeper dry runs (DRY_RUN=1); the real epoch-<n>.json manifests are published.
 web/public/rewards/venture/*.dryrun.json
+
+# API worker local secrets (DB password, wrangler dev vars)
+api/.secrets.local
+api/.dev.vars
+api/node_modules/
+api/.wrangler/

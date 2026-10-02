@@ -674,3 +674,26 @@ input[type="range"]::-moz-range-thumb { background: var(--gel-blue); border: 1px
 .dp-share .dp-share-x { color: #fff; background: linear-gradient(#3a3a3a, #111 50%, #000 51%, #1a1a1a); }
 .dp-share-note { font: 12px var(--body); color: var(--up); }
 .dp-share-tip { flex-basis: 100%; font-size: 11px; color: var(--faint); }
+
+/* ---------- token chat ---------- */
+.dp-chat { padding: 12px 0; }
+.dp-chat-compose textarea {
+  width: 100%; resize: vertical; min-height: 70px; padding: 9px 11px; font: 13.5px var(--body); color: var(--text);
+  background: #070b18; border: 1px solid #33467a; border-radius: 4px; box-shadow: inset 0 1px 2px rgb(0 0 0 / .6);
+}
+.dp-chat-compose textarea:focus { outline: none; border-color: #6fa8ff; box-shadow: 0 0 0 1px #6fa8ff; }
+.dp-chat-row { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+.dp-chat-row .dp-action { margin-left: auto; padding: 7px 16px !important; font-size: 13px !important; }
+.dp-chat-left { font: 11px var(--mono); color: var(--faint); }
+.dp-chat-over { font: 11px var(--mono); color: var(--down); }
+.dp-chat-note { font-size: 12px; color: #ffcf6b; }
+.dp-chat-hint { margin: 6px 0 0; font-size: 11px; color: var(--faint); }
+.dp-chat-empty { color: var(--faint); font-size: 13px; padding: 18px 0; }
+.dp-chat-list { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 8px; }
+.dp-chat-list li { padding: 9px 12px; border-radius: 5px; background: rgb(255 255 255 / .03); border: 1px solid rgb(93 125 181 / .22); }
+.dp-chat-list p { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13.5px; color: var(--text); }
+.dp-chat-meta { display: flex; align-items: center; gap: 7px; font-size: 11.5px; }
+.dp-chat-meta b { color: #c9d6f5; font-weight: 600; }
+.dp-chat-ago { color: var(--faint); margin-left: auto; }
+.dp-badge.dp-chat-dev { color: #ffd66b; border-color: #c9a227; background: rgb(240 200 80 / .1); }
+.dp-badge.dp-chat-holder { color: #8ff0ae; border-color: #3fae5a; background: rgb(79 220 124 / .1); }

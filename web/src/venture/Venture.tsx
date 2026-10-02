@@ -15,6 +15,7 @@ import { profileLinks, useDexProfile, type DexProfile } from "../lib/dexscreener
 import { PriceChart, TradeTape, usePoolTrades } from "./Chart";
 import { refLink, storedRef } from "./referral";
 import { ShareBar } from "./share";
+import { Comments, COMMENTS_ENABLED } from "./comments";
 import { Donut, Legend, Ring, SplitBar, type Slice } from "./charts";
 import { usePageMeta } from "./seo";
 import { ago, BuySellStrength, Change, changePct, CopyButton, Countdown, CurveBar, Delta, DexBadge, fmtEth, fmtMcap,
@@ -23,7 +24,7 @@ import { useWallet, errorText } from "../lib/useWallet";
 import { useUi } from "../store";
 import { env } from "../lib/env";
 
-type Tab = "project" | "updates" | "trades" | "backers" | "terms";
+type Tab = "project" | "chat" | "updates" | "trades" | "backers" | "terms";
 
 export function VenturePage() {
   const { address } = useParams<{ address: string }>();
@@ -67,6 +68,7 @@ function VentureBody({ v, fills, ethUsd }: { v: VentureT; fills: Fill[]; ethUsd:
 
   const TABS: [Tab, string][] = [
     ["project", "The project"],
+    ...(COMMENTS_ENABLED ? ([["chat", "Chat"]] as [Tab, string][]) : []),
     ["updates", "Updates"],
     ...(v.phase === "graduated" ? ([["trades", "Trades"]] as [Tab, string][]) : []),
     ["backers", "Backers"],
@@ -118,6 +120,7 @@ function VentureBody({ v, fills, ethUsd }: { v: VentureT; fills: Fill[]; ethUsd:
           </div>
 
           <div className="dp-tabpane" hidden={tab !== "project"}><ProjectPane v={v} /></div>
+          {COMMENTS_ENABLED && <div className="dp-tabpane" hidden={tab !== "chat"}><Comments v={v} /></div>}
           <div className="dp-tabpane" hidden={tab !== "updates"}><UpdatesPane v={v} /></div>
           {v.phase === "graduated" && <div className="dp-tabpane" hidden={tab !== "trades"}><TradeTape v={v} trades={trades} /></div>}
           <div className="dp-tabpane" hidden={tab !== "backers"}><BackersPane v={v} fills={fills} /></div>
