@@ -1,0 +1,319 @@
+/* ============================================================
+   doubleplus.fun — Aero skin (Windows XP × Vista)
+
+   A paint job over venture.css, loaded after it. It remaps the
+   colour tokens and re-dresses surfaces only: no selector here
+   changes layout, display, ordering or interaction, so the
+   launchpad behaves exactly as it does unskinned. Delete the
+   import in VentureApp.tsx and the original look returns.
+
+   Grammar:
+   - desktop:   2000s nature wallpaper behind everything
+   - taskbar:   Vista black glass (the topbar)
+   - windows:   white client area inside a frosted Aero frame
+   - buttons:   XP green "Start" gel for create/buy, Aero blue
+                gel for everything else, red gel for sell
+   - progress:  the striped green Vista progress bar
+   ============================================================ */
+
+:root[data-brand="venture"] {
+  /* light Aero palette. --bg doubles as "text on an accent", so it
+     stays light; --paper is the heading/selected ink, so it is the
+     Vista title blue rather than paper cream. */
+  --bg:      #f4f8fc;
+  --panel:   #ffffff;
+  --panel-2: #e8f1fb;   /* Vista hover/selection wash */
+  --line:    #cfdbe8;
+  --line-2:  #97b1cc;
+  --text:    #1b2430;
+  --dim:     #46576b;
+  --faint:   #5d6d7f;   /* 5.3:1 on white */
+  --up:      #23802a;   /* XP green, darkened to 4.9:1 on white */
+  --up-dim:  #6fb76f;
+  --down:    #c0291d;
+  --paper:   #1c4e8f;   /* Vista heading blue */
+  --violet:  #6a3d9e;
+  --red:     #c0291d;
+  --blue:    #2a6fc9;
+  --buy:     #3c9c26;
+  --sell:    #cf3b2c;
+
+  --display: "Segoe UI", "Segoe UI Variable", Tahoma, "Frutiger", "Helvetica Neue", Arial, sans-serif;
+  --body:    "Segoe UI", "Segoe UI Variable", Tahoma, "Frutiger", "Helvetica Neue", Arial, sans-serif;
+  --mono:    Consolas, "Lucida Console", "Fragment Mono", "Courier New", monospace;
+  --type:    var(--mono);
+
+  /* Aero building blocks */
+  --glass:        rgb(214 232 248 / .55);
+  --glass-edge:   rgb(255 255 255 / .75);
+  --glass-shadow: 0 0 0 1px rgb(28 52 84 / .45), 0 10px 30px rgb(8 24 48 / .35);
+  --gel-blue:  linear-gradient(#f2f8fe 0%, #d6e8fa 49%, #bcd8f5 50%, #cfe4fa 100%);
+  --gel-green: linear-gradient(#5fc94a 0%, #3c9c26 48%, #2f8a1c 52%, #47b02f 100%);
+  --gel-red:   linear-gradient(#ee7a6c 0%, #cf3b2c 48%, #b52a1d 52%, #d4483a 100%);
+  --taskbar:   linear-gradient(rgb(70 78 92 / .92) 0%, rgb(22 26 34 / .94) 50%, rgb(6 8 12 / .96) 51%, rgb(20 24 32 / .94) 100%);
+  --wall: url("/wallpapers/hills.webp");
+
+  color-scheme: light;
+}
+
+/* ---------- desktop ---------- */
+/* Pages pick their own wallpaper by what they render; :has() keeps
+   that out of the components. The legal page renders no <main> and
+   stays a plain white document. */
+[data-brand="venture"] body:has(.dp-create-grid, .dp-wizard) { --wall: url("/wallpapers/aurora.webp"); }
+[data-brand="venture"] body:has(.dp-coingrid)                 { --wall: url("/wallpapers/lake.webp"); }
+[data-brand="venture"] body:has(.dp-epoch)                    { --wall: url("/wallpapers/beach.webp"); }
+[data-brand="venture"] body:has(.dp-doc-grid)                 { --wall: url("/wallpapers/dew.webp"); }
+
+[data-brand="venture"] body {
+  background: #fff;
+  -webkit-font-smoothing: antialiased;
+}
+[data-brand="venture"] body:has(main) {
+  background: var(--wall) center / cover fixed no-repeat, #5a8fc7;
+}
+[data-brand="venture"] ::selection { background: #3399ff; color: #fff; }
+
+[data-brand="venture"] h1,
+[data-brand="venture"] h2,
+[data-brand="venture"] h3 { font-weight: 400; letter-spacing: 0; }
+.dp-page-title, .dp-boardhead h1 { color: #1e3287; font-weight: 300; }
+
+/* the content window: frosted frame, white client area */
+[data-brand="venture"] main {
+  /* the shell is a flex column and main is a size container, so it
+     needs an explicit width: auto margins alone shrink it to nothing */
+  width: min(calc(100% - 24px), calc(var(--shell) + 28px));
+  align-self: center;
+  margin: 22px auto 0;
+  padding: 6px 6px 18px;
+  background: linear-gradient(rgb(255 255 255 / .94), rgb(250 252 255 / .92));
+  border-radius: 8px;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / .6) inset, var(--glass-shadow);
+  backdrop-filter: blur(16px) saturate(1.3);
+  -webkit-backdrop-filter: blur(16px) saturate(1.3);
+}
+@media (max-width: 700px) {
+  [data-brand="venture"] main { width: calc(100% - 16px); margin: 10px auto 0; border-radius: 6px; }
+}
+
+/* ---------- taskbar (topbar) ---------- */
+.dp-topbar {
+  background: var(--taskbar);
+  border-bottom: 1px solid rgb(0 0 0 / .8);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .25), 0 2px 10px rgb(0 0 0 / .25);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.dp-brand { color: #fff; font-weight: 600; text-shadow: 0 0 10px rgb(120 190 255 / .55), 0 1px 1px rgb(0 0 0 / .6); }
+.dp-brand sub { color: #9fe28c; }
+.dp-brand:hover { color: #e6f4ff; }
+.dp-topnav a { color: #dfe8f2; font-family: var(--body); font-size: 12.5px; border: 1px solid transparent; }
+.dp-topnav a:hover {
+  color: #fff;
+  background: linear-gradient(rgb(255 255 255 / .22), rgb(255 255 255 / .06));
+  border-color: rgb(255 255 255 / .28);
+}
+.dp-topnav a[aria-current="page"] {
+  color: #fff;
+  background: linear-gradient(rgb(160 210 255 / .45), rgb(60 130 210 / .35));
+  border-color: rgb(170 215 255 / .6);
+  box-shadow: inset 0 0 6px rgb(140 200 255 / .5);
+}
+.dp-tb-search input {
+  background: rgb(255 255 255 / .92); color: #1b2430; border: 1px solid #1f2a38;
+  border-radius: 3px; box-shadow: inset 0 1px 2px rgb(0 0 0 / .25); font-family: var(--body);
+}
+.dp-tb-search input:focus { border-color: #3c8ce6; box-shadow: 0 0 0 1px #3c8ce6, inset 0 1px 2px rgb(0 0 0 / .2); }
+
+/* XP Start button, reborn as Create */
+.dp-btn-create {
+  background: var(--gel-green); color: #fff; font-family: var(--body); font-style: italic;
+  font-size: 13.5px; letter-spacing: .02em; text-transform: none;
+  border-radius: 0 12px 12px 0; padding: 8px 20px 8px 16px;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .45), inset 0 -2px 4px rgb(0 0 0 / .2), 0 0 0 1px #1d5c11;
+  text-shadow: 1px 1px 1px rgb(0 0 0 / .45);
+}
+.dp-btn-create:hover { background: var(--gel-green); color: #fff; filter: brightness(1.12); }
+
+/* everything else on the bar is an Aero glass button */
+.dp-btn-connect {
+  color: #fff; background: linear-gradient(rgb(255 255 255 / .28), rgb(255 255 255 / .08) 50%, rgb(0 0 0 / .1) 51%, rgb(255 255 255 / .12));
+  border: 1px solid rgb(0 0 0 / .7); border-radius: 3px; font-family: var(--body);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / .25);
+}
+.dp-btn-connect:hover { border-color: #000; box-shadow: inset 0 0 0 1px rgb(255 255 255 / .4), 0 0 10px rgb(110 190 255 / .7); }
+
+/* the chain bar sits on a light surface, so its button is a light gel */
+.dp-chainbar { background: #fff4c4; border-bottom: 1px solid #e3c766; color: #4a3b00; }
+.dp-chainbar .dp-btn-connect { color: #1b2430; background: var(--gel-blue); border-color: #7a9cc4; box-shadow: none; }
+
+/* ticker strips ride the taskbar glass */
+.dp-feedbar, .dp-activity {
+  background: linear-gradient(rgb(20 26 36 / .78), rgb(10 14 20 / .82));
+  border-bottom: 1px solid rgb(0 0 0 / .6); color: #b9c6d4;
+}
+.dp-feedbar b, .dp-activity a { color: #f0f6fc; }
+.dp-activity a:hover { color: #9fd3ff; }
+.dp-activity .dp-when, .dp-activity .dp-quiet, .dp-activity span { color: #a7b6c6; }
+
+/* ---------- windows ---------- */
+.dp-panel, .dp-record, .dp-form-sheet, .dp-epoch, details.dp-adv, details.dp-dossier, .dp-tcard, .dp-king {
+  background: #fff;
+  border: 1px solid #8ea8c4;
+  border-radius: 6px;
+  box-shadow: 0 1px 0 rgb(255 255 255 / .9) inset, 0 2px 6px rgb(30 60 100 / .14);
+}
+/* title bars: Aero glass strip */
+.dp-panel .dp-phead, .dp-epoch header, details.dp-adv summary, details.dp-dossier summary, .dp-form-sheet .dp-sec {
+  background: linear-gradient(#f4f9ff 0%, #dcebfb 50%, #cfe2f7 51%, #e3effc 100%);
+  color: #1e3287; font-family: var(--body); letter-spacing: .02em;
+  border-bottom: 1px solid #a9c1db;
+  border-radius: 5px 5px 0 0;
+  text-shadow: 0 1px 0 rgb(255 255 255 / .8);
+}
+.dp-form-sheet .dp-sec { margin: -16px -16px 12px; padding: 7px 16px; }
+
+/* cards: white pane with the Vista hover glow */
+.dp-tcard:hover, .dp-king:hover {
+  background: linear-gradient(#fafdff, #eef6fe);
+  border-color: #6aa6e3;
+  box-shadow: 0 0 0 1px #b8dafb inset, 0 3px 10px rgb(40 110 200 / .22);
+}
+.dp-king { background: linear-gradient(90deg, #fffbe6, #fff 60%); border-color: #d9b44a; }
+@keyframes bump { 0% { border-color: #3c9c26; translate: 0 -3px; } 100% { border-color: #8ea8c4; } }
+
+.dp-monogram {
+  color: #fff; border-radius: 6px; font-family: var(--body); font-weight: 600;
+  background: linear-gradient(#5fbf4a, #2f8a1c);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .5), 0 1px 2px rgb(0 0 0 / .3);
+  text-shadow: 0 1px 1px rgb(0 0 0 / .4);
+}
+.dp-monogram.dp-m2 { background: linear-gradient(#a07ed6, #6a3d9e); }
+.dp-monogram.dp-m3 { background: linear-gradient(#6fb1f0, #1c5fae); }
+.dp-monogram.dp-m4 { background: linear-gradient(#f39a7e, #c0291d); }
+
+/* ---------- progress: the green Vista bar ---------- */
+.dp-curvebar, .dp-meter {
+  background: linear-gradient(#e6e6e6, #f7f7f7 50%, #dcdcdc);
+  border: 1px solid #9aa7b4; border-radius: 3px;
+}
+.dp-curvebar { height: 9px; }
+.dp-curvebar > i, .dp-meter > i {
+  background:
+    linear-gradient(rgb(255 255 255 / .55), rgb(255 255 255 / .1) 50%, rgb(0 0 0 / .06) 51%, rgb(255 255 255 / .15)),
+    linear-gradient(#37c22b, #1d9a14);
+}
+.dp-curvebar.dp-done > i, .dp-meter.dp-done > i {
+  background:
+    linear-gradient(rgb(255 255 255 / .55), rgb(255 255 255 / .1) 50%, rgb(0 0 0 / .06) 51%, rgb(255 255 255 / .15)),
+    linear-gradient(#5aa6f0, #1f62c4);
+}
+.dp-curvebar.dp-dead > i, .dp-meter.dp-dead > i { background: linear-gradient(#e86a5c, #b52a1d); opacity: .7; }
+.dp-holders .dp-bar { background: #e3e9f0; }
+.dp-holders .dp-bar i { background: linear-gradient(#56c84a, #279a1c); }
+
+/* ---------- chips, tabs, badges ---------- */
+.dp-chips button, .dp-quicks button, .dp-tfchips button {
+  color: #1b2430; font-family: var(--body);
+  background: var(--gel-blue); border: 1px solid #8fa9c6; border-radius: 3px;
+}
+.dp-chips button:hover, .dp-quicks button:hover, .dp-tfchips button:hover {
+  border-color: #3c7fb1; box-shadow: 0 0 6px rgb(60 150 230 / .45);
+}
+.dp-chips button.dp-on, .dp-tfchips button.dp-on {
+  color: #fff; font-weight: 600; border-color: #1c4e8f;
+  background: linear-gradient(#7db9f0 0%, #3d8be0 49%, #2a6fc9 50%, #4b97e5 100%);
+  text-shadow: 0 1px 1px rgb(0 0 0 / .3);
+}
+
+.dp-tabbar { border-bottom-color: #8ea8c4; }
+.dp-tabbar button { font-family: var(--body); border: 1px solid transparent; border-bottom: none; border-radius: 4px 4px 0 0; }
+.dp-tabbar button.dp-on {
+  color: #1e3287; background: #fff; border-color: #8ea8c4; margin-bottom: -1px;
+  box-shadow: inset 0 2px 0 #f5b83d;   /* the XP tab's orange lip */
+}
+
+.dp-badge { font-family: var(--body); font-weight: 600; border-radius: 3px; }
+.dp-badge.dp-live { background: #e6f6e3; }
+.dp-badge.dp-grad { background: #f0e9fa; }
+.dp-badge.dp-dead { background: #fbe8e6; }
+.dp-badge.dp-open { color: #1f62c4; border-color: #1f62c4; background: #e7f0fc; }
+.dp-badge.dp-dexpaid { color: #3b2b00; }
+.dp-badge.dp-dexpend { color: #8a6400; }
+
+/* ---------- trade box ---------- */
+.dp-tb-tabs button { background: linear-gradient(#f7fafd, #e4ecf5); font-family: var(--body); color: var(--dim); border-bottom-color: #a9c1db; }
+.dp-tb-tabs button.dp-buy.dp-on { background: #fff; box-shadow: inset 0 3px 0 #3c9c26; }
+.dp-tb-tabs button.dp-sell.dp-on { background: #fff; box-shadow: inset 0 3px 0 #cf3b2c; }
+.dp-tb-amt, .dp-field input:not([type="range"]), .dp-field textarea, .dp-field select,
+.dp-archive-filters select, .dp-archive-filters input {
+  background: #fff; border: 1px solid #abadb3; border-top-color: #8e8f8f; border-radius: 2px;
+  box-shadow: inset 0 1px 1px rgb(0 0 0 / .08);
+}
+.dp-tb-amt:hover, .dp-field input:not([type="range"]):hover, .dp-field textarea:hover, .dp-field select:hover { border-color: #5794bf #b7d5ea #c7e2f1; }
+.dp-tb-amt:focus-within, .dp-field input:focus, .dp-field textarea:focus, .dp-field select:focus {
+  border-color: #3d7bad #a4c9e3 #b7d9ed; box-shadow: 0 0 0 1px rgb(61 123 173 / .25);
+}
+
+/* primary actions are gel buttons */
+.dp-tb-go, button.dp-action, .dp-action {
+  font-family: var(--body); text-transform: none; letter-spacing: .02em; font-size: 14.5px;
+  border-radius: 4px; color: #fff; text-shadow: 0 1px 1px rgb(0 0 0 / .45);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .45), 0 0 0 1px rgb(0 0 0 / .35), 0 2px 4px rgb(0 0 0 / .18);
+}
+.dp-tb-go.dp-buy, button.dp-action, .dp-action { background: var(--gel-green); color: #fff; }
+.dp-tb-go.dp-sell { background: var(--gel-red); color: #fff; }
+.dp-tb-go.dp-buy:hover, .dp-tb-go.dp-sell:hover, button.dp-action:hover, .dp-action:hover {
+  color: #fff; filter: brightness(1.1) saturate(1.1);
+}
+.dp-tb-go.dp-buy:hover, button.dp-action:hover, .dp-action:hover { background: var(--gel-green); }
+.dp-tb-go.dp-sell:hover { background: var(--gel-red); }
+button.dp-action.dp-ghost {
+  background: var(--gel-blue); color: #1b2430; text-shadow: none; border: 1px solid #7a9cc4;
+  box-shadow: inset 0 1px 0 #fff;
+}
+button.dp-action:disabled, .dp-tb-go:disabled { filter: grayscale(.85) opacity(.55); }
+
+input[type="range"]::-webkit-slider-runnable-track { background: linear-gradient(#c9d3de, #e9eef3); border: 1px solid #9aa7b4; }
+input[type="range"]::-webkit-slider-thumb { background: var(--gel-blue); border: 1px solid #3c7fb1; border-radius: 3px; width: 11px; height: 18px; margin-top: -8px; }
+input[type="range"]::-moz-range-track { background: linear-gradient(#c9d3de, #e9eef3); border: 1px solid #9aa7b4; }
+input[type="range"]::-moz-range-thumb { background: var(--gel-blue); border: 1px solid #3c7fb1; border-radius: 3px; width: 10px; height: 17px; }
+
+/* ---------- tables ---------- */
+.dp-docket th, .dp-holders th {
+  background: linear-gradient(#ffffff, #f1f5fa 50%, #e5edf6);
+  color: #1e3287; border-bottom: 1px solid #a9c1db; font-family: var(--body);
+}
+.dp-docket tbody tr:hover td { background: linear-gradient(#f2f8ff, #e2effd); }
+
+/* ---------- popovers read as Vista tooltips/dialogs ---------- */
+[popover].note {
+  background: linear-gradient(#ffffff, #e4ecf6); color: #1b2430;
+  border: 1px solid #767676; border-radius: 4px; box-shadow: 2px 3px 8px rgb(0 0 0 / .3);
+}
+[popover].note::before { color: #1e3287; font-family: var(--body); font-weight: 600; }
+[popover].note::backdrop { background: rgb(10 30 60 / .25); }
+
+/* the term sheet keeps its paper on a light desk */
+.dp-sheet { box-shadow: 0 0 0 1px #b3a98e, 0 6px 18px rgb(30 50 80 / .25); }
+
+/* ---------- footer: a second, thinner taskbar ---------- */
+.dp-footer {
+  background: var(--taskbar); border-top: 1px solid rgb(255 255 255 / .2);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .15);
+}
+.dp-footer .dp-shell { color: #b9c6d4; font-family: var(--body); }
+.dp-footer a { color: #e6f0fa; }
+.dp-footer a:hover { color: #9fd3ff; }
+
+/* links inside the white client area */
+[data-brand="venture"] main a:not([class]) { color: #0066cc; }
+[data-brand="venture"] main a:not([class]):hover { color: #3399ff; }
+
+/* focus stays visible on every surface */
+[data-brand="venture"] :focus-visible { outline: 2px solid #3399ff; outline-offset: 2px; }
+
+@media (prefers-reduced-transparency: reduce) {
+  [data-brand="venture"] main, .dp-topbar { backdrop-filter: none; -webkit-backdrop-filter: none; background-color: #fff; }
+}

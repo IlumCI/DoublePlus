@@ -19,6 +19,7 @@ import { captureRef } from "./referral";
 import { ago, FilterDefs, pct } from "./ui";
 import { useVentures } from "./useVentures";
 import "./venture.css";
+import "./vista.css";
 
 captureRef();
 
@@ -190,6 +191,7 @@ function Footer() {
         {env.explorerUrl && <a href={env.explorerUrl} target="_blank" rel="noreferrer">explorer ↗</a>}
         <Link to="/docs" viewTransition>docs</Link>
         <Link to="/legal" viewTransition>terms</Link>
+        <a href="/wallpapers/CREDITS.md" target="_blank" rel="noreferrer">wallpaper credits</a>
       </div>
     </footer>
   );
