@@ -297,18 +297,31 @@ export async function loadVentures(): Promise<Venture[]> {
   const total = Number(
     await venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "totalTokens" }),
   );
-  const out: Venture[] = [];
-  for (let i = total - 1; i >= 0; i--) {
-    const address = (await venturePc.readContract({
-      address: VENTURE.factory, abi: factoryAbi, functionName: "allTokens", args: [BigInt(i)],
-    })) as Address;
-    try {
-      out.push(await loadVenture(address));
-    } catch {
-      /* skip one that can't be read this pass */
-    }
-  }
-  return out;
+  // In parallel: the client batches these into multicalls, where a serial
+  // loop paid one round trip per coin and slowed the board with every launch.
+  const addresses = await Promise.all(
+    Array.from({ length: total }, (_, k) => venturePc.readContract({
+      address: VENTURE.factory, abi: factoryAbi, functionName: "allTokens", args: [BigInt(total - 1 - k)],
+    }) as Promise<Address>),
+  );
+  const loaded = await Promise.all(addresses.map((a) => loadVenture(a).catch(() => null))); // skip one that can't be read this pass
+  return loaded.filter((v): v is Venture => v !== null);
+}
+
+const poolTickAbi = [
+  { type: "function", name: "poolTick", stateMutability: "view", inputs: [{ type: "address" }], outputs: [{ type: "int24" }] },
+] as const;
+
+/** A graduated coin's live price from its pool, in pair-wei per whole coin,
+ *  the unit the curve price uses. The curve's own price freezes at
+ *  graduation, so without this a coin's market cap never moved again. */
+async function poolPriceWei(coin: Address, pair: Address): Promise<bigint | null> {
+  const tick = await venturePc.readContract({ address: VENTURE.hook, abi: poolTickAbi, functionName: "poolTick", args: [coin] }).catch(() => null);
+  if (tick === null) return null;
+  const p01 = Math.pow(1.0001, Number(tick));
+  const p = BigInt(coin) < BigInt(pair) ? p01 : 1 / p01;
+  if (!Number.isFinite(p) || p <= 0) return null;
+  return BigInt(Math.round(p * 1e18));
 }
 
 export async function loadVenture(address: Address): Promise<Venture> {
@@ -350,7 +363,7 @@ export async function loadVenture(address: Address): Promise<Venture> {
     poolId: String(poolId),
     meta,
     deadline: base.deadline,
-    priceWei: c[1],
+    priceWei: (c[6] ? await poolPriceWei(address, pair) : null) ?? c[1],
     soldWhole: c[2],
     remainingWhole: c[3],
     raisedWei: c[4],

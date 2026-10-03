@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CandleType, PolygonType, dispose, init, registerLocale, type Chart as KChart, type KLineData } from "klinecharts";
 
-import { loadPoolTrades, type PoolTrade, type Venture } from "./client";
-import { fmtTok, fmtValue, short } from "./ui";
+import { loadPoolTrades, TOTAL_SUPPLY, type PoolTrade, type Venture } from "./client";
+import { fmtTok, fmtValue, short, useEthUsd } from "./ui";
 import { pickInterval } from "./format";
 import { env } from "../lib/env";
 
@@ -37,15 +37,17 @@ export function usePoolTrades(v: Venture): PoolTrade[] {
 
 /** OHLC plus the volume each bucket actually traded, which the bare candle
  *  builder in client.ts does not carry. */
-function toBars(trades: PoolTrade[], intervalSecs: number): KLineData[] {
+function toBars(trades: PoolTrade[], intervalSecs: number, scale = 1): KLineData[] {
   const out: KLineData[] = [];
   let cur: KLineData | null = null;
   let bucket = -1;
   for (const t of trades) {
     const b = Math.floor(t.ts / intervalSecs) * intervalSecs;
-    const px = Number(t.priceWei) / 1e18;
-    const vol = Number(t.coinAmount) / 1e18;
+    const px = (Number(t.priceWei) / 1e18) * scale;
+    // Volume in ETH traded, which is what a trader sizes against; a token
+    // count in the hundreds of millions says nothing.
     const turnover = Number(t.pairAmount) / 1e18;
+    const vol = turnover;
     if (!cur || b !== bucket) {
       if (cur) out.push(cur);
       bucket = b;
@@ -95,12 +97,18 @@ export function PriceChart({ v, trades }: { v: Venture; trades: PoolTrade[] }) {
   const setInterval_ = setPicked;
   const [style, setStyle] = useState<CandleType>(CandleType.CandleSolid);
 
-  const bars = useMemo(() => toBars(trades, interval_.secs), [trades, interval_]);
+  // Plotted as market cap in dollars when ETH is priced: "$30k" reads at a
+  // glance where a per-token price of 0.00000000006 ETH does not.
+  const ethUsd = useEthUsd();
+  const scale = ethUsd > 0 ? TOTAL_SUPPLY * ethUsd : 1;
+  const bars = useMemo(() => toBars(trades, interval_.secs, scale), [trades, interval_, scale]);
   const precision = useMemo(() => precisionFor(bars), [bars]);
 
   useEffect(() => {
     if (!box.current) return;
-    const c = init(box.current, { locale: "en-GB" });
+    // decimalFoldThreshold: klinecharts folds long zero runs into a "0.0{11}6"
+    // notation that renders as literal braces; never fold.
+    const c = init(box.current, { locale: "en-GB", decimalFoldThreshold: 1000 });
     if (!c) return;
     chart.current = c;
     c.setStyles({
@@ -149,7 +157,7 @@ export function PriceChart({ v, trades }: { v: Venture; trades: PoolTrade[] }) {
   useEffect(() => {
     const c = chart.current;
     if (!c) return;
-    c.setPriceVolumePrecision(precision, 2);
+    c.setPriceVolumePrecision(precision, 4);
     c.applyNewData(bars);
     // A young pool has a handful of bars. Left at the default the whole series
     // hugs the right edge as a lone toothpick, so widen the bars and push the
@@ -165,7 +173,7 @@ export function PriceChart({ v, trades }: { v: Venture; trades: PoolTrade[] }) {
   return (
     <div className="dp-panel dp-chartpanel">
       <div className="dp-phead">
-        <span>${v.symbol} / ETH</span>
+        <span>${v.symbol} · {ethUsd > 0 ? "market cap, USD" : "price, ETH"}</span>
         <span className="dp-tfchips">
           {INTERVALS.map((iv) => (
             <button key={iv.label} className={interval_.label === iv.label ? "on" : ""} onClick={() => setInterval_(iv)}>
