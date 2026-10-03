@@ -142,3 +142,19 @@ export const feePct = (bps: number): string => (bps / 100).toFixed(2);
 
 /** Founder tax, which is set in whole and half percents, so one decimal. */
 export const taxPct = (bps: number): string => (bps / 100).toFixed(1);
+
+/** How much worse a trade fills than the current price, as a percentage,
+ *  fees already removed: 0 for a trade too small to move the price, 50 when
+ *  it gets half of what the current price would give. `priceWei` is wei per
+ *  whole token, the unit the curve and the pool tick share. */
+export function priceImpactPct(side: "buy" | "sell", inAmount: bigint, outAmount: bigint, priceWei: bigint, feeBps: number): number {
+  if (inAmount <= 0n || outAmount <= 0n || priceWei <= 0n) return 0;
+  const afterFee = (x: bigint) => (x * BigInt(10_000 - feeBps)) / 10_000n;
+  // Ideal output at today's price: ETH in buys tokens, tokens in fetch ETH.
+  const ideal = side === "buy"
+    ? (afterFee(inAmount) * 10n ** 18n) / priceWei
+    : afterFee((inAmount * priceWei) / 10n ** 18n);
+  if (ideal <= 0n) return 0;
+  const pct = (1 - Number(outAmount) / Number(ideal)) * 100;
+  return pct > 0 ? pct : 0;
+}

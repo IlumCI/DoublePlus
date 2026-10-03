@@ -5,6 +5,7 @@ import {
   curveCostWei,
   entryFeeWei,
   feePct,
+  priceImpactPct,
   curveFeeWei,
   gradValueWei,
   quoteBuy,
@@ -312,5 +313,21 @@ describe("curveFeeWei", () => {
     const plain = curveFeeWei(v, 50);
     expect(plain).toBe((v * 50n) / 10_000n);
     expect(curveFeeWei(v, 50, true)).toBe(plain - (plain * 1_000n) / 10_000n);
+  });
+});
+
+describe("priceImpactPct", () => {
+  const price = 10n ** 9n; // wei per whole token
+  it("is zero when the trade fills at the current price after fees", () => {
+    const eth = 10n ** 18n;
+    const tokens = ((eth * 9_900n) / 10_000n) * 10n ** 18n / price;
+    expect(priceImpactPct("buy", eth, tokens, price, 100)).toBeCloseTo(0, 6);
+  });
+  it("reports the shortfall against the current price", () => {
+    const eth = 10n ** 18n;
+    const tokens = (eth * 10n ** 18n) / price / 2n; // half of what the price promises
+    expect(priceImpactPct("buy", eth, tokens, price, 0)).toBeCloseTo(50, 6);
+    const coin = 10n ** 27n;
+    expect(priceImpactPct("sell", coin, ((coin * price) / 10n ** 18n) * 3n / 4n, price, 0)).toBeCloseTo(25, 6);
   });
 });

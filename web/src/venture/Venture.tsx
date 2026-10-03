@@ -10,7 +10,7 @@ import {
 } from "./client";
 import { marketStats } from "./marketStats";
 import { termSheetRows, type RaiseMode } from "./raiseMode";
-import { capState, feePct, gradValueWei, quoteBuy, taxPct } from "./curve";
+import { capState, feePct, gradValueWei, priceImpactPct, quoteBuy, taxPct } from "./curve";
 import { profileLinks, useDexProfile, type DexProfile } from "../lib/dexscreener";
 import { PriceChart, TradeTape, usePoolTrades } from "./Chart";
 import { refLink, storedRef } from "./referral";
@@ -550,7 +550,7 @@ function RaisePanel({ v }: { v: VentureT }) {
               {["0.05", "0.1", "0.5", "1"].map((q) => <button key={q} onClick={() => setAmt(q)}>{q}</button>)}
             </div>
             <p className="dp-tb-est">
-              {tokensOut > 0n ? <>you receive ≈ <b>{fmtTok(tokensOut, true)} ${v.symbol}</b></> : <>enter an amount to see what you get</>}
+              {tokensOut > 0n ? <>you receive ≈ <b>{fmtTok(tokensOut, true)} ${v.symbol}</b><Impact curve pct={priceImpactPct("buy", parsed - entryFee, tokensOut * 10n ** 18n, v.priceWei, 0)} /></> : <>enter an amount to see what you get</>}
             </p>
             <button className="dp-tb-go dp-buy"
               disabled={busy || overCap || shortOnEth || (isConnected && parsed === 0n)} onClick={buy}>
@@ -634,6 +634,23 @@ function RaisePanel({ v }: { v: VentureT }) {
         </p>
       </div>
     </div>
+  );
+}
+
+/** Price impact beside a quote: quiet when small, plain words when large. */
+function Impact({ pct, curve }: { pct: number; curve?: boolean }) {
+  if (pct < 1) return null;
+  // On the curve a rising price is the design, and splitting a buy costs the
+  // same, so it is stated as the average price rather than flagged.
+  if (curve) {
+    const above = (100 / (100 - Math.min(pct, 99)) - 1) * 100;
+    return <span style={{ color: "var(--faint)" }}> · average price {above.toFixed(above < 10 ? 1 : 0)}% above the current price</span>;
+  }
+  const big = pct >= 10;
+  return (
+    <span style={{ color: big ? "var(--down)" : "var(--faint)" }}>
+      {" "}· price impact {pct.toFixed(pct < 10 ? 1 : 0)}%{big ? ". Buying less gets a better average price." : ""}
+    </span>
   );
 }
 
@@ -904,8 +921,8 @@ function TradePanel({ v }: { v: VentureT }) {
           {parsed === 0n ? <span style={{ color: "var(--faint)" }}>Enter an amount to see what you get.</span>
             : quoting ? <span style={{ color: "var(--faint)" }}>Quoting…</span>
             : quote === null ? <span style={{ color: "var(--down)" }}>Could not quote this trade.</span>
-            : side === "buy" ? <>you receive ≈ <b>{fmtTok(quote)} ${v.symbol}</b></>
-            : <>you receive ≈ <b>{fmtEth(quote, 6)} ETH</b></>}
+            : side === "buy" ? <>you receive ≈ <b>{fmtTok(quote)} ${v.symbol}</b><Impact pct={priceImpactPct("buy", parsed, quote, v.priceWei, tax + VENTURE.platformFeeBps)} /></>
+            : <>you receive ≈ <b>{fmtEth(quote, 6)} ETH</b><Impact pct={priceImpactPct("sell", parsed, quote, v.priceWei, tax + VENTURE.platformFeeBps)} /></>}
         </p>
         <button className={`dp-tb-go ${side === "buy" ? "dp-buy" : "dp-sell"}`}
           disabled={busy || shortOnEth || shortOnTokens || (isConnected && (parsed === 0n || quote === null))} onClick={go}>
