@@ -10,7 +10,7 @@ export const SESSION_SECS = 7 * 86_400;
 export const ISSUED_SKEW_SECS = 5 * 60;
 
 const ADDR = /^0x[0-9a-fA-F]{40}$/;
-export const isAddr = (s: unknown): s is string => typeof s === "string" && ADDR.test(s);
+export const isAddr = (s: unknown): s is `0x${string}` => typeof s === "string" && ADDR.test(s);
 
 export const NONCE = /^[0-9a-f]{16,64}$/;
 
@@ -47,7 +47,7 @@ export async function issueSession(secret: string, address: string, nowSecs: num
 }
 
 /** The address a session token was issued to, or null if forged or expired. */
-export async function readSession(secret: string, token: string, nowSecs: number): Promise<string | null> {
+export async function readSession(secret: string, token: string, nowSecs: number): Promise<`0x${string}` | null> {
   const parts = token.split(".");
   if (parts.length !== 3) return null;
   const [address, exp, mac] = parts;
@@ -80,6 +80,34 @@ export const cooldownSecs = (holderOrDev: boolean) => (holderOrDev ? 15 : 120);
 
 /** Largest request body the API reads. A comment is 280 characters. */
 export const MAX_REQUEST_BYTES = 4 * 1024;
+
+/** Read a JSON body no larger than MAX_REQUEST_BYTES. Streams with a cap,
+ *  so a chunked upload without Content-Length is cut off, not buffered. */
+export async function readJson(req: Request): Promise<Record<string, unknown> | "too_big" | null> {
+  const declared = Number(req.headers.get("Content-Length") ?? "0");
+  if (declared > MAX_REQUEST_BYTES) return "too_big";
+  if (!req.body) return null;
+  const reader = req.body.getReader();
+  const buf = new Uint8Array(MAX_REQUEST_BYTES);
+  let n = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (n + value.byteLength > MAX_REQUEST_BYTES) {
+        reader.cancel().catch(() => undefined);
+        return "too_big";
+      }
+      buf.set(value, n);
+      n += value.byteLength;
+    }
+    const v = JSON.parse(new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(buf.subarray(0, n)));
+    return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
+  } catch { return null; }
+}
+
+/** Shortest SESSION_SECRET the worker will sign with. */
+export const MIN_SECRET_CHARS = 32;
 
 /**
  * Paths no client of this API ever requests, which scanners always do. A hit

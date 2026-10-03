@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { authMessage, carriesDecoy, cleanBody, DECOY_KEY, isTrap, issueSession, readSession, SESSION_SECS } from "../src/lib";
+import { authMessage, carriesDecoy, cleanBody, DECOY_KEY, isTrap, issueSession, MAX_REQUEST_BYTES, readJson, readSession, SESSION_SECS } from "../src/lib";
 
 const A = "0x1111111111111111111111111111111111111111";
 
@@ -65,5 +65,30 @@ describe("carriesDecoy", () => {
     expect(carriesDecoy(new Headers({ apikey: DECOY_KEY }), u)).toBe(true);
     expect(carriesDecoy(new Headers(), new URL(`https://api.example/x?key=${DECOY_KEY}`))).toBe(true);
     expect(carriesDecoy(new Headers({ Authorization: "Bearer 0xabc.123.mac" }), u)).toBe(false);
+  });
+});
+
+describe("readJson", () => {
+  const post = (body: BodyInit, headers: Record<string, string> = {}) =>
+    new Request("https://api.test/comments", { method: "POST", body, headers, duplex: "half" } as RequestInit);
+  const chunked = (parts: string[]) => new ReadableStream<Uint8Array>({
+    start(c) { for (const p of parts) c.enqueue(new TextEncoder().encode(p)); c.close(); },
+  });
+
+  it("parses a small object", async () => {
+    expect(await readJson(post('{"a":1}'))).toEqual({ a: 1 });
+  });
+  it("refuses a declared oversize body without reading it", async () => {
+    expect(await readJson(post("{}", { "Content-Length": String(MAX_REQUEST_BYTES + 1) }))).toBe("too_big");
+  });
+  it("cuts off a chunked body that never declared its length", async () => {
+    const chunk = "x".repeat(1024);
+    expect(await readJson(post(chunked(['{"a":"', chunk, chunk, chunk, chunk, chunk, '"}'])))).toBe("too_big");
+  });
+  it("rejects arrays, primitives, broken JSON and invalid UTF-8", async () => {
+    expect(await readJson(post("[1,2]"))).toBeNull();
+    expect(await readJson(post("42"))).toBeNull();
+    expect(await readJson(post("{nope"))).toBeNull();
+    expect(await readJson(post(new Uint8Array([0x7b, 0xff, 0x7d])))).toBeNull();
   });
 });

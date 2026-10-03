@@ -1,8 +1,8 @@
-import { createPublicClient, http, keccak256, parseAbi, verifyMessage, type Address } from "viem";
+import { createPublicClient, http, keccak256, parseAbi, verifyMessage, zeroAddress, type Address, type Hex } from "viem";
 
 import {
   authMessage, carriesDecoy, cleanBody, cooldownSecs, DECOY_KEY, isAddr, isTrap, ISSUED_SKEW_SECS, issueSession,
-  MAX_REQUEST_BYTES, NONCE, readSession,
+  MIN_SECRET_CHARS, NONCE, readJson, readSession,
 } from "./lib";
 
 /**
@@ -109,21 +109,8 @@ async function block(env: Env, c: Ctx, reason: string) {
   } catch { /* KV unavailable or out of writes: the event is still recorded */ }
 }
 
-/** Read a JSON body no larger than MAX_REQUEST_BYTES. */
-async function body(req: Request): Promise<Record<string, unknown> | "too_big" | null> {
-  const declared = Number(req.headers.get("Content-Length") ?? "0");
-  if (declared > MAX_REQUEST_BYTES) return "too_big";
-  const buf = await req.arrayBuffer().catch(() => null);
-  if (!buf) return null;
-  if (buf.byteLength > MAX_REQUEST_BYTES) return "too_big";
-  try {
-    const v = JSON.parse(new TextDecoder().decode(buf));
-    return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
-  } catch { return null; }
-}
-
 async function auth(env: Env, c: Ctx, h: Record<string, string>) {
-  const b = await body(c.req);
+  const b = await readJson(c.req);
   if (b === "too_big") return json({ error: "too large" }, 413, h);
   const { address, issuedAt, nonce, signature } = b ?? {};
   if (!isAddr(address) || typeof issuedAt !== "string" || typeof nonce !== "string" || !NONCE.test(nonce)
@@ -132,13 +119,13 @@ async function auth(env: Env, c: Ctx, h: Record<string, string>) {
   }
   const t = Date.parse(issuedAt);
   if (!Number.isFinite(t) || Math.abs(t / 1000 - now()) > ISSUED_SKEW_SECS) return json({ error: "signature expired, sign again" }, 400, h);
-  const ok = await verifyMessage({ address: address as Address, message: authMessage(address, issuedAt, nonce), signature: signature as `0x${string}` }).catch(() => false);
+  const ok = await verifyMessage({ address, message: authMessage(address, issuedAt, nonce), signature: signature as Hex }).catch(() => false);
   if (!ok) {
     record(env, c, "auth_bad_signature", { address });
     return json({ error: "signature does not match" }, 401, h);
   }
   // One use per signature: a copied or phished signature can't be replayed.
-  const used = `sig:${keccak256(signature as `0x${string}`)}`;
+  const used = `sig:${keccak256(signature as Hex)}`;
   try {
     if (await env.GUARD.get(used)) {
       record(env, c, "auth_replay", { address });
@@ -158,7 +145,7 @@ async function list(env: Env, c: Ctx, h: Record<string, string>) {
   // Every open coin page polls this; serve repeats from the edge cache so
   // a flood of reads costs the database one query per thread per 5 seconds.
   const cacheKey = new Request(`https://cache.doubleplus/comments?token=${token}&before=${before ?? ""}`);
-  const cache = (caches as unknown as { default: Cache }).default;
+  const cache = caches.default;
   const hit = await cache.match(cacheKey).catch(() => undefined);
   if (hit) {
     const r = new Response(hit.body, hit);
@@ -184,7 +171,7 @@ async function post(env: Env, c: Ctx, h: Record<string, string>) {
   }
   if (!(await env.RL_WRITE.limit({ key: `author:${author}` })).success) return json({ error: "slow down" }, 429, h);
 
-  const b = await body(c.req);
+  const b = await readJson(c.req);
   if (b === "too_big") return json({ error: "too large" }, 413, h);
   const { token: rawToken, body: rawBody, website } = b ?? {};
   // A field the form hides from people. Bots fill every field they find.
@@ -194,18 +181,20 @@ async function post(env: Env, c: Ctx, h: Record<string, string>) {
     return json({ comment: { id: 0, author, body: String(rawBody ?? "").slice(0, 280), holder: false, is_dev: false, created_at: new Date().toISOString() } }, 201, h);
   }
   if (!isAddr(rawToken)) return json({ error: "bad token" }, 400, h);
-  const token = rawToken.toLowerCase();
+  const token = rawToken.toLowerCase() as Address;
   const cleaned = cleanBody(rawBody);
   if (!cleaned.ok) return json({ error: cleaned.error }, 400, h);
 
   const pc = createPublicClient({ transport: http(env.RPC_URL) });
+  const factory = env.FACTORY;
+  if (!isAddr(factory)) throw new Error("FACTORY is not an address");
   const [listing, balance] = await Promise.all([
-    pc.readContract({ address: env.FACTORY as Address, abi: FACTORY_ABI, functionName: "listings", args: [token as Address] }),
-    pc.readContract({ address: token as Address, abi: ERC20_ABI, functionName: "balanceOf", args: [author as Address] }).catch(() => 0n),
+    pc.readContract({ address: factory, abi: FACTORY_ABI, functionName: "listings", args: [token] }),
+    pc.readContract({ address: token, abi: ERC20_ABI, functionName: "balanceOf", args: [author] }).catch(() => 0n),
   ]).catch(() => [null, 0n] as const);
   if (!listing) return json({ error: "chain unavailable, try again" }, 502, h);
-  const creator = String(listing[0]).toLowerCase();
-  if (creator === "0x0000000000000000000000000000000000000000") return json({ error: "not a doubleplus coin" }, 404, h);
+  const creator = listing[0].toLowerCase();
+  if (creator === zeroAddress) return json({ error: "not a doubleplus coin" }, 404, h);
   const isDev = creator === author;
   const holder = balance > 0n;
 
@@ -288,6 +277,12 @@ async function route(env: Env, c: Ctx): Promise<Response> {
     return json({ error: "slow down" }, 429, { ...h, "Retry-After": "60" });
   }
 
+  // A missing or short secret would sign sessions anyone can forge: refuse
+  // sign-in and posting rather than run that way.
+  if ((url.pathname === "/auth" || req.method === "POST") && (env.SESSION_SECRET ?? "").length < MIN_SECRET_CHARS) {
+    throw new Error("SESSION_SECRET is missing or too short");
+  }
+
   if (url.pathname === "/auth" && req.method === "POST") return auth(env, c, h);
   if (url.pathname === "/comments" && req.method === "GET") return list(env, c, h);
   if (url.pathname === "/comments" && req.method === "POST") return post(env, c, h);
@@ -295,12 +290,12 @@ async function route(env: Env, c: Ctx): Promise<Response> {
 }
 
 export default {
-  async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  async fetch(req: Request<unknown, IncomingRequestCfProperties>, env: Env, ctx: ExecutionContext): Promise<Response> {
     const c: Ctx = {
       req, url: new URL(req.url),
       ip: req.headers.get("CF-Connecting-IP") ?? "unknown",
       ua: req.headers.get("User-Agent") ?? "",
-      country: (req as unknown as { cf?: { country?: string } }).cf?.country ?? "",
+      country: String(req.cf?.country ?? ""),
       started: Date.now(),
       wait: (p) => ctx.waitUntil(p),
     };
