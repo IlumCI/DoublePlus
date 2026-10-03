@@ -17,12 +17,12 @@ const W = 1200, H = 630;
 
 function status(v: Venture): { big: string; small: string; pct: number } {
   const p = v.phase === "graduated" ? 100 : pct(v.raisedWei, v.targetRaiseWei);
-  if (v.phase === "graduated") return { big: "LIVE ON UNISWAP", small: `${fmtEth(v.raisedWei, 3)} ETH raised · liquidity locked`, pct: 100 };
-  if (v.phase === "failed") return { big: "REFUNDS OPEN", small: "missed the target · every backer gets their ETH back", pct: p };
+  if (v.phase === "graduated") return { big: "Trading on Uniswap", small: `${fmtEth(v.raisedWei, 3)} ETH raised, pool locked`, pct: 100 };
+  if (v.phase === "failed") return { big: "Refunds open", small: "missed its target, so buyers get their ETH back", pct: p };
   const left = v.targetRaiseWei > v.raisedWei ? v.targetRaiseWei - v.raisedWei : 0n;
   // Only an all-or-nothing raise refunds; an open curve just trades until it fills.
-  const tail = v.mode === 1 ? "open curve" : "refund or rocket";
-  return { big: `${p.toFixed(0)}% TO GRADUATION`, small: `${fmtEth(left, 3)} ETH left to fill · ${tail}`, pct: p };
+  const tail = v.mode === 1 ? "open curve" : "refunds if it misses";
+  return { big: `${p.toFixed(0)}% filled`, small: `${fmtEth(left, 3)} ETH to go, ${tail}`, pct: p };
 }
 
 function loadImage(src: string): Promise<HTMLImageElement | null> {
@@ -106,7 +106,7 @@ export async function drawShareCard(v: Venture): Promise<Blob | null> {
   // Status and the progress bar.
   const s = status(v);
   ctx.fillStyle = v.phase === "failed" ? "#ff8a80" : "#fff";
-  ctx.font = "800 46px 'Segoe UI', Tahoma, sans-serif";
+  ctx.font = "600 46px 'Segoe UI', 'Open Sans', Tahoma, sans-serif";
   ctx.fillText(s.big, 100, 400);
   const bx = 100, by = 425, bw = W - 200, bh = 30;
   ctx.fillStyle = "#060a18"; ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 8); ctx.fill();
@@ -132,10 +132,10 @@ export async function drawShareCard(v: Venture): Promise<Blob | null> {
 }
 
 function postText(v: Venture): string {
-  if (v.phase === "graduated") return `$${v.symbol} graduated and is trading on Uniswap. Liquidity locked.`;
+  if (v.phase === "graduated") return `$${v.symbol} is trading on Uniswap.`;
   if (v.phase === "failed") return `$${v.symbol} missed its target. Refunds are open.`;
   const p = pct(v.raisedWei, v.targetRaiseWei);
-  return `$${v.symbol} is ${p.toFixed(0)}% of the way to graduation.${v.mode === 1 ? "" : " Refund or rocket."}`;
+  return `$${v.symbol} is ${p.toFixed(0)}% filled.${v.mode === 1 ? "" : " Buyers are refunded if it misses its target."}`;
 }
 
 /** Post on X, copy the card image, or download it. With a wallet connected the

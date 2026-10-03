@@ -15,9 +15,9 @@ const FLAVOR_META: Record<string, { title: string; description: string; icon?: s
       "hammr. dutch-auction launchpad on Robinhood Chain: coins start at 10x and fall for one hour, then the hammer drops, liquidity locks, and holders earn the pair token on every trade.",
   },
   venture: {
-    title: "doubleplus — launch a coin, fill the curve, hit Uniswap",
+    title: "doubleplus · coins on Robinhood Chain",
     description:
-      "Launch a coin on Robinhood Chain in two minutes. Creators earn up to 4% of every trade, forever. Refund or rocket: a raise that misses its target refunds every backer, and holders get an ETH drip from every trade.",
+      "Launch and trade coins on Robinhood Chain. Each coin fills a bonding curve, then moves to a locked Uniswap pool. Raises that miss their target refund every buyer.",
     ogImage: "/doubleplus-card.png",
   },
   steadypads: {

@@ -71,10 +71,10 @@ const FLAVORS: Record<string, Brand> = {
     url: "https://doubleplus.fun",
     twitter: "https://x.com/DoublePlusFund",
     twitterHandle: "DoublePlusFund",
-    tagline: "day-zero funding for startups and research projects",
+    tagline: "coins on Robinhood Chain",
     description:
-      "Back startups and research projects at day zero on Robinhood Chain. Every raise publishes its terms on-chain before any money moves, returns every wei on the curve if it misses target, and pays holders a share of every trade in ETH.",
-    title: "doubleplus — back an idea, own a stake in its market",
+      "Launch and trade coins on Robinhood Chain. Each coin fills a bonding curve, then moves to a locked Uniswap pool. Raises that miss their target refund every buyer.",
+    title: "doubleplus · coins on Robinhood Chain",
   },
   steadypads: {
     name: "steadypads",

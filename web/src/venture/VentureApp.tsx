@@ -126,10 +126,10 @@ function Shell() {
       <FilterDefs />
       <Wallpaper pulse={pulse} />
       <div className={`lh-desk${maximized ? " is-max" : ""}`}>
-        <div className={`lh-window${minimized ? " is-min" : ""}`} role="application" aria-label={`${BRAND.name} — ${title}`}>
+        <div className={`lh-window${minimized ? " is-min" : ""}`} role="application" aria-label={`${title} - ${BRAND.name}`}>
           <div className="lh-title" onDoubleClick={toggleMax}>
             <span className="lh-appicon" aria-hidden="true">++</span>
-            <span className="lh-title-text">{BRAND.name} — {title}</span>
+            <span className="lh-title-text">{title} - {BRAND.name}</span>
             <div className="lh-caps">
               <button className="lh-cap" onClick={() => setMinimized(true)} title="Minimise" aria-label="Minimise window"><i className="lh-ico-min" /></button>
               <button className="lh-cap" onClick={toggleMax} title={maximized ? "Restore" : "Maximise"} aria-label={maximized ? "Restore window" : "Maximise window"}><i className={maximized ? "lh-ico-restore" : "lh-ico-max"} /></button>
@@ -287,7 +287,7 @@ function Taskbar({ title, minimized, onTask }: { title: string; minimized: boole
       </button>
       {open && <StartMenu />}
       <button className={`lh-taskbtn${minimized ? "" : " is-active"}`} onClick={onTask} title={minimized ? "Restore window" : "Minimise window"}>
-        <span className="lh-appicon" aria-hidden="true">++</span>{BRAND.name} — {title}
+        <span className="lh-appicon" aria-hidden="true">++</span>{title}
       </button>
       <nav className="lh-tasknav" aria-label="Pages">
         {NAV.slice(0, 4).map(([to, label]) => (

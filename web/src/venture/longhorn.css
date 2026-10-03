@@ -92,7 +92,7 @@
 [data-brand="venture"] h1,
 [data-brand="venture"] h2,
 [data-brand="venture"] h3 { letter-spacing: 0; }
-.dp-page-title, .dp-boardhead h1 { color: #fff; font-weight: 300; }
+.dp-page-title { color: #fff; font-weight: 300; }
 
 /* ---------- the window ---------- */
 .lh-window {
@@ -324,25 +324,19 @@
 .lh-startmenu .lh-sm-go:hover b { color: #fff; }
 
 /* ---------- surfaces inside the window ---------- */
-.dp-panel, .dp-record, .dp-form-sheet, .dp-epoch, details.dp-adv, details.dp-dossier, .dp-tcard, .dp-king {
+.dp-panel, .dp-form-sheet, .dp-epoch {
   background: linear-gradient(#111a34, #0d1429);
   border: 1px solid #263763;
   border-radius: 6px;
   box-shadow: inset 0 1px 0 rgb(255 255 255 / .06), 0 2px 8px rgb(0 0 0 / .35);
 }
-.dp-panel .dp-phead, .dp-epoch header, details.dp-adv summary, details.dp-dossier summary, .dp-form-sheet .dp-sec {
+.dp-panel .dp-phead, .dp-epoch header, .dp-form-sheet .dp-sec {
   background: var(--plex-strip); color: #dce7ff; font-family: var(--body); letter-spacing: .02em;
   border-bottom: 1px solid #000; border-radius: 5px 5px 0 0;
   box-shadow: inset 0 1px 0 rgb(255 255 255 / .12);
 }
 .dp-form-sheet .dp-sec { margin: -16px -16px 12px; padding: 7px 16px; }
 
-.dp-tcard:hover, .dp-king:hover {
-  background: linear-gradient(#16224a, #0f1834);
-  border-color: #4f7fd8;
-  box-shadow: inset 0 0 0 1px rgb(110 160 255 / .25), 0 0 16px rgb(70 120 230 / .3);
-}
-.dp-king { background: linear-gradient(90deg, #2a2408, #111a34 60%); border-color: #8a7020; }
 @keyframes bump { 0% { border-color: var(--up); translate: 0 -3px; } 100% { border-color: #263763; } }
 
 .dp-monogram {
@@ -402,8 +396,7 @@
 .dp-tb-tabs button { background: var(--plex-strip); font-family: var(--body); color: var(--dim); border-bottom-color: #000; }
 .dp-tb-tabs button.dp-buy.dp-on { background: #111a34; color: var(--buy); box-shadow: inset 0 3px 0 var(--buy); }
 .dp-tb-tabs button.dp-sell.dp-on { background: #111a34; color: var(--sell); box-shadow: inset 0 3px 0 var(--sell); }
-.dp-tb-amt, .dp-field input:not([type="range"]), .dp-field textarea, .dp-field select,
-.dp-archive-filters select, .dp-archive-filters input {
+.dp-tb-amt, .dp-field input:not([type="range"]), .dp-field textarea, .dp-field select {
   background: #070b18; color: var(--text); border: 1px solid #33467a; border-radius: 3px;
   box-shadow: inset 0 1px 2px rgb(0 0 0 / .6);
 }
@@ -451,7 +444,7 @@ input[type="range"]::-moz-range-thumb { background: var(--gel-blue); border: 1px
 
 /* sticky rails stick to the top of the window body, not under a topbar */
 .dp-tradebox { top: 12px; }
-.dp-toc, .dp-companion, .dp-doc-grid aside { top: 12px; }
+.dp-toc, .dp-companion { top: 12px; }
 
 /* ---------- smaller screens ---------- */
 @media (max-width: 1240px) { .lh-sidebar { display: none; } }
@@ -508,7 +501,6 @@ input[type="range"]::-moz-range-thumb { background: var(--gel-blue); border: 1px
 @keyframes dp-tape-in { from { opacity: 0; transform: translateX(-6px); } }
 @media (prefers-reduced-motion: reduce) { .dp-tape-new { animation: none; } }
 
-
 /* ---------- due-diligence row and link indicators on cards ---------- */
 
 .dp-socials { display: inline-flex; gap: 3px; margin-left: 6px; vertical-align: 1px; }
@@ -516,7 +508,6 @@ input[type="range"]::-moz-range-thumb { background: var(--gel-blue); border: 1px
   font: normal 700 9px/1 var(--body); color: #dce6ff; padding: 2px 4px; border-radius: 2px;
   background: rgb(110 155 255 / .18); border: 1px solid rgb(110 155 255 / .35);
 }
-.dp-links-push { margin: -4px 0 12px; padding: 8px 10px; border-left: 3px solid var(--up); background: rgb(79 220 124 / .06); color: #c9f5d6 !important; }
 
 /* ---------- share bar ---------- */
 .dp-share { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 12px 0; }
@@ -527,7 +518,6 @@ input[type="range"]::-moz-range-thumb { background: var(--gel-blue); border: 1px
 .dp-share button:hover { color: #fff; box-shadow: inset 0 0 0 1px rgb(255 255 255 / .25), 0 0 10px rgb(110 170 255 / .45); }
 .dp-share .dp-share-x { color: #fff; background: linear-gradient(#3a3a3a, #111 50%, #000 51%, #1a1a1a); }
 .dp-share-note { font: 12px var(--body); color: var(--up); }
-.dp-share-tip { flex-basis: 100%; font-size: 11px; color: var(--faint); }
 
 /* ---------- token chat ---------- */
 .dp-chat { padding: 12px 0; }

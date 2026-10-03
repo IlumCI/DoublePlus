@@ -897,7 +897,7 @@ function TradePanel({ v }: { v: VentureT }) {
               <option value={500}>5%</option>
             </select>
           </label>
-          <span>{quote !== null ? <>min received {side === "buy" ? `${fmtTok(minOut)} $${v.symbol}` : `${fmtEth(minOut, 6)} ETH`}</> : "enforced on-chain"}</span>
+          <span>{quote !== null ? <>min received {side === "buy" ? `${fmtTok(minOut)} $${v.symbol}` : `${fmtEth(minOut, 6)} ETH`}</> : ""}</span>
         </div>
 
         {isConnected && pending > 0n && (
