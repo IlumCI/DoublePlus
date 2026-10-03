@@ -192,7 +192,7 @@ export function PriceChart({ v, trades }: { v: Venture; trades: PoolTrade[] }) {
         <div ref={box} style={{ height: 320 }} />
         {bars.length === 0 && (
           <p className="dp-agate" style={{ position: "absolute", inset: 0, display: "grid", placeContent: "center", textAlign: "center" }}>
-            No trades yet — the chart draws itself from the pool's swap log.
+            No trades yet.
           </p>
         )}
       </div>
