@@ -809,3 +809,9 @@ main { container-type: inline-size; }
 .dp-socials a { font-family: var(--mono); font-size: 11px; color: var(--dim); border: 1px solid var(--line);
   border-radius: 99px; padding: 4px 10px; text-decoration: none; }
 .dp-socials a:hover { color: var(--text); border-color: var(--line-2); }
+
+/* Your bag, one line under the market cap. */
+.dp-coinhead .dp-bag { display: block; margin-top: 6px; font-family: var(--mono); font-size: 12px; white-space: nowrap; }
+.dp-coinhead .dp-bag .dp-k { letter-spacing: .06em; }
+.dp-coinhead .dp-bag .dp-up { color: var(--up); }
+.dp-coinhead .dp-bag .dp-down { color: var(--down); }

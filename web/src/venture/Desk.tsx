@@ -3,21 +3,14 @@ import { Link } from "react-router-dom";
 import { useWalletClient } from "wagmi";
 
 import {
-  ercAbi, factoryAbi, loadReferralEarnings, loadVentures, updatesAbi, VENTURE, venturePc, vestingAbi, type Venture,
+  ercAbi, factoryAbi, loadReferralEarnings, updatesAbi, VENTURE, venturePc, vestingAbi,
 } from "./client";
+import { loadPortfolio, type Holding } from "./portfolio";
 import { fmtEth, fmtTok, pct, short } from "./ui";
 import { usePageMeta } from "./seo";
 import { refLink } from "./referral";
 import { errorText, useWallet } from "../lib/useWallet";
 import { useUi } from "../store";
-
-interface Holding {
-  v: Venture;
-  balance: bigint;
-  pending: bigint;
-  spent: bigint;
-  vestingClaimable: bigint;
-}
 
 /** My desk: everything this wallet is owed across the launchpad — backed
  *  raises, holdings and dividends, referral earnings, founder tooling. */
@@ -40,25 +33,9 @@ export function Desk() {
     let live = true;
     const refresh = async () => {
       try {
-        const ventures = await loadVentures();
-        const out: Holding[] = [];
-        for (const v of ventures) {
-          const [balance, pending, spent] = await Promise.all([
-            venturePc.readContract({ address: v.address, abi: ercAbi, functionName: "balanceOf", args: [me] }) as Promise<bigint>,
-            venturePc.readContract({ address: v.address, abi: ercAbi, functionName: "pendingRewards", args: [me] }).catch(() => 0n) as Promise<bigint>,
-            venturePc.readContract({ address: VENTURE.factory, abi: [{ type: "function", name: "spentWei", stateMutability: "view", inputs: [{ type: "address" }, { type: "address" }], outputs: [{ type: "uint256" }] }] as const, functionName: "spentWei", args: [v.address, me] }).catch(() => 0n) as Promise<bigint>,
-          ]);
-          let vestingClaimable = 0n;
-          if (v.creator.toLowerCase() === me.toLowerCase() && v.vesting !== "0x0000000000000000000000000000000000000000") {
-            vestingClaimable = (await venturePc.readContract({ address: v.vesting, abi: vestingAbi, functionName: "claimable" }).catch(() => 0n)) as bigint;
-          }
-          if (balance > 0n || pending > 0n || spent > 0n || vestingClaimable > 0n || v.creator.toLowerCase() === me.toLowerCase()) {
-            out.push({ v, balance, pending, spent, vestingClaimable });
-          }
-        }
-        if (live) setRows(out);
-        const owed = (await venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "feesAccrued", args: [me] }).catch(() => 0n)) as bigint;
-        if (live) setFactoryOwed(owed);
+        const sellBps = Number(await venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "curveSellFeeBps" }).catch(() => 100));
+        const p = await loadPortfolio(me, sellBps);
+        if (live) { setRows(p.rows); setFactoryOwed(p.factoryOwed); }
         const earned = await loadReferralEarnings(me);
         if (live) setRefEarned(earned);
       } catch {
@@ -118,6 +95,30 @@ export function Desk() {
       pushToast({ kind: "success", title: `${fmtEth(factoryOwed, 6)} ETH withdrawn`, txHash: hash });
     } catch (e) {
       pushToast({ kind: "error", title: "Withdraw failed", body: errorText(e) });
+    } finally { setBusy(false); }
+  };
+
+  /** Get a failed raise's ETH back in one go: close the round if nobody has,
+   *  approve the tokens if needed, refund. */
+  const refund = async (r: Holding) => {
+    if (!wc) return;
+    setBusy(true);
+    try {
+      const send = async (fn: "abort" | "refund") => {
+        const hash = await wc.writeContract({ address: VENTURE.factory, abi: factoryAbi, functionName: fn, args: [r.v.address], chain: wc.chain, account: wc.account });
+        await venturePc.waitForTransactionReceipt({ hash });
+        return hash;
+      };
+      if (!r.v.aborted) await send("abort");
+      const allowance = (await venturePc.readContract({ address: r.v.address, abi: ercAbi, functionName: "allowance", args: [me!, VENTURE.factory] })) as bigint;
+      if (allowance < r.bought) {
+        const a = await wc.writeContract({ address: r.v.address, abi: ercAbi, functionName: "approve", args: [VENTURE.factory, r.bought], chain: wc.chain, account: wc.account });
+        await venturePc.waitForTransactionReceipt({ hash: a });
+      }
+      const hash = await send("refund");
+      pushToast({ kind: "success", title: `${fmtEth(r.refundable, 5)} ETH refunded`, txHash: hash });
+    } catch (e) {
+      pushToast({ kind: "error", title: "Refund failed", body: errorText(e) });
     } finally { setBusy(false); }
   };
 
@@ -197,14 +198,14 @@ export function Desk() {
 
       <div className="dp-two-col" style={{ marginTop: 16, alignItems: "start" }}>
         <div className="dp-form-sheet">
-          <p className="dp-sec">Holdings <span className="dp-agate">as the chain tells it</span></p>
+          <p className="dp-sec">Holdings <span className="dp-agate">ETH · worth now is what you'd get if you sold</span></p>
           {rows === null ? (
             <p className="dp-agate">Reading your positions…</p>
           ) : rows.length === 0 ? (
             <p className="dp-agate">Nothing yet. Back a raise and it shows up here.</p>
           ) : (
             <table className="dp-docket">
-              <thead><tr><th>Token</th><th className="dp-num">Balance</th><th className="dp-num">Backed</th><th className="dp-num">Fee income</th><th>Status</th></tr></thead>
+              <thead><tr><th>Coin</th><th className="dp-num">Put in</th><th className="dp-num">Worth now</th><th className="dp-num">P&amp;L</th><th>Status</th></tr></thead>
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.v.address}>
@@ -213,14 +214,25 @@ export function Desk() {
                         <b>{r.v.name}</b> <span className="dp-mono" style={{ fontSize: 10.5 }}>${r.v.symbol}</span>
                       </Link>
                     </td>
-                    <td className="dp-num">{r.balance > 0n ? fmtTok(r.balance) : "—"}</td>
-                    <td className="dp-num">{r.spent > 0n ? `${fmtEth(r.spent, 4)} ETH` : "—"}</td>
-                    <td className="dp-num" style={{ color: r.pending > 0n ? "var(--up)" : undefined }}>
-                      {r.pending > 0n ? fmtEth(r.pending, 6) : "—"}
+                    <td className="dp-num">{r.pos.putIn > 0n ? fmtEth(r.pos.putIn, 4) : "—"}</td>
+                    <td className="dp-num" title={r.pos.basis === "market" ? "At the pool price, after sell fees, before price impact" : r.pos.basis === "curve" ? "What the curve pays if you exit now" : undefined}>
+                      {r.pos.valueNow !== null && (r.pos.valueNow > 0n || r.pos.putIn > 0n) ? fmtEth(r.pos.valueNow, 4) : "—"}
                     </td>
-                    <td><span className={`dp-badge ${r.v.phase === "graduated" ? "dp-grad" : r.v.phase === "failed" ? "dp-dead" : "dp-live"}`}>
-                      {r.v.phase === "graduated" ? "trading" : r.v.phase === "failed" ? "refund" : r.v.phase === "expired" ? "funded" : "live"}
-                    </span></td>
+                    <td className="dp-num" style={{ color: r.pos.pnl === null ? undefined : r.pos.pnl >= 0n ? "var(--up)" : "var(--down)" }}>
+                      {r.pos.pnl === null || r.pos.pnlPct === null ? "—" : `${r.pos.pnl >= 0n ? "+" : ""}${r.pos.pnlPct.toFixed(Math.abs(r.pos.pnlPct) < 10 ? 1 : 0)}%`}
+                    </td>
+                    <td>
+                      {r.refundable > 0n ? (
+                        <button className="dp-action" style={{ padding: "4px 10px", fontSize: 11 }} disabled={busy} onClick={() => refund(r)}>
+                          Get {fmtEth(r.refundable, 4)} ETH back
+                        </button>
+                      ) : (
+                        <span className={`dp-badge ${r.v.phase === "graduated" ? "dp-grad" : r.v.phase === "failed" ? "dp-dead" : "dp-live"}`}>
+                          {r.v.phase === "graduated" ? "trading" : r.v.phase === "failed" ? "failed" : r.v.phase === "expired" ? "funded" : "filling"}
+                        </span>
+                      )}
+                      {r.pending > 0n && <span className="dp-mono" style={{ fontSize: 10.5, color: "var(--up)", marginLeft: 6 }}>+{fmtEth(r.pending, 5)} drip</span>}
+                    </td>
                   </tr>
                 ))}
               </tbody>

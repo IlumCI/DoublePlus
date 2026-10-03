@@ -54,6 +54,16 @@ export function quoteTokens(v: CurveState, valueWei: bigint): bigint {
   return q > v.remainingWhole ? v.remainingWhole : q;
 }
 
+/** What `qWhole` tokens are worth at the price the pool opens at when the
+ *  curve fills: the closing price of a fully sold curve. Graduation seeds the
+ *  pool at exactly that price, so this is the bag's value the moment trading
+ *  opens, before anyone else trades. */
+export const CURVE_SUPPLY_WHOLE = 600_000_000n;
+export function gradValueWei(v: CurveState, qWhole: bigint): bigint {
+  const endPrice = v.basePriceWei + (v.slopeQ * CURVE_SUPPLY_WHOLE) / 10n ** 18n;
+  return qWhole * endPrice;
+}
+
 export interface SellQuote {
   gross: bigint;
   fee: bigint;

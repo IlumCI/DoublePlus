@@ -5,6 +5,7 @@ import {
   curveCostWei,
   entryFeeWei,
   feePct,
+  gradValueWei,
   quoteBuy,
   quoteSellWei,
   quoteTokens,
@@ -287,5 +288,19 @@ describe("fee formatting", () => {
     expect(taxPct(250)).toBe("2.5");
     expect(taxPct(400)).toBe("4.0");
     expect(taxPct(0)).toBe("0.0");
+  });
+});
+
+describe("gradValueWei", () => {
+  it("prices a bag at the curve's closing price, above what it cost early on", () => {
+    const v = curve();
+    const q = 50_000_000n;
+    const cost = curveCostWei(v, q, 0n);
+    const atGrad = gradValueWei(v, q);
+    // The closing price is the top of the curve, so an early bag is worth more there.
+    expect(atGrad).toBeGreaterThan(cost);
+    // And it equals the marginal price at the sold-out point times the bag.
+    const endPrice = curveCostWei(v, 1n, 600_000_000n - 1n);
+    expect(Number(atGrad) / Number(q * endPrice)).toBeCloseTo(1, 3);
   });
 });
