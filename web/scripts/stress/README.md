@@ -23,3 +23,21 @@ browser. Run before a release.
 
 Needs `playwright` (set `PLAYWRIGHT` to its path if it isn't resolvable, and
 `CHROME` to a Chrome binary if Playwright's own isn't installed).
+
+## As a user, with a wallet
+
+`mock-wallet.js` is an injected EIP-6963 wallet that forwards to the local
+node's unlocked accounts and can be told to reject, hang, switch account or
+chain, front-run, or force gas (`window.__wallet`). It also records toasts.
+
+- `user-flows.cjs [scenario]`: buy, reject, six rapid clicks, a wallet too
+  poor for gas, wrong network, account switch and disconnect, a wallet that
+  never answers, a front-run past slippage, sell, refund (coin page and
+  portfolio).
+- `user-chaos.cjs [scenario]`: full launch with a huge photo as logo
+  (`NOISY_PNG`, e.g. `magick -size 2400x1600 plasma:fractal +noise Random
+  noisy.png`), blocked storage, device clock off by an hour / a day, network
+  dropping on Buy, a 320 px screen.
+
+Local state carries over between runs (refunds stay refunded, time moves
+on), so redeploy the fixture for a clean slate.
