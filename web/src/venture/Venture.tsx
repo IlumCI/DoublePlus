@@ -4,21 +4,22 @@ import { useBalance, useWalletClient } from "wagmi";
 import { formatEther, parseEther, toEventSelector, type Address } from "viem";
 
 import {
-  ercAbi, factoryAbi, hookAbi, loadFills, loadUpdates, loadVenture, quoteSellWei, quoteTokens,
-  routerAbi, SOCIAL_FIELDS, toCandles, VENTURE, venturePc, vestingAbi,
+  CURVE_SUPPLY, ercAbi, factoryAbi, hookAbi, loadFills, loadUpdates, loadVenture, quoteSellWei, quoteTokens,
+  routerAbi, SOCIAL_FIELDS, TOTAL_SUPPLY, VENTURE, venturePc, vestingAbi,
   type Fill, type PoolTrade, type Venture as VentureT,
 } from "./client";
 import { marketStats } from "./marketStats";
 import { termSheetRows, type RaiseMode } from "./raiseMode";
-import { capState, feePct, quoteBuy, taxPct } from "./curve";
+import { capState, feePct, gradValueWei, quoteBuy, taxPct } from "./curve";
 import { profileLinks, useDexProfile, type DexProfile } from "../lib/dexscreener";
 import { PriceChart, TradeTape, usePoolTrades } from "./Chart";
 import { refLink, storedRef } from "./referral";
 import { ShareBar } from "./share";
 import { Comments, COMMENTS_ENABLED } from "./comments";
-import { Donut, Legend, Ring, SplitBar, type Slice } from "./charts";
+import { loadHolding, type Holding } from "./portfolio";
+import { Donut, Legend, SplitBar, type Slice } from "./charts";
 import { usePageMeta } from "./seo";
-import { ago, BuySellStrength, Change, changePct, CopyButton, Countdown, CurveBar, Delta, DexBadge, fmtEth, fmtMcap,
+import { ago, BuySellStrength, CopyButton, Countdown, Delta, DexBadge, fmtEth, fmtMcap,
   fmtTok, fmtUsdPrice, fmtUsdV, Monogram, pct, short, StatCell, StatusBadge, useEthUsd, useTick } from "./ui";
 import { useWallet, errorText } from "../lib/useWallet";
 import { useUi } from "../store";
@@ -63,8 +64,6 @@ function VentureBody({ v, fills, ethUsd }: { v: VentureT; fills: Fill[]; ethUsd:
     if (next === fallbackTab) p.delete("tab"); else p.set("tab", next);
     setParams(p, { replace: true });
   };
-  const candles = useMemo(() => toCandles(trades, 3600), [trades]);
-  const change24 = useMemo(() => changePct(candles.slice(-24)), [candles]);
 
   const TABS: [Tab, string][] = [
     ["project", "The project"],
@@ -97,9 +96,7 @@ function VentureBody({ v, fills, ethUsd }: { v: VentureT; fills: Fill[]; ethUsd:
         <div className="dp-mcbig">
           <span className="dp-k">market cap</span><br />
           <span className="dp-v">{fmtMcap(v, ethUsd)}</span><br />
-          {v.phase === "graduated"
-            ? <span className="dp-mono" style={{ fontSize: 12 }}><Change pct={change24} /> <span style={{ color: "var(--faint)" }}>24h</span></span>
-            : null}
+          <YourBag v={v} />
         </div>
       </div>
 
@@ -124,7 +121,7 @@ function VentureBody({ v, fills, ethUsd }: { v: VentureT; fills: Fill[]; ethUsd:
           <div className="dp-tabpane" hidden={tab !== "updates"}><UpdatesPane v={v} /></div>
           {v.phase === "graduated" && <div className="dp-tabpane" hidden={tab !== "trades"}><TradeTape v={v} trades={trades} /></div>}
           <div className="dp-tabpane" hidden={tab !== "backers"}><BackersPane v={v} fills={fills} /></div>
-          <div className="dp-tabpane" hidden={tab !== "terms"}><TermsPane v={v} /><VestingCard v={v} /></div>
+          <div className="dp-tabpane" hidden={tab !== "terms"}><TermsPane v={v} /><WhoEarns v={v} /><VestingCard v={v} /><ContractCard v={v} /></div>
         </div>
 
         {/* RIGHT: the money box, always above the fold */}
@@ -135,10 +132,6 @@ function VentureBody({ v, fills, ethUsd }: { v: VentureT; fills: Fill[]; ethUsd:
           {v.phase === "graduated" && <TradePanel v={v} />}
 
           <ShareBar v={v} />
-          <DexPanel v={v} dex={dex} />
-          <ContractCard v={v} />
-          <WhoEarns v={v} />
-          <ReferralChit />
         </div>
       </div>
     </div>
@@ -176,7 +169,6 @@ function StatBar({ v, trades, ethUsd }: { v: VentureT; trades: PoolTrade[]; ethU
     <>
       <div className="dp-statbar">
         <StatCell k="price">{ethUsd > 0 && priceEth > 0 ? fmtUsdPrice(priceEth * ethUsd) : `${fmtEth(st.priceWei, 8)}`}</StatCell>
-        <StatCell k="market cap">{fmtMcap(v, ethUsd)}</StatCell>
         <StatCell k="24h vol">{ethUsd > 0 ? fmtUsdV((Number(st.vol24Wei) / 1e18) * ethUsd) : `${fmtEth(st.vol24Wei, 3)} ETH`}</StatCell>
         <StatCell k="24h txns">{st.buys24 + st.sells24}</StatCell>
         <StatCell k="5m"><Delta pct={st.change.m5} sinceInception={st.ageSecs < 300} ageSecs={st.ageSecs} /></StatCell>
@@ -184,35 +176,40 @@ function StatBar({ v, trades, ethUsd }: { v: VentureT; trades: PoolTrade[]; ethU
         <StatCell k="4h"><Delta pct={st.change.h4} sinceInception={st.ageSecs < 14_400} ageSecs={st.ageSecs} /></StatCell>
         <StatCell k="24h"><Delta pct={st.change.h24} sinceInception={st.ageSecs < 86_400} ageSecs={st.ageSecs} /></StatCell>
       </div>
-      <div className="dp-panel" style={{ marginBottom: 14 }}>
-        <div className="dp-pbody">
+      {st.buys24 + st.sells24 > 0 && (
+        <div style={{ margin: "-4px 0 14px" }}>
           <BuySellStrength buyWei={st.buyVol24Wei} sellWei={st.sellVol24Wei} buys={st.buys24} sells={st.sells24} />
         </div>
-      </div>
+      )}
     </>
   );
 }
 
 function CurvePanel({ v }: { v: VentureT }) {
   const bars = 36;
-  // Purely the shape of the pricing, not the progress: the ring in the trade
-  // box is the one place that reads how far along the raise is. Encoding it
-  // here too gave the same number two visualisations on one screen.
+  const ethUsd = useEthUsd();
+  // The curve's shape and where it stands on it: filled bars are sold, the
+  // rest is what is left before graduation. Progress for both modes lives
+  // here, on the chart, where the eye already is.
+  const filled = v.raisedWei >= v.targetRaiseWei ? 100 : pct(v.raisedWei, v.targetRaiseWei);
+  const soldFrac = Number(v.soldWhole) / CURVE_SUPPLY;
+  const left = v.targetRaiseWei > v.raisedWei ? v.targetRaiseWei - v.raisedWei : 0n;
+  const gradFdv = Number(gradValueWei(v, BigInt(TOTAL_SUPPLY))) / 1e18;
   return (
     <div className="dp-panel dp-chartpanel">
-      <div className="dp-phead"><span>${v.symbol} bonding curve</span></div>
+      <div className="dp-phead">
+        <span>{filled.toFixed(0)}% filled · {fmtEth(left, 3)} ETH to go</span>
+        <span>graduates at {ethUsd > 0 ? fmtUsdV(gradFdv * ethUsd) : `${gradFdv.toFixed(2)} ETH`} market cap</span>
+      </div>
       <div className="dp-pbody">
         <svg className="dp-px" width="100%" viewBox="0 0 560 150" preserveAspectRatio="none" style={{ height: 150 }} aria-hidden>
           {Array.from({ length: bars }, (_, i) => {
             const h = 18 + (i / (bars - 1)) * 120;
+            const sold = (i + 1) / bars <= soldFrac + 1e-9;
             return <rect key={i} x={i * 15.5 + 2} y={142 - h} width={11} height={h}
-              fill="var(--up)" opacity={0.16 + (i / bars) * 0.34} />;
+              fill="var(--up)" opacity={sold ? 0.85 : 0.14} />;
           })}
         </svg>
-        <p className="dp-agate" style={{ padding: "4px 6px 2px" }}>
-          Price rises with every buy — early backers pay less. Pricing is the exact integral of the curve, so
-          splitting an order into many small ones costs exactly the same.
-        </p>
       </div>
     </div>
   );
@@ -319,61 +316,6 @@ function TermsPane({ v }: { v: VentureT }) {
   );
 }
 
-/** The contract itself, as a spec sheet. Immutability is the headline: these
- *  numbers were fixed at deployment and there is no key that edits them. */
-/** DEX Screener presence. Whether a token's info there is paid for is one of
- *  the first things a trader checks, because an unpaid listing on the venue
- *  everyone browses shows up as a nameless grey row. This states the status,
- *  names the evidence behind it, and refuses to dress it up as a safety
- *  rating — paid info proves spend, nothing more. */
-function DexPanel({ v, dex }: { v: VentureT; dex: DexProfile }) {
-  // Pre-graduation there is no pair to index, so there is nothing to report.
-  if (v.phase !== "graduated" && dex.state === "unlisted") return null;
-  if (dex.state === "unknown") return null;
-
-  // The badge already says "dex paid", so the note carries what it cannot:
-  // when, and on what evidence. Repeating the word would be the same fact
-  // twice, six pixels apart.
-  const note = dex.state === "paid"
-    ? dex.paidAt
-      ? `since ${new Date(dex.paidAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`
-      : "logo, banner and links are live there"
-    : dex.state === "pending" ? "order placed, awaiting approval"
-    : dex.state === "unpaid" ? "listed, no paid info"
-    : "not indexed yet";
-
-  return (
-    <div className="dp-panel" style={{ marginTop: 12 }}>
-      <div className="dp-phead"><span>DEX Screener</span>
-        {dex.url && <a href={dex.url} target="_blank" rel="noreferrer noopener">pair ↗</a>}
-      </div>
-      <div className="dp-pbody">
-        <div className="dp-dexrow">
-          <DexBadge profile={dex} title={false} />
-          <span className="dp-dexnote">{note}</span>
-        </div>
-        {dex.state === "paid" && (
-          <p className="dp-spec-note" style={{ marginTop: 10 }}>
-            Someone paid for this token&apos;s info on DEX Screener, so its logo, banner and links
-            render there. That is proof of spend, not of safety.
-          </p>
-        )}
-        {dex.state === "unpaid" && (
-          <p className="dp-spec-note" style={{ marginTop: 10 }}>
-            No paid token info: on DEX Screener this trades as an unnamed row. Anyone can buy the
-            profile — doubleplus does not sell it and takes no cut.
-          </p>
-        )}
-        {dex.state === "unlisted" && (
-          <p className="dp-spec-note" style={{ marginTop: 10 }}>
-            DEX Screener indexes pools, not curves. The pair appears after graduation.
-          </p>
-        )}
-      </div>
-    </div>
-  );
-}
-
 function ContractCard({ v }: { v: VentureT }) {
   const vested = v.vesting !== "0x0000000000000000000000000000000000000000";
   const deployed = new Date(v.createdAt * 1000).toLocaleDateString("en-GB", {
@@ -432,22 +374,6 @@ function WhoEarns({ v }: { v: VentureT }) {
         <Donut slices={slices} size={116} thickness={18} center={`${avgTax.toFixed(1)}%`} sub="fee" />
         <div style={{ flex: 1, minWidth: 150 }}><Legend slices={slices} /></div>
       </div>
-    </div>
-  );
-}
-
-function ReferralChit() {
-  const { address: me } = useWallet();
-  const [copied, setCopied] = useState(false);
-  if (!me) return null;
-  return (
-    <div className="dp-chit" style={{ marginTop: 12 }}>
-      <b>REFERRAL LINK</b> — earns {VENTURE.refShareBps / 100}% of the protocol fee on every trade your link
-      brings, paid in the same transaction:<br />
-      <button className="dp-mono" style={{ fontSize: 10.5, background: "none", border: "none", padding: 0, color: "var(--up)", textAlign: "left", wordBreak: "break-all" }}
-        onClick={() => navigator.clipboard?.writeText(refLink(me)).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); })}>
-        {copied ? "copied ✓" : refLink(me)}
-      </button>
     </div>
   );
 }
@@ -660,7 +586,18 @@ function RaisePanel({ v }: { v: VentureT }) {
           <span>{ethUsdInPanel > 0 && parsed > 0n && side === "buy" ? fmtUsdV((Number(parsed) / 1e18) * ethUsdInPanel) : ""}</span>
         </div>
         <p className="dp-tb-note">
-          {side === "sell" && guaranteed
+          {side === "buy" && tokensOut > 0n ? (() => {
+            // Both outcomes, in numbers, before anyone signs.
+            const atGrad = gradValueWei(v, tokensOut);
+            const x = Number(atGrad) / Number(parsed);
+            return <>
+              If it graduates: worth <b>≈ {fmtEth(atGrad, 4)} ETH</b> when trading opens{x >= 1.05 ? ` (${x.toFixed(x < 10 ? 1 : 0)}×)` : ""}.{" "}
+              {guaranteed
+                ? <>If it misses: <b>{fmtEth(parsed - entryFee, 4)} ETH</b> back.</>
+                : <>Open curve: no refund, sell back any time.</>}
+            </>;
+          })()
+            : side === "sell" && guaranteed
             ? "Exit any time. Before graduation the curve pays back up to what you put in."
             : side === "sell"
             ? "Exit any time, at the live curve price."
@@ -669,17 +606,6 @@ function RaisePanel({ v }: { v: VentureT }) {
             : "No target, no deadline. It graduates once the curve fills."}
         </p>
       </div>
-      {guaranteed && (
-        <div className="dp-gradblock dp-chartrow">
-          <Ring pct={funded} size={104} label="funded" />
-          <div style={{ flex: 1, minWidth: 140 }}>
-            <p style={{ margin: 0, fontSize: 12, color: "var(--dim)" }}>
-              <b style={{ color: "var(--text)" }}>{fmtEth(v.targetRaiseWei - (v.raisedWei > v.targetRaiseWei ? v.targetRaiseWei : v.raisedWei), 3)} ETH</b> to go.
-            </p>
-            <p style={{ margin: "6px 0 0" }}>At 100% it graduates: liquidity locks and trading opens.</p>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -688,6 +614,39 @@ function RaisePanel({ v }: { v: VentureT }) {
  *  buy that graduates ~788k. */
 const GRADUATING_BUY_GAS = 1_200_000n;
 const GRADUATED_TOPIC = toEventSelector("Graduated(address,bytes32,uint256,uint256,uint256)");
+
+/** One line under the market cap: what this wallet's bag is worth if it
+ *  cashed out now, and how that compares with what it put in. Nothing when
+ *  the wallet has no stake, so nobody reads a row of dashes. */
+function YourBag({ v }: { v: VentureT }) {
+  const { address: me } = useWallet();
+  const [h, setH] = useState<Holding | null>(null);
+  useEffect(() => {
+    if (!me) { setH(null); return; }
+    let live = true;
+    const read = () => {
+      venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "curveSellFeeBps" })
+        .then((bps) => loadHolding(me, v, Number(bps)))
+        .then((x) => { if (live) setH(x); })
+        .catch(() => undefined);
+    };
+    read();
+    const id = setInterval(() => { if (!document.hidden) read(); }, 20_000);
+    return () => { live = false; clearInterval(id); };
+  }, [me, v]);
+  if (!h || h.pos.valueNow === null || (h.pos.valueNow === 0n && h.pos.putIn === 0n)) return null;
+  const { pnl, pnlPct, valueNow, basis } = h.pos;
+  const what = basis === "refund" ? "refund due" : basis === "curve" ? "your bag, if you exit now" : "your bag, after fees";
+  return (
+    <span className="dp-bag" title={basis === "market" ? "At the pool price, less sell fees. Large bags get less due to price impact." : undefined}>
+      <span className="dp-k">{what}</span>{" "}
+      <b>{fmtEth(valueNow, 4)} ETH</b>
+      {pnl !== null && pnlPct !== null && basis !== "refund" && (
+        <span className={pnl >= 0n ? "dp-up" : "dp-down"}> {pnl >= 0n ? "+" : ""}{pnlPct.toFixed(Math.abs(pnlPct) < 10 ? 1 : 0)}%</span>
+      )}
+    </span>
+  );
+}
 
 function GraduatePanel({ v }: { v: VentureT }) {
   const { isConnected, connectFirst } = useWallet();
@@ -941,11 +900,6 @@ function TradePanel({ v }: { v: VentureT }) {
             <button className="dp-action" style={{ padding: "8px 14px", fontSize: 11 }} disabled={busy} onClick={claim}>Claim</button>
           </div>
         )}
-      </div>
-      <div className="dp-gradblock">
-        <div className="dp-lbl"><span>bonding curve progress</span><b>100%</b></div>
-        <CurveBar v={v} />
-        <p>Graduated. Liquidity is locked in the Uniswap V4 pool and the curve is closed forever.</p>
       </div>
     </div>
   );
