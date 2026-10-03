@@ -31,7 +31,14 @@ import { useUi } from "../store";
 const TOTAL_SUPPLY = 10n ** 27n;
 const CURVE_SHARE = 0.6; // 60% of supply sells on the curve
 const START_FDV_USD = 750; // mirrors VentureFactory.START_MCAP_USD_8
-const MIN_TARGET_ETH = 0.5; // mirrors VentureFactory.minTargetWei
+const MIN_TARGET_ETH = 2; // mirrors VentureFactory.minTargetWei on mainnet
+const MAX_RAISE_DAYS = 14; // mirrors VentureFactory.MAX_RAISE_SECS
+
+/** Market cap (FDV) the coin opens at on Uniswap when a raise of `targetEth`
+ *  fills: the linear curve's closing price. Founder cut doesn't move it. */
+function gradFdvUsd(targetEth: number, ethUsd: number): number {
+  return (2 * targetEth * ethUsd) / CURVE_SHARE - START_FDV_USD;
+}
 
 /** Found a startup: identity + the on-chain term sheet, in one transaction. */
 export function LaunchVenture() {
@@ -457,7 +464,7 @@ export function LaunchVenture() {
                 <p className="dp-hint" style={{ margin: "2px 0 14px" }}>
                   An open curve graduates at{" "}
                   <b className="dp-up">{chain ? `${(Number(chain.grad) / 1e18).toFixed(2)} ETH` : "the protocol threshold"}</b>{" "}
-                  on the curve, then locks its liquidity into the pool like any other launch. Buyers
+                  on the curve{chain && ethUsd > 0 ? ` (about ${fmtUsdV(gradFdvUsd(Number(chain.grad) / 1e18, ethUsd))} market cap)` : ""}, then locks its liquidity into the pool like any other launch. Buyers
                   can sell back to the curve at any moment, so there is no deadline to miss and no
                   refund to open. You earn from trade fees rather than a cut of a raise.
                 </p>
@@ -470,16 +477,17 @@ export function LaunchVenture() {
               <div style={{ display: open ? "none" : "grid", gridTemplateColumns: "1fr 1fr", gap: "0 22px" }}>
                 <div className="dp-field"><label htmlFor="v-target">How much do you want to raise?</label>
                   <input id="v-target" inputMode="decimal" value={target}
-                    onChange={(e) => setTarget(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="5.0"
+                    onChange={(e) => setTarget(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="4.0"
                     required={requiresTarget(mode)} />
                   <span className="dp-hint">
                     In ETH{targetUsd > 0 ? ` — about ${fmtUsdV(targetUsd)} today` : ""}.
+                    {targetUsd > 0 ? ` Graduates at about ${fmtUsdV(gradFdvUsd(Number(target), ethUsd))} market cap.` : ""}
                     {minTargetEth > 0 ? ` Minimum ${minTargetEth.toFixed(4)} ETH.` : ""}
                     {" "}Ask for what the next milestone costs: backers fund plans, not round numbers.
                   </span>
                 </div>
                 <div className="dp-field"><label htmlFor="v-days">How long to raise it? — {days} days</label>
-                  <input id="v-days" type="range" min={1} max={60} value={days} onChange={(e) => setDays(Number(e.target.value))} />
+                  <input id="v-days" type="range" min={1} max={MAX_RAISE_DAYS} value={days} onChange={(e) => setDays(Number(e.target.value))} />
                   <span className="dp-hint">Miss the deadline and every backer takes their curve spend back, automatically.
                     Short windows create urgency; long ones give word of mouth time to work.</span></div>
               </div>
