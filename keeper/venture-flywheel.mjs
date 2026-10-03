@@ -5,7 +5,7 @@
 //      volume per venture and per trader;
 //   2) size the jackpot: the protocol's estimated epoch revenue in ETH
 //      (volume x platformFeeBps) x JACKPOT_BPS, capped by the keeper wallet;
-//   3) spend it three ways — 40% market-buys the top-3 ventures by volume
+//   3) spend it three ways (each capped by WASH_CAP_BPS below) — 40% market-buys the top-3 ventures by volume
 //      (weighted 50/30/20) and burns the tokens to dEaD; 30% pays ETH rebates
 //      to the top-10 traders pro-rata by volume; 30% pays OUTSIDE makers who
 //      added liquidity to venture pools during the epoch (attributed to the
@@ -36,6 +36,15 @@
 //   MAX_JACKPOT_ETH     (default 0.5) hard cap per epoch
 //   BUYBACK_SLIPPAGE_BPS (default 300) floor on buyback output vs a simulation
 //                       taken just before sending
+//   MAKER_REWARDS       (default off) pay the outside-maker share. Off because
+//                       it counts liquidity *added*, which add/remove cycling
+//                       farms for gas alone, and liquidity units aren't
+//                       comparable across pools. Off, that share buys back.
+//   WASH_CAP_BPS        (default 5000) no trader is rebated, and no coin bought
+//                       back, more than this share of the platform fees its own
+//                       volume paid (net of the referee discount and referral
+//                       share). Wash trading then always costs more than it
+//                       earns; the unspent budget stays in the treasury.
 //   LOG_CHUNK           (default 500000)
 //   DRY_RUN             set to print the plan to epoch-<n>.dryrun.json without
 //                       sending txs or advancing the cursor
@@ -60,6 +69,8 @@ const KEY = process.env.KEEPER_PRIVATE_KEY;
 if (!KEY) { console.error("Set KEEPER_PRIVATE_KEY."); process.exit(1); }
 const JACKPOT_BPS = Number(process.env.JACKPOT_BPS ?? 2500);
 const MAX_JACKPOT_ETH = ethers.parseEther(process.env.MAX_JACKPOT_ETH ?? "0.5");
+const MAKER_REWARDS = (process.env.MAKER_REWARDS ?? "off") === "on";
+const WASH_CAP_BPS = BigInt(process.env.WASH_CAP_BPS ?? 5000);
 const SLIPPAGE_BPS = BigInt(process.env.BUYBACK_SLIPPAGE_BPS ?? 300);
 const LOG_CHUNK = Number(process.env.LOG_CHUNK ?? "500000");
 const DRY_RUN = process.env.DRY_RUN != null;
@@ -208,6 +219,7 @@ async function buildPlan(epoch, fromBlock, toBlock) {
     [dep.contracts.hook, dep.contracts.factory, dep.contracts.router, wallet.address].map((a) => a.toLowerCase()),
   );
   const byMaker = new Map();
+  if (MAKER_REWARDS) {
   const mlTopic = pm.interface.getEvent("ModifyLiquidity").topicHash;
   // The PoolManager is shared by every pool on the chain: filter to ours in the
   // query (poolId is the first indexed topic) rather than after fetching.
@@ -223,6 +235,7 @@ async function buildPlan(epoch, fromBlock, toBlock) {
     if (!maker || protocolAddrs.has(maker)) continue;
     byMaker.set(maker, (byMaker.get(maker) ?? 0n) + delta);
   }
+  }
 
   // 3a) Buyback-and-burn the top-3 ventures: 40% of the budget (plus the
   // maker share when no outside maker showed up this epoch). v1 burns only
@@ -233,9 +246,18 @@ async function buildPlan(epoch, fromBlock, toBlock) {
   const rebateBudget = (budget * 30n) / 100n;
   const burnBudget = budget - rebateBudget - (byMaker.size > 0 ? makerBudgetPlanned : 0n);
   const ventures = [];
+  // The least the treasury kept from `vol` of routed volume: platform fee,
+  // less the 10% referee discount, less the 20% referral share (which an
+  // attacker can route to a second wallet of their own).
+  const bps = BigInt(dep.platformFeeBps ?? 100);
+  const netFee = (vol) => (vol * bps * 72n) / 1_000_000n;
+  const washCap = (vol) => (netFee(vol) * WASH_CAP_BPS) / 10_000n;
   for (let i = 0; i < topCoins.length; i++) {
     const [coin, vol] = topCoins[i];
-    const spend = (burnBudget * BigInt(weights[i])) / 100n;
+    let spend = (burnBudget * BigInt(weights[i])) / 100n;
+    // Buying back more than the coin's own volume paid in fees would make
+    // wash-trading a coin into the top three a profit.
+    if (spend > washCap(vol)) spend = washCap(vol);
     const listing = await factory.listings(coin);
     const burnable = spend > 0n && listing.pair.toLowerCase() === dep.contracts.weth.toLowerCase();
     ventures.push({ coin, volumeEth: ethers.formatEther(vol), spendEth: ethers.formatEther(spend), spendWei: spend.toString(), burnable, burnedTokens: "0", buyTx: null, burnTx: null });
@@ -245,7 +267,10 @@ async function buildPlan(epoch, fromBlock, toBlock) {
   const topTraders = [...byTrader.entries()].sort((a, b) => (b[1] > a[1] ? 1 : -1)).slice(0, 10);
   const traderVolume = topTraders.reduce((a, [, v]) => a + v, 0n);
   const rebates = topTraders.map(([trader, vol]) => {
-    const amount = traderVolume === 0n ? 0n : (rebateBudget * vol) / traderVolume;
+    let amount = traderVolume === 0n ? 0n : (rebateBudget * vol) / traderVolume;
+    // A rebate above the fees this trader's own volume paid would pay
+    // wash trading; cap it there.
+    if (amount > washCap(vol)) amount = washCap(vol);
     return { trader, volumeEth: ethers.formatEther(vol), amountEth: ethers.formatEther(amount), amountWei: amount.toString(), tx: null };
   });
 
