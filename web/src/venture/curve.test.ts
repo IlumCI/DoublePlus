@@ -5,6 +5,7 @@ import {
   curveCostWei,
   entryFeeWei,
   feePct,
+  curveFeeWei,
   gradValueWei,
   quoteBuy,
   quoteSellWei,
@@ -302,5 +303,14 @@ describe("gradValueWei", () => {
     // And it equals the marginal price at the sold-out point times the bag.
     const endPrice = curveCostWei(v, 1n, 600_000_000n - 1n);
     expect(Number(atGrad) / Number(q * endPrice)).toBeCloseTo(1, 3);
+  });
+});
+
+describe("curveFeeWei", () => {
+  it("takes 10% off for a referred wallet, rounding as the contract does", () => {
+    const v = 123_456_789_000_000n;
+    const plain = curveFeeWei(v, 50);
+    expect(plain).toBe((v * 50n) / 10_000n);
+    expect(curveFeeWei(v, 50, true)).toBe(plain - (plain * 1_000n) / 10_000n);
   });
 });

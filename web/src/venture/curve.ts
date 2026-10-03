@@ -85,6 +85,7 @@ export function quoteSellWei(
   ownedWei: bigint,
   basisWei: bigint,
   sellFeeBps: number,
+  referred = false,
 ): SellQuote {
   if (qWhole <= 0n || ownedWei === 0n) return { gross: 0n, fee: 0n, out: 0n, capped: false };
   const q = qWhole > v.soldWhole ? v.soldWhole : qWhole;
@@ -92,25 +93,35 @@ export function quoteSellWei(
   const basis = (basisWei * (q * 10n ** 18n)) / ownedWei;
   const capped = v.mode === GUARANTEED && raw > basis;
   const gross = capped ? basis : raw;
-  const fee = (gross * BigInt(sellFeeBps)) / 10_000n;
+  const fee = curveFeeWei(gross, sellFeeBps, referred);
   return { gross, fee, out: gross - fee, capped };
+}
+
+/** VentureFeeHook.REFEREE_DISCOUNT_BPS: a wallet with a bound referrer pays
+ *  10% less of the curve fees, as it does of the platform fee after graduation. */
+export const REFEREE_DISCOUNT_BPS = 1_000n;
+
+/** A curve fee as VentureFactory._feeFor computes it. */
+export function curveFeeWei(amountWei: bigint, bps: number, referred = false): bigint {
+  const fee = (amountWei * BigInt(bps)) / 10_000n;
+  return referred ? fee - (fee * REFEREE_DISCOUNT_BPS) / 10_000n : fee;
 }
 
 /** The protocol's curve entry fee, taken off the incoming value *before* the
  *  curve is quoted — so `spentWei` records what actually reached escrow and
  *  `sum(spentWei) == raisedWei` holds. Mirrors VentureFactory.buy. */
-export function entryFeeWei(valueWei: bigint, buyFeeBps: number): bigint {
+export function entryFeeWei(valueWei: bigint, buyFeeBps: number, referred = false): bigint {
   if (valueWei <= 0n) return 0n;
-  return (valueWei * BigInt(buyFeeBps)) / 10_000n;
+  return curveFeeWei(valueWei, buyFeeBps, referred);
 }
 
 /** What a buy of `valueWei` actually gets, fee first then curve. */
-export function quoteBuy(v: CurveState, valueWei: bigint, buyFeeBps: number): {
+export function quoteBuy(v: CurveState, valueWei: bigint, buyFeeBps: number, referred = false): {
   fee: bigint;
   net: bigint;
   tokensOut: bigint;
 } {
-  const fee = entryFeeWei(valueWei, buyFeeBps);
+  const fee = entryFeeWei(valueWei, buyFeeBps, referred);
   const net = valueWei > fee ? valueWei - fee : 0n;
   return { fee, net, tokensOut: quoteTokens(v, net) };
 }

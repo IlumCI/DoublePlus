@@ -58,6 +58,10 @@ contract VentureFeeHook is IHooks, ReentrancyGuard, IUnlockCallback {
     uint16 public constant MAX_SIDE_TAX_BPS = 400; // 4% per side, founder-set
     uint16 public constant MIN_PLATFORM_BPS = 50; // 0.5%
     uint16 public constant MAX_PLATFORM_BPS = 100; // 1%
+    /// @notice A trader with a bound referrer pays this much less of the
+    ///         platform fee (and of the factory's curve fees). Two-sided: the
+    ///         referrer earns, and the person they brought pays less.
+    uint16 public constant REFEREE_DISCOUNT_BPS = 1_000; // 10% of the fee
     uint256 public constant PAYOUT_GAS = 100_000;
     int24 internal constant LP_WIDTH = 10; // auto-liquidity band, in spacings
     int24 internal constant WALL_WIDTH = 2; // quote walls: tight bands beside price
@@ -236,25 +240,28 @@ contract VentureFeeHook is IHooks, ReentrancyGuard, IUnlockCallback {
         (Currency feeCurrency, uint256 magnitude) = _unspecified(key, params, delta);
         if (magnitude == 0) return (IHooks.afterSwap.selector, 0);
 
+        // Routers pass the end trader as 32-byte hookData; a trader with a
+        // bound referrer gets the referee discount, and the referrer is paid.
+        address trader;
+        address ref;
+        if (hookData.length == 32) {
+            trader = abi.decode(hookData, (address));
+            ref = referrerOf[trader];
+        }
         uint256 platformFee = (magnitude * platformFeeBps) / BPS;
+        if (ref != address(0)) platformFee -= (platformFee * REFEREE_DISCOUNT_BPS) / BPS;
         uint256 founderTax = (magnitude * sideTaxBps) / BPS;
         uint256 sniperFee = (magnitude * snipeBps) / BPS;
         uint256 total = platformFee + founderTax + sniperFee;
         if (total == 0) return (IHooks.afterSwap.selector, 0);
 
         if (platformFee > 0) {
-            // Routers pass the end trader as 32-byte hookData; a bound
-            // referrer earns their cut of the protocol fee on every trade.
             uint256 toReferrer;
-            if (hookData.length == 32) {
-                address trader = abi.decode(hookData, (address));
-                address ref = referrerOf[trader];
-                if (ref != address(0)) {
-                    toReferrer = (platformFee * refShareBps) / BPS;
-                    if (toReferrer > 0) {
-                        _payOut(feeCurrency, ref, toReferrer);
-                        emit ReferralPaid(trader, ref, feeCurrency, toReferrer);
-                    }
+            if (ref != address(0)) {
+                toReferrer = (platformFee * refShareBps) / BPS;
+                if (toReferrer > 0) {
+                    _payOut(feeCurrency, ref, toReferrer);
+                    emit ReferralPaid(trader, ref, feeCurrency, toReferrer);
                 }
             }
             _payOut(feeCurrency, platformTreasury, platformFee - toReferrer);

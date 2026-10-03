@@ -388,6 +388,13 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         emit FeeAccrued(token, to, amount);
     }
 
+    /// @dev A curve fee, less the hook's referee discount when the caller has a
+    ///      bound referrer: the same rule the hook applies after graduation.
+    function _feeFor(uint256 amount, uint16 bps) internal view returns (uint256 fee) {
+        fee = (amount * bps) / BPS;
+        if (hook.referrerOf(msg.sender) != address(0)) fee -= (fee * hook.REFEREE_DISCOUNT_BPS()) / BPS;
+    }
+
     /// @dev Referrer first, then the Open-mode creator's share, remainder to
     ///      the protocol treasury. Nothing here calls out to the recipients.
     function _splitCurveFee(address token, uint256 fee) internal {
@@ -605,7 +612,7 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         // The entry fee comes off the incoming value before the curve is
         // quoted, so spentWei records what actually reaches escrow. Booking it
         // gross would leave refund liability above escrow by exactly the take.
-        uint256 feeIn = (msg.value * curveBuyFeeBps) / BPS;
+        uint256 feeIn = _feeFor(msg.value, curveBuyFeeBps);
         uint256 netValue = msg.value - feeIn;
         if (netValue == 0) revert InvalidParams();
 
@@ -681,7 +688,7 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         if (c.mode == RaiseMode.Guaranteed && gross > costBasis) gross = costBasis;
         if (gross > c.raisedWei) gross = c.raisedWei;
 
-        uint256 fee = (gross * curveSellFeeBps) / BPS;
+        uint256 fee = _feeFor(gross, curveSellFeeBps);
         ethOut = gross - fee;
         if (ethOut < minEthOut) revert SlippageExceeded();
 

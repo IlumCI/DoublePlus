@@ -103,8 +103,8 @@ export function Docs() {
 
           <H id="referrals">Referrals and weekly payouts</H>
           <p>
-            If someone's first trade comes through your link, you get {refShare} of the platform fee on every trade
-            they make, paid in the same transaction. Each Monday, part of the platform's income buys and burns the
+            If someone links up through your link, they pay 10% less in fees, and you get {refShare} of the
+            platform fee on every trade they make, paid in the same transaction. Each Monday, part of the platform's income buys and burns the
             most-traded coins and goes back to the most active traders. The <Link to="/rewards" viewTransition>Rewards</Link> page
             lists every payout.
           </p>

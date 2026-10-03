@@ -83,7 +83,7 @@ export async function deployStack(
   );
   await factory.waitForDeployment();
   expect(await factory.getAddress()).to.equal(predictedFactory);
-  return { factory, tokenDeployer, weth };
+  return { factory, tokenDeployer, weth, hook };
 }
 
 export async function mineSalt(tokenDeployer: any, args: any[]) {

@@ -396,17 +396,17 @@ function ReferralBanner() {
     try {
       const hash = await wc.writeContract({ address: VENTURE.hook, abi: hookAbi, functionName: "setReferrer", args: [ref], chain: wc.chain, account: wc.account });
       await venturePc.waitForTransactionReceipt({ hash });
-      pushToast({ kind: "success", title: "Referral activated", txHash: hash });
+      pushToast({ kind: "success", title: "Linked. Your fees are 10% lower now.", txHash: hash });
     } catch (e) {
-      pushToast({ kind: "error", title: "Activation failed", body: errorText(e) });
+      pushToast({ kind: "error", title: "Linking failed", body: errorText(e) });
     } finally { setBusy(false); }
   };
 
   return (
     <div className="dp-chit" style={{ margin: "0 14px 12px", borderColor: "var(--up-dim)" }}>
-      You arrived through {short(ref)}'s link. Activating costs one tiny transaction and changes none of your fees.{" "}
-      <button className="dp-mono" style={{ background: "none", border: "none", color: "var(--up)", padding: 0 }} disabled={busy} onClick={activate}>
-        {busy ? "confirm…" : "activate →"}
+      You came from {short(ref)}'s link. Link up and you pay 10% less in fees; it takes one small transaction.{" "}
+      <button style={{ background: "none", border: "none", color: "var(--up)", padding: 0, font: "inherit" }} disabled={busy} onClick={activate}>
+        {busy ? "Confirm in wallet…" : "Link up"}
       </button>
     </div>
   );
@@ -449,7 +449,14 @@ function RaisePanel({ v }: { v: VentureT }) {
   // The entry fee comes off before the curve is quoted, so the tokens you get
   // are priced on what actually reaches the curve. Both derivations live in
   // curve.ts, where they are tested against the contract's own arithmetic.
-  const { fee: entryFee, tokensOut } = quoteBuy(v, parsed, fees.buyBps);
+  // A wallet with a bound referrer pays 10% less of the curve fees.
+  const [referred, setReferred] = useState(false);
+  useEffect(() => {
+    if (!me) { setReferred(false); return; }
+    venturePc.readContract({ address: VENTURE.hook, abi: hookAbi, functionName: "referrerOf", args: [me] })
+      .then((r) => setReferred(String(r) !== "0x0000000000000000000000000000000000000000")).catch(() => undefined);
+  }, [me, busy]);
+  const { fee: entryFee, tokensOut } = quoteBuy(v, parsed, fees.buyBps, referred);
   const funded = pct(v.raisedWei, v.targetRaiseWei);
   // Mirrors VentureFactory.LAUNCH_WINDOW_SECS: for the first minute every
   // wallet may put in at most 1% of the target.
@@ -468,8 +475,8 @@ function RaisePanel({ v }: { v: VentureT }) {
     return n > ownedWhole ? ownedWhole : n < 0n ? 0n : n;
   }, [sellQ, ownedWhole]);
   const sellQuote = useMemo(
-    () => quoteSellWei(v, sellWhole, bought, spent, fees.sellBps),
-    [v, sellWhole, bought, spent, fees.sellBps],
+    () => quoteSellWei(v, sellWhole, bought, spent, fees.sellBps, referred),
+    [v, sellWhole, bought, spent, fees.sellBps, referred],
   );
 
   const buy = async () => {

@@ -217,8 +217,8 @@ export function Desk() {
           <div className="dp-form-sheet">
             <p className="dp-sec">Your referral link</p>
             <p className="dp-agate" style={{ marginBottom: 8 }}>
-              Anyone whose first trade comes through this link stays linked to you. You get {VENTURE.refShareBps / 100}% of
-              the platform fee on their trades, paid in the same transaction.
+              People who link up through this link pay 10% less in fees. You get {VENTURE.refShareBps / 100}% of the
+              platform fee on their trades, paid in the same transaction.
             </p>
             <div className="dp-chit">
               <button className="dp-mono" style={{ background: "none", border: "none", padding: 0, color: "var(--up)", fontSize: 11, textAlign: "left", wordBreak: "break-all" }}

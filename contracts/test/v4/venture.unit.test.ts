@@ -296,6 +296,24 @@ describe("Venture bonding-curve launchpad (unit)", function () {
     expect((await factory.curveState(coin)).raisedWei).to.equal(0n);
   });
 
+  it("charges a referred buyer 10% less curve fee, and still pays the referrer", async () => {
+    const [admin, creator, plain, referred, referrer] = await ethers.getSigners();
+    const { factory, tokenDeployer, weth, hook } = await deployStack();
+    const coin = await launch(factory, tokenDeployer, creator, await weth.getAddress(), { maxBuyWei: ethers.parseEther("10") });
+    await (await hook.connect(referred).setReferrer(referrer.address)).wait();
+    const value = ethers.parseEther("0.1");
+    const treasury = await hook.platformTreasury();
+    const fees = async () => (await factory.feesAccrued(treasury)) + (await factory.feesAccrued(referrer.address));
+    const f0 = await fees();
+    await (await factory.connect(plain).buy(coin, 0, { value })).wait();
+    const f1 = await fees();
+    await (await factory.connect(referred).buy(coin, 0, { value })).wait();
+    const f2 = await fees();
+    expect(f2 - f1).to.equal(((f1 - f0) * 9_000n) / 10_000n);
+    expect(await factory.feesAccrued(referrer.address)).to.be.greaterThan(0n);
+    void admin;
+  });
+
   it("refuses a pair other than WETH", async () => {
     const [, creator] = await ethers.getSigners();
     const { factory, tokenDeployer, weth } = await deployStack();
