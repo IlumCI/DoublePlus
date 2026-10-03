@@ -132,10 +132,10 @@ export function termSheetRows(mode: RaiseMode, v: TermValues): [string, string][
     [isOpen(mode) ? "Graduates at" : "Funding target", `${v.targetEth} ETH`],
   ];
   if (takesFounderCut(mode)) {
-    rows.push(["Founder cut of raise", `${v.founderCutPct}% — at graduation only`]);
+    rows.push(["Creator's cut of the raise", `${v.founderCutPct}%, paid at graduation`]);
   }
   if (hasDeadline(mode)) {
-    rows.push(["Round deadline", `${v.days} day${v.days === 1 ? "" : "s"}`]);
+    rows.push(["Deadline", `${v.days} day${v.days === 1 ? "" : "s"}`]);
   }
   rows.push(["Anti-snipe", v.antiSnipe]);
   return rows;

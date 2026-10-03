@@ -1,129 +1,58 @@
-import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { useMemo } from "react";
 
-import { type Venture } from "./client";
-import { ago, fmtEth, fmtMcap, pct, short, StatusBadge, useEthUsd } from "./ui";
+import { VENTURE } from "./client";
+import { fmtEth } from "./ui";
 import { usePageMeta } from "./seo";
 import { useVentures } from "./useVentures";
 import { env } from "../lib/env";
 
-/** Platform aggregates plus the full index of every raise ever filed. */
+/** Platform totals, laid out like a Properties sheet: label, value. Every
+ *  figure is computed from the coins the board already loaded; the coins
+ *  themselves are on the board. */
 export function Stats() {
   usePageMeta("Stats");
   const { ventures } = useVentures();
-  const ethUsd = useEthUsd();
-  const [q, setQ] = useState("");
-  const [state, setState] = useState("");
 
-  const totals = useMemo(() => {
+  const t = useMemo(() => {
     const list = ventures ?? [];
-    const raised = list.reduce((a, v) => a + v.raisedWei, 0n);
     const graduated = list.filter((v) => v.phase === "graduated");
     const failed = list.filter((v) => v.phase === "failed");
-    const refunded = failed.reduce((a, v) => a + v.raisedWei, 0n);
+    const creatorFee = list.length > 0
+      ? list.reduce((a, v) => a + (v.policy.buyTaxBps + v.policy.sellTaxBps) / 2, 0) / list.length / 100
+      : 0;
     return {
       count: list.length,
-      raised,
       graduated: graduated.length,
-      gradRate: list.length > 0 ? (graduated.length / list.length) * 100 : 0,
-      refunded,
-      liveNow: list.filter((v) => v.phase === "raising" || v.phase === "expired").length,
-      avgTax: list.length > 0
-        ? list.reduce((a, v) => a + (v.policy.buyTaxBps + v.policy.sellTaxBps) / 2, 0) / list.length / 100
-        : 0,
+      filling: list.filter((v) => v.phase === "raising" || v.phase === "expired").length,
+      failed: failed.length,
+      raised: list.reduce((a, v) => a + v.raisedWei, 0n),
+      intoPools: graduated.reduce((a, v) => a + v.raisedWei - (v.raisedWei * BigInt(v.founderRaiseBps)) / 10_000n, 0n),
+      creatorFee,
     };
   }, [ventures]);
 
-  const rows = useMemo(() => {
-    let list = [...(ventures ?? [])];
-    if (state) list = list.filter((v) => v.phase === state);
-    const needle = q.trim().toLowerCase();
-    if (needle) {
-      list = list.filter((v) =>
-        v.name.toLowerCase().includes(needle) || v.symbol.toLowerCase().includes(needle) ||
-        (v.meta.pitch ?? "").toLowerCase().includes(needle) || v.address.toLowerCase().includes(needle));
-    }
-    return list.sort((a, b) => b.createdAt - a.createdAt);
-  }, [ventures, q, state]);
+  const rows: [string, string][] = ventures === null ? [] : [
+    ["Coins launched", String(t.count)],
+    ["Trading on Uniswap", t.count > 0 ? `${t.graduated} (${((t.graduated / t.count) * 100).toFixed(0)}% of launches)` : "0"],
+    ["Filling now", String(t.filling)],
+    ["Missed their target", String(t.failed)],
+    ["ETH paid into curves", `${fmtEth(t.raised, 4)} ETH`],
+    ["ETH locked in pools", `${fmtEth(t.intoPools, 4)} ETH`],
+    ["Average creator fee", `${t.creatorFee.toFixed(2)}% per trade`],
+    ["Platform fee", `${(VENTURE.platformFeeBps / 100).toFixed(2)}% per trade, ${VENTURE.refShareBps / 100}% of that to referrers`],
+  ];
 
   return (
     <div className="dp-shell" style={{ paddingBottom: 70 }}>
       <div className="dp-page-head">
         <h1 className="dp-page-title">Stats</h1>
-        <p style={{ maxWidth: "58ch", color: "var(--dim)", fontSize: 13 }}>
-          Platform totals, read straight off {env.chainName}. No indexer sits between these numbers and the chain.
-        </p>
+        <p style={{ maxWidth: "58ch", color: "var(--dim)", fontSize: 13 }}>Read directly from {env.chainName}.</p>
       </div>
-
-      <div className="dp-three-col">
-        <Stat k="Committed to projects" v={`${fmtEth(totals.raised, 4)} ETH`} foot={`across ${totals.count} raise${totals.count === 1 ? "" : "s"}`} />
-        <Stat k="Trading with locked liquidity" v={String(totals.graduated)} foot="graduated into Uniswap V4 pools" />
-        <Stat k="Raising right now" v={String(totals.liveNow)} foot="open curves accepting backers" />
-        <Stat k="Refund guarantee" v="100%" foot="returned when a raise misses its target" />
-        <Stat k="Average trade tax" v={`${totals.avgTax.toFixed(2)}%`} foot="founder-set, 0–4% each side" />
-        <Stat k="Protocol fee" v={`${(Number(import.meta.env.VITE_PLATFORM_FEE_BPS ?? 100) / 100).toFixed(2)}%`} foot="per trade; 20% of it to referrers" />
-      </div>
-
-      <div className="dp-archive-filters">
-        <label>Status
-          <select value={state} onChange={(e) => setState(e.target.value)}>
-            <option value="">any</option>
-            <option value="raising">raising</option>
-            <option value="expired">funded</option>
-            <option value="graduated">trading</option>
-            <option value="failed">failed</option>
-          </select>
-        </label>
-        <label>Search
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="name, ticker, pitch, address…" size={24} />
-        </label>
-      </div>
-
-      <div className="dp-form-sheet">
-        <p className="dp-sec">Every raise filed <span className="dp-agate">newest first</span></p>
-        {ventures === null ? <p className="dp-agate">Reading the chain…</p> : (
-          <table className="dp-docket">
-            <thead><tr>
-              <th>Project</th><th className="dp-num">Raised</th><th className="dp-num">Target</th>
-              <th className="dp-num">Market cap</th><th>Age</th><th>Creator</th><th>Status</th>
-            </tr></thead>
-            <tbody>
-              {rows.length === 0 ? (
-                <tr><td colSpan={7} className="dp-agate">No results.</td></tr>
-              ) : rows.map((v: Venture) => (
-                <tr key={v.address}>
-                  <td>
-                    <Link className="dp-row-link" to={`/venture/${v.address}`} viewTransition>
-                      <b>{v.name}</b> <span className="dp-mono" style={{ fontSize: 10.5 }}>${v.symbol}</span>
-                    </Link>
-                  </td>
-                  <td className="dp-num">{fmtEth(v.raisedWei, 3)}</td>
-                  <td className="dp-num">{fmtEth(v.targetRaiseWei, 3)}</td>
-                  <td className="dp-num">{fmtMcap(v, ethUsd)}</td>
-                  <td className="dp-mono" style={{ fontSize: 11 }}>{ago(v.createdAt)}</td>
-                  <td className="dp-mono" style={{ fontSize: 11 }}>{short(v.creator)}</td>
-                  <td><StatusBadge v={v} /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      <p className="dp-agate" style={{ marginTop: 14 }}>
-        Funding percentages are computed from the curve's own state:{" "}
-        {rows.length > 0 ? `${pct(rows[0].raisedWei, rows[0].targetRaiseWei).toFixed(1)}% on the newest raise.` : "nothing filed yet."}
-      </p>
-    </div>
-  );
-}
-
-function Stat({ k, v, foot }: { k: string; v: string; foot: string }) {
-  return (
-    <div className="dp-record">
-      <span className="dp-k">{k}</span>
-      <span className="dp-val">{v}</span>
-      <p className="dp-foot dp-agate">{foot}</p>
+      {ventures === null ? <p className="dp-agate">Loading…</p> : (
+        <dl className="dp-props">
+          {rows.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}
+        </dl>
+      )}
     </div>
   );
 }

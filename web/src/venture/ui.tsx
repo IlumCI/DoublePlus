@@ -188,7 +188,7 @@ export function CopyButton({ value, label, className }: { value: string; label?:
       onClick={() => navigator.clipboard?.writeText(value).then(() => { setDone(true); setTimeout(() => setDone(false), 1400); })}
       title="Copy"
     >
-      {done ? "copied ✓" : (label ?? short(value))} ⧉
+      {done ? "Copied" : (label ?? short(value))}
     </button>
   );
 }
@@ -250,7 +250,7 @@ export function Delta({ pct: p, size = 13, sinceInception, ageSecs }: {
   // 24h on a two-hour-old pool answers nothing — but four identical numbers
   // read as a broken widget unless the strip says why.
   const title = sinceInception
-    ? `Pool is only ${ageSecs !== undefined ? ago(Math.floor(Date.now() / 1000) - ageSecs) : "minutes"} old — this is the change since its first trade, not a full window.`
+    ? `The pool is only ${ageSecs !== undefined ? ago(Math.floor(Date.now() / 1000) - ageSecs) : "minutes"} old, so this is the change since its first trade.`
     : undefined;
   return (
     <span
@@ -305,7 +305,7 @@ export function DexBadge({ profile, title }: { profile: DexProfile; title?: bool
   const cls = state === "paid" ? "dp-dexpaid" : state === "pending" ? "dp-dexpend" : "dp-dexunpaid";
   const label = state === "paid" ? "dex paid" : state === "pending" ? "dex pending" : "dex unpaid";
   const tip = state === "paid"
-    ? `DEX Screener token info is paid for${profile.paidAt ? ` (${new Date(profile.paidAt).toISOString().slice(0, 10)})` : ""} — logo, banner and links are live on their pair page. Proof of spend, not of safety.`
+    ? `Paid DEX Screener profile${profile.paidAt ? `, since ${new Date(profile.paidAt).toISOString().slice(0, 10)}` : ""}: its logo and links show on the pair page. Anyone can buy one.`
     : state === "pending"
       ? "A DEX Screener profile order is placed but not approved yet."
       : "Listed on DEX Screener with no paid token info: no logo, banner or links there.";

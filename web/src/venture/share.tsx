@@ -73,7 +73,7 @@ export async function drawShareCard(v: Venture): Promise<Blob | null> {
   ctx.fillStyle = tb;
   ctx.beginPath(); ctx.roundRect(60, 60, W - 120, 50, [14, 14, 0, 0]); ctx.fill();
   ctx.fillStyle = "#fff"; ctx.font = "600 22px 'Segoe UI', Tahoma, sans-serif";
-  ctx.fillText(`${BRAND.name}${BRAND.tld} — $${v.symbol}`, 90, 93);
+  ctx.fillText(`${BRAND.name}${BRAND.tld}  ·  $${v.symbol}`, 90, 93);
 
   // Logo or monogram.
   const lx = 100, ly = 150, ls = 150;
@@ -133,7 +133,7 @@ export async function drawShareCard(v: Venture): Promise<Blob | null> {
 
 function postText(v: Venture): string {
   if (v.phase === "graduated") return `$${v.symbol} graduated and is trading on Uniswap. Liquidity locked.`;
-  if (v.phase === "failed") return `$${v.symbol} missed its target — refunds are open.`;
+  if (v.phase === "failed") return `$${v.symbol} missed its target. Refunds are open.`;
   const p = pct(v.raisedWei, v.targetRaiseWei);
   return `$${v.symbol} is ${p.toFixed(0)}% of the way to graduation.${v.mode === 1 ? "" : " Refund or rocket."}`;
 }
@@ -176,7 +176,6 @@ export function ShareBar({ v }: { v: Venture }) {
       <button onClick={copy}>Copy image</button>
       <button onClick={download}>Download</button>
       {note && <span className="dp-share-note">{note}</span>}
-      <span className="dp-share-tip">Tip: paste the image into your post — image posts travel further.</span>
     </div>
   );
 }

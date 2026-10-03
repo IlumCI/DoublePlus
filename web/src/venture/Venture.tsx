@@ -49,7 +49,7 @@ export function VenturePage() {
   usePageMeta(v ? `${v.name} ($${v.symbol})` : null, v?.meta.pitch);
 
   if (!v) {
-    return <div className="dp-shell" style={{ padding: "80px 18px", textAlign: "center", color: "var(--faint)" }}>Pulling the term sheet…</div>;
+    return <div className="dp-shell" style={{ padding: "80px 18px", textAlign: "center", color: "var(--faint)" }}>Loading…</div>;
   }
   return <VentureBody v={v} fills={fills} ethUsd={ethUsd} />;
 }
@@ -67,7 +67,7 @@ function VentureBody({ v, fills, ethUsd }: { v: VentureT; fills: Fill[]; ethUsd:
   };
 
   const TABS: [Tab, string][] = [
-    ["project", "The project"],
+    ["project", "About"],
     ...(COMMENTS_ENABLED ? ([["chat", "Chat"]] as [Tab, string][]) : []),
     ["updates", "Updates"],
     ...(v.phase === "graduated" ? ([["trades", "Trades"]] as [Tab, string][]) : []),
@@ -77,7 +77,6 @@ function VentureBody({ v, fills, ethUsd }: { v: VentureT; fills: Fill[]; ethUsd:
 
   return (
     <div className="dp-shell" style={{ paddingBottom: 70 }}>
-      <Link to="/" viewTransition className="dp-mono" style={{ display: "inline-block", marginTop: 14, fontSize: 11, color: "var(--faint)" }}>← all raises</Link>
 
       {v.meta.banner && (
         <div className="dp-banner"><img src={v.meta.banner} alt="" loading="lazy" /></div>
@@ -221,14 +220,7 @@ function ProjectPane({ v }: { v: VentureT }) {
     <div className="dp-story">
       {v.meta.description || v.meta.pitch
         ? <p>{v.meta.description || v.meta.pitch}</p>
-        : <p className="dp-agate">This raise filed no description on-chain.</p>}
-
-      {(v.meta.website || v.meta.twitter) && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 16 }}>
-          {v.meta.website && <a className="dp-chit" href={v.meta.website} target="_blank" rel="noreferrer">website ↗</a>}
-          {v.meta.twitter && <a className="dp-chit" href={v.meta.twitter} target="_blank" rel="noreferrer">x / twitter ↗</a>}
-        </div>
-      )}
+        : <p className="dp-agate">No description.</p>}
     </div>
   );
 }
@@ -243,7 +235,7 @@ function UpdatesPane({ v }: { v: VentureT }) {
 
   if (updates === null) return <p className="dp-agate">Reading the update log…</p>;
   if (updates.length === 0) {
-    return <p className="dp-agate">No founder updates posted yet. Updates are written on-chain and cannot be edited or deleted afterwards.</p>;
+    return <p className="dp-agate">No updates yet. The creator posts them on-chain, where they can't be edited or deleted.</p>;
   }
   return (
     <div className="dp-typescript">
@@ -259,7 +251,7 @@ function UpdatesPane({ v }: { v: VentureT }) {
 }
 
 function BackersPane({ v, fills }: { v: VentureT; fills: Fill[] }) {
-  if (fills.length === 0) return <p className="dp-agate">No backers yet — the curve starts at its lowest price.</p>;
+  if (fills.length === 0) return <p className="dp-agate">No buyers yet.</p>;
   const total = fills.reduce((s, f) => s + f.ethIn, 0n);
   return (
     <table className="dp-holders" style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -295,7 +287,7 @@ function TermsPane({ v }: { v: VentureT }) {
     targetEth: fmtEth(v.targetRaiseWei, 4),
     founderCutPct: (v.founderRaiseBps / 100).toFixed(1),
     days,
-    antiSnipe: "15% premium for 5s, 5% to 15s → into the quote walls",
+    antiSnipe: "15% for the first 5 s, 5% until 15 s; it goes to the buy wall",
   });
   return (
     <>
@@ -324,7 +316,7 @@ function ContractCard({ v }: { v: VentureT }) {
   });
   const rows: [string, React.ReactNode][] = [
     ["deployed", deployed],
-    ["raise type", v.mode === 1 ? "open curve" : "refund or rocket"],
+    ["type", v.mode === 1 ? "open curve, no refunds" : "refunds if it misses its target"],
     ["fee policy", `${(v.policy.buyTaxBps / 100).toFixed(2)}% buy · ${(v.policy.sellTaxBps / 100).toFixed(2)}% sell`],
     ["fee split", `${v.policy.devBps / 100} / ${v.policy.dividendBps / 100} / ${v.policy.liquidityBps / 100} / ${v.policy.mmBps / 100}`],
     ["protocol fee", `${feePct(VENTURE.platformFeeBps)}%`],
@@ -352,8 +344,8 @@ function ContractCard({ v }: { v: VentureT }) {
           ))}
         </div>
         <p className="dp-spec-note">
-          Set once, at deployment. There is no admin key, no upgrade path and no owner who can
-          rewrite these numbers — the creator included.
+          Fixed at launch. No one can change these numbers afterwards, including the creator
+          and the platform: the contracts have no admin key and can't be upgraded.
         </p>
       </div>
     </div>
@@ -363,7 +355,7 @@ function ContractCard({ v }: { v: VentureT }) {
 function WhoEarns({ v }: { v: VentureT }) {
   const avgTax = (v.policy.buyTaxBps + v.policy.sellTaxBps) / 2 / 100;
   const slices: Slice[] = [
-    { label: "Founder", value: v.policy.devBps, note: "on every trade, forever" },
+    { label: "Creator", value: v.policy.devBps, note: "paid on every trade" },
     { label: "Holders", value: v.policy.dividendBps, note: "paid to you in ETH" },
     { label: "Liquidity", value: v.policy.liquidityBps, note: "locked into the pool" },
     { label: "Market-making", value: v.policy.mmBps, note: "keeps a bid under the price" },
@@ -486,13 +478,13 @@ function RaisePanel({ v }: { v: VentureT }) {
         address: VENTURE.factory, abi: factoryAbi, functionName: "buy", args: [v.address], value: parsed,
         chain: wc.chain, account: wc.account, ...(mayFill ? { gas: GRADUATING_BUY_GAS } : {}),
       });
-      pushToast({ kind: "info", title: "Backing submitted", txHash: hash });
+      pushToast({ kind: "info", title: "Buy sent", txHash: hash });
       const rc = await venturePc.waitForTransactionReceipt({ hash });
       const graduated = rc.logs.some((l) => l.topics[0] === GRADUATED_TOPIC);
-      pushToast({ kind: "success", title: graduated ? "You filled it. Graduated, trading is open." : "You're on the cap table", txHash: hash });
+      pushToast({ kind: "success", title: graduated ? "Bought. That filled the curve, so it trades on Uniswap now." : "Bought", txHash: hash });
       setAmt("");
     } catch (e) {
-      pushToast({ kind: "error", title: "Backing failed", body: errorText(e) });
+      pushToast({ kind: "error", title: "Buy failed", body: errorText(e) });
     } finally { setBusy(false); }
   };
 
@@ -510,7 +502,7 @@ function RaisePanel({ v }: { v: VentureT }) {
       // 1% tolerance: the curve can move between quote and mine.
       const minOut = (sellQuote.out * 9_900n) / 10_000n;
       const hash = await wc.writeContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "sell", args: [v.address, sellWhole, minOut], chain: wc.chain, account: wc.account });
-      pushToast({ kind: "info", title: "Exit submitted", txHash: hash });
+      pushToast({ kind: "info", title: "Sell sent", txHash: hash });
       await venturePc.waitForTransactionReceipt({ hash });
       pushToast({ kind: "success", title: "Sold back to the curve", txHash: hash });
       setSellQ("");
@@ -525,9 +517,9 @@ function RaisePanel({ v }: { v: VentureT }) {
     <div className="dp-panel dp-tradebox">
       <div className="dp-tb-tabs">
         <button className={`dp-buy ${side === "buy" ? "on" : ""}`} onClick={() => setSide("buy")}>
-          {guaranteed ? "Back this raise" : "Buy"}
+          Buy
         </button>
-        <button className={`dp-sell ${side === "sell" ? "on" : ""}`} onClick={() => setSide("sell")}>Sell back</button>
+        <button className={`dp-sell ${side === "sell" ? "on" : ""}`} onClick={() => setSide("sell")}>Sell</button>
       </div>
       <div className="dp-tb-body">
         <ReferralBanner />
@@ -577,13 +569,13 @@ function RaisePanel({ v }: { v: VentureT }) {
               {busy ? "Confirm in wallet…" : !isConnected ? "Connect wallet" : `Sell ${fmtTok(sellWhole, true)} $${v.symbol}`}
             </button>
             <div className="dp-tb-slip">
-              <span>your curve position <b style={{ color: "var(--dim)" }}>{fmtTok(bought)}</b></span>
+              <span>you hold <b style={{ color: "var(--dim)" }}>{fmtTok(bought)}</b></span>
               <span>exit fee {feePct(fees.sellBps)}%</span>
             </div>
           </>
         )}
         <div className="dp-tb-slip">
-          <span>{guaranteed ? <>closes in <Countdown deadline={v.deadline} /></> : <>no deadline — graduates on the curve</>}</span>
+          <span>{guaranteed ? <>closes in <Countdown deadline={v.deadline} /></> : <>no deadline</>}</span>
           <span>{ethUsdInPanel > 0 && parsed > 0n && side === "buy" ? fmtUsdV((Number(parsed) / 1e18) * ethUsdInPanel) : ""}</span>
         </div>
         <p className="dp-tb-note">
@@ -599,12 +591,12 @@ function RaisePanel({ v }: { v: VentureT }) {
             </>;
           })()
             : side === "sell" && guaranteed
-            ? "Exit any time. Before graduation the curve pays back up to what you put in."
+            ? "Sell back any time before graduation, for at most what you paid."
             : side === "sell"
-            ? "Exit any time, at the live curve price."
+            ? "Sell back any time at the curve price."
             : guaranteed
-            ? "Refund or rocket. Miss the target and your curve spend comes back."
-            : "No target, no deadline. It graduates once the curve fills."}
+            ? "If it misses its target, you get your ETH back."
+            : "Graduates when the curve fills. No refunds."}
         </p>
       </div>
     </div>
@@ -624,7 +616,7 @@ function AlertToggle({ v }: { v: VentureT }) {
   return (
     <button className={`dp-bell${on ? " on" : ""}`} onClick={() => set(!on)}
       title={on ? "Alerts on: nearly full, graduated, refunds open. Click to stop." : "Get an alert when it's nearly full, graduates, or opens refunds"}>
-      {on ? "🔔 alerts on" : "🔔 alert me"}
+      {on ? "Alerts on" : "Alert me"}
     </button>
   );
 }
@@ -650,7 +642,7 @@ function YourBag({ v }: { v: VentureT }) {
   }, [me, v]);
   if (!h || h.pos.valueNow === null || (h.pos.valueNow === 0n && h.pos.putIn === 0n)) return null;
   const { pnl, pnlPct, valueNow, basis } = h.pos;
-  const what = basis === "refund" ? "refund due" : basis === "curve" ? "your bag, if you exit now" : "your bag, after fees";
+  const what = basis === "refund" ? "refund due" : "your bag if sold now";
   return (
     <span className="dp-bag" title={basis === "market" ? "At the pool price, less sell fees. Large bags get less due to price impact." : undefined}>
       <span className="dp-k">{what}</span>{" "}
@@ -747,7 +739,7 @@ function FailPanel({ v }: { v: VentureT }) {
         </p>
         {!v.aborted ? (
           <button className="dp-tb-go dp-buy" style={{ background: "var(--up-dim)" }} disabled={busy} onClick={() => act("abort")}>
-            {busy ? "Confirm in wallet…" : "Close the round (opens refunds)"}
+            {busy ? "Confirm in wallet…" : "Open refunds"}
           </button>
         ) : spent > 0n ? (
           <button className="dp-tb-go dp-buy" disabled={busy} onClick={() => act("refund")}>
@@ -963,7 +955,7 @@ function VestingCard({ v }: { v: VentureT }) {
 
   return (
     <div className="dp-panel" style={{ marginTop: 12 }}>
-      <div className="dp-phead"><span>Founder stake · vesting</span><span>{vestedPct.toFixed(0)}% unlocked so far</span></div>
+      <div className="dp-phead"><span>Creator tokens, vesting</span><span>{vestedPct.toFixed(0)}% unlocked so far</span></div>
       <div className="dp-pbody">
         <div className="dp-meter" style={{ ["--pct" as string]: `${vestedPct}%` }}><i /></div>
         <div className="dp-tb-slip">
@@ -975,7 +967,7 @@ function VestingCard({ v }: { v: VentureT }) {
             {busy ? "Confirm in wallet…" : `Claim ${fmtTok(state.claimable)} vested`}
           </button>
         )}
-        <p className="dp-tb-note">Unlocked nothing until the raise succeeded; unlocks linearly from graduation.</p>
+        <p className="dp-tb-note">Locked until graduation, then unlocks evenly over the vesting period.</p>
       </div>
     </div>
   );

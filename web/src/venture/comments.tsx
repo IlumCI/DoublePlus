@@ -106,7 +106,7 @@ export function Comments({ v }: { v: Venture }) {
       let r = await post(token!);
       if (r.status === 401) { dropSession(address); token = await signIn(address); r = await post(token!); }
       const j = (await r.json()) as { comment?: Comment; error?: string };
-      if (!r.ok || !j.comment) throw new Error(j.error ?? "could not post");
+      if (!r.ok || !j.comment) throw new Error(j.error ?? "Couldn't post");
       setComments((c) => [j.comment!, ...(c ?? [])]);
       setDraft("");
     } catch (e) {
@@ -131,10 +131,10 @@ export function Comments({ v }: { v: Venture }) {
             {!isConnected ? "Connect to chat" : busy ? "Posting…" : readSession(address ?? "") ? "Post" : "Sign in & post"}
           </button>
         </div>
-        <p className="dp-chat-hint">One signature a week signs you in. No gas, and it can't move funds. Holders and the dev get badges.</p>
+        <p className="dp-chat-hint">Signing in takes one signature a week. It costs no gas and can't move funds.</p>
       </div>
       {error && !comments && <p className="dp-chat-empty">{error}</p>}
-      {comments && comments.length === 0 && <p className="dp-chat-empty">No messages yet. Start the thread.</p>}
+      {comments && comments.length === 0 && <p className="dp-chat-empty">No messages yet.</p>}
       <ol className="dp-chat-list">
         {(comments ?? []).map((c) => (
           <li key={c.id}>
