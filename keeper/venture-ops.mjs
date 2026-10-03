@@ -16,7 +16,8 @@
 //   RPC_URL             (default https://rpc.testnet.chain.robinhood.com)
 //   CHAIN_ID            (default 46630) picks the deployment file: 4663 ->
 //                       venture-robinhood.json, 46630 -> venture-testnet.json.
-//                       Must agree with RPC_URL or the run aborts.
+//                       Must agree with RPC_URL or the run aborts; any other
+//                       chain needs DEPLOYMENT_FILE.
 //   DEPLOYMENT_FILE     explicit override for the above
 //   MIN_DELIVER         (default 1e12 wei of the reward token)
 //   RECENTER_SPACINGS   (default 10) recenter walls whose near edge drifted
@@ -29,34 +30,16 @@
 //   DELIVER_GAS_MULT    (default 4) a payout is only pushed when it is worth at
 //                       least this many times the gas it costs to push
 import { ethers } from "ethers";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
 
-const here = dirname(fileURLToPath(import.meta.url));
-// Pick the deployment by chain rather than defaulting to testnet. The old
-// default meant pointing RPC_URL at mainnet silently kept the testnet
-// addresses, so every call went to a contract that does not exist there.
-const DEPLOYMENTS = {
-  4663: "venture-robinhood.json",
-  46630: "venture-testnet.json",
-};
-const CHAIN_ID = Number(process.env.CHAIN_ID ?? 46630);
-const depPath = process.env.DEPLOYMENT_FILE
-  ?? join(here, "../contracts/deployments", DEPLOYMENTS[CHAIN_ID] ?? "venture-testnet.json");
-const dep = JSON.parse(readFileSync(depPath, "utf8"));
+import { DRY_RUN, envEth, envInt, envWei, KEY, loadDeployment, LOG_CHUNK, RPC } from "./venture-config.mjs";
 
-const RPC = process.env.RPC_URL ?? "https://rpc.testnet.chain.robinhood.com";
-const KEY = process.env.KEEPER_PRIVATE_KEY;
-if (!KEY) { console.error("Set KEEPER_PRIVATE_KEY."); process.exit(1); }
-const MIN_DELIVER = BigInt(process.env.MIN_DELIVER ?? "1000000000000");
-const RECENTER_SPACINGS = Number(process.env.RECENTER_SPACINGS ?? "10");
+const { dep, depPath } = loadDeployment();
+const MIN_DELIVER = envWei("MIN_DELIVER", 1_000_000_000_000n);
+const RECENTER_SPACINGS = envInt("RECENTER_SPACINGS", 10, 1, 10_000);
 const SPACING = 60; // the factory's pools all use tickSpacing 60
-const LOG_CHUNK = Number(process.env.LOG_CHUNK ?? "500000");
-const CONFIRMATIONS = Number(process.env.CONFIRMATIONS ?? "3");
-const DRY_RUN = process.env.DRY_RUN != null;
-const MAX_SPEND_WEI = ethers.parseEther(process.env.MAX_SPEND_ETH ?? "0.01");
-const DELIVER_GAS_MULT = BigInt(process.env.DELIVER_GAS_MULT ?? "4");
+const CONFIRMATIONS = envInt("CONFIRMATIONS", 3, 0, 64);
+const MAX_SPEND_WEI = envEth("MAX_SPEND_ETH", "0.01");
+const DELIVER_GAS_MULT = BigInt(envInt("DELIVER_GAS_MULT", 4, 1, 1000));
 // Gas one holder adds to a claimForMany batch, measured on testnet, with room.
 const GAS_PER_DELIVERY = 60_000n;
 

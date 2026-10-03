@@ -5,13 +5,11 @@
 //      volume per venture and per trader;
 //   2) size the jackpot: the protocol's estimated epoch revenue in ETH
 //      (volume x platformFeeBps) x JACKPOT_BPS, capped by the keeper wallet;
-//   3) spend it three ways (each capped by WASH_CAP_BPS below) — 40% market-buys the top-3 ventures by volume
-//      (weighted 50/30/20) and burns the tokens to dEaD; 30% pays ETH rebates
-//      to the top-10 traders pro-rata by volume; 30% pays OUTSIDE makers who
-//      added liquidity to venture pools during the epoch (attributed to the
-//      transaction sender of each ModifyLiquidity, protocol addresses
-//      excluded; rolls into the burn pot when the epoch had no outside
-//      makers);
+//   3) spend it, each share capped by WASH_CAP_BPS: 40% market-buys the
+//      top-3 ventures by volume (weighted 50/30/20) and burns the tokens to
+//      dEaD; 30% pays ETH rebates to the top-10 traders pro-rata by volume;
+//      30% goes to outside liquidity makers when MAKER_REWARDS is on, and
+//      otherwise (the default) joins the buyback;
 //   4) publish a manifest to web/public/rewards/venture/epoch-<n>.json and
 //      advance the cursor in index.json.
 //
@@ -30,7 +28,8 @@
 //   RPC_URL             (default https://rpc.testnet.chain.robinhood.com)
 //   CHAIN_ID            (default 46630) picks the deployment file: 4663 ->
 //                       venture-robinhood.json, 46630 -> venture-testnet.json.
-//                       Must agree with RPC_URL or the run aborts.
+//                       Must agree with RPC_URL or the run aborts; any other
+//                       chain needs DEPLOYMENT_FILE.
 //   DEPLOYMENT_FILE     explicit override for the above
 //   JACKPOT_BPS         (default 2500) share of estimated epoch revenue to spend
 //   MAX_JACKPOT_ETH     (default 0.5) hard cap per epoch
@@ -49,31 +48,22 @@
 //   DRY_RUN             set to print the plan to epoch-<n>.dryrun.json without
 //                       sending txs or advancing the cursor
 import { ethers } from "ethers";
-import { readFileSync, writeFileSync, mkdirSync, existsSync, unlinkSync } from "node:fs";
+import { writeFileSync, mkdirSync, existsSync, unlinkSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
+import { DRY_RUN, envEth, envInt, KEY, loadDeployment, LOG_CHUNK, RPC } from "./venture-config.mjs";
+
 const here = dirname(fileURLToPath(import.meta.url));
-const DEPLOYMENTS = {
-  4663: "venture-robinhood.json",
-  46630: "venture-testnet.json",
-};
-const CHAIN_ID = Number(process.env.CHAIN_ID ?? 46630);
-const depPath = process.env.DEPLOYMENT_FILE
-  ?? join(here, "../contracts/deployments", DEPLOYMENTS[CHAIN_ID] ?? "venture-testnet.json");
-const dep = JSON.parse(readFileSync(depPath, "utf8"));
+const { dep, depPath } = loadDeployment();
 const MANIFEST_DIR = join(here, "../web/public/rewards/venture");
 
-const RPC = process.env.RPC_URL ?? "https://rpc.testnet.chain.robinhood.com";
-const KEY = process.env.KEEPER_PRIVATE_KEY;
-if (!KEY) { console.error("Set KEEPER_PRIVATE_KEY."); process.exit(1); }
-const JACKPOT_BPS = Number(process.env.JACKPOT_BPS ?? 2500);
-const MAX_JACKPOT_ETH = ethers.parseEther(process.env.MAX_JACKPOT_ETH ?? "0.5");
+const JACKPOT_BPS = envInt("JACKPOT_BPS", 2500, 0, 10_000);
+const MAX_JACKPOT_ETH = envEth("MAX_JACKPOT_ETH", "0.5");
 const MAKER_REWARDS = (process.env.MAKER_REWARDS ?? "off") === "on";
-const WASH_CAP_BPS = BigInt(process.env.WASH_CAP_BPS ?? 5000);
-const SLIPPAGE_BPS = BigInt(process.env.BUYBACK_SLIPPAGE_BPS ?? 300);
-const LOG_CHUNK = Number(process.env.LOG_CHUNK ?? "500000");
-const DRY_RUN = process.env.DRY_RUN != null;
+// Above 100% a wash trader would be paid more than their volume's fees.
+const WASH_CAP_BPS = BigInt(envInt("WASH_CAP_BPS", 5000, 0, 10_000));
+const SLIPPAGE_BPS = BigInt(envInt("BUYBACK_SLIPPAGE_BPS", 300, 1, 5000));
 const DEAD = "0x000000000000000000000000000000000000dEaD";
 
 const ROUTER_ABI = [
