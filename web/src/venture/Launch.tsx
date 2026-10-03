@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useWalletClient } from "wagmi";
-import { concatHex, encodeAbiParameters, getContractAddress, isAddress, keccak256, parseEther, toEventSelector, zeroAddress, type Address, type Hex } from "viem";
+import { concatHex, encodeAbiParameters, getContractAddress, keccak256, parseEther, toEventSelector, zeroAddress, type Hex } from "viem";
 
 import { confirmTx, factoryAbi, VENTURE, venturePc } from "./client";
 import { minGrossTargetEth, raiseFields, requiresTarget, targetIssue } from "./raiseMode";
@@ -9,22 +9,8 @@ import { fmtEth, fmtUsdV } from "./ui";
 import { Donut, Legend, SPLIT_COLORS, type Slice } from "./charts";
 import { usePageMeta } from "./seo";
 import { QUIVER_TOKEN_BYTECODE } from "../lib/rh/tokenBytecode";
-import { pairUsd, resolvePairRoute } from "../lib/rh/routes";
-import { STOCKS } from "../lib/v4/stocks";
-import { env } from "../lib/env";
+import { pairUsd } from "../lib/rh/routes";
 
-// Stock-paired ventures need the self-deployed V3 stack, which exists on
-// mainnet (4663) only; the testnet build keeps every pool ETH-quoted.
-//
-// Opt-in rather than implied by the chain. finalize() routes a completed
-// raise's ETH through the V3 router to buy the pair asset before seeding the
-// pool, and that hop only runs when pair != WETH — so on testnet, where
-// v3Router is address(0), it cannot run at all. Tying the toggle to the chain
-// id meant mainnet day one was the first time that path had ever executed,
-// with real money, on the highest-value launch type offered. Turn this on
-// deliberately, after the fork suite has exercised it.
-const STOCK_PAIRS_ENABLED =
-  env.chainId === 4663 && String(import.meta.env.VITE_VENTURE_STOCK_PAIRS ?? "") === "true";
 import { errorText, useWallet } from "../lib/useWallet";
 import { useUi } from "../store";
 
@@ -32,12 +18,12 @@ const TOTAL_SUPPLY = 10n ** 27n;
 const CURVE_SHARE = 0.6; // 60% of supply sells on the curve
 const START_FDV_USD = 750; // mirrors VentureFactory.START_MCAP_USD_8
 const MIN_TARGET_ETH = 2; // mirrors VentureFactory.minTargetWei on mainnet
-const MAX_RAISE_DAYS = 14;
+const MAX_RAISE_DAYS = 14; // mirrors VentureFactory.MAX_RAISE_SECS
 const LAUNCHED_TOPIC = toEventSelector("Launched(address,address,address,uint16,uint256,uint64,address)");
 // On-chain metadata budget. A launch transaction is capped at 2^24 gas, and
 // storing ~25 KB of metadata already reaches it; leave room for the rest.
 const LOGO_MAX_CHARS = 12_000;
-const METADATA_MAX_BYTES = 18_000; // mirrors VentureFactory.MAX_RAISE_SECS
+const METADATA_MAX_BYTES = 18_000;
 
 /** Market cap (FDV) the coin opens at on Uniswap when a raise of `targetEth`
  *  fills: the linear curve's closing price. Founder cut doesn't move it. */
@@ -69,8 +55,6 @@ export function LaunchVenture() {
   const [mode, setMode] = useState<0 | 1>(0); // 0 = funded raise, 1 = open curve
   const open = !requiresTarget(mode);
   const [chain, setChain] = useState<{ creation: bigint; grad: bigint; buyBps: number; sellBps: number; minTarget: bigint } | null>(null);
-  const [pairMode, setPairMode] = useState<"eth" | "stock">("eth");
-  const [stock, setStock] = useState<string>(STOCKS[0]?.address ?? "");
   const [buyTaxPct, setBuyTaxPct] = useState(2); // 0-4, founder trade tax on buys
   const [sellTaxPct, setSellTaxPct] = useState(3); // 0-4, on sells
   // Where the founder tax goes, in % that must total 100.
@@ -189,14 +173,6 @@ export function LaunchVenture() {
         );
       }
 
-      const pair: Address = STOCK_PAIRS_ENABLED && pairMode === "stock" && isAddress(stock) ? stock : VENTURE.weth;
-      let v3Path: Hex = "0x";
-      if (pair.toLowerCase() !== VENTURE.weth.toLowerCase()) {
-        const route = await resolvePairRoute(venturePc, pair);
-        if (!route.buy || route.buy === "0x") throw new Error("No live route to that stock. Pick another.");
-        v3Path = route.buy;
-      }
-
       const metadataURI = JSON.stringify({
         description: (longDesc.trim() || form.pitch.trim()),
         pitch: form.pitch.trim(),
@@ -229,7 +205,7 @@ export function LaunchVenture() {
           { type: "uint256" }, { type: "uint8" },
         ],
         [
-          form.name.trim(), symbol, metadataURI, TOTAL_SUPPLY, me, VENTURE.factory, buyTaxBps, pair,
+          form.name.trim(), symbol, metadataURI, TOTAL_SUPPLY, me, VENTURE.factory, buyTaxBps, VENTURE.weth,
           // The deployer scales the whole-token floor; the salt must be mined
           // against the value the constructor actually receives.
           BigInt(minHold) * 10n ** 18n, divMode,
@@ -262,7 +238,7 @@ export function LaunchVenture() {
             name: form.name.trim(),
             symbol,
             metadataURI,
-            pair,
+            pair: VENTURE.weth,
             buyTaxBps,
             sellTaxBps: Math.round(sellTaxPct * 100),
             devWallet: zeroAddress, // defaults to the founder
@@ -282,7 +258,7 @@ export function LaunchVenture() {
             mode,
             minHoldForDividends: BigInt(minHold),
             dividendMode: divMode,
-            v3Path,
+            v3Path: "0x",
           },
           salt,
         ],
@@ -376,8 +352,6 @@ export function LaunchVenture() {
   const divMode: 0 | 1 = paysDividends && tiered && minHold > 0 ? 1 : 0;
   const cutEth = Number(founderCutEth) / 1e18;
   const avgTax = (buyTaxPct + sellTaxPct) / 2;
-  const stockPick = STOCKS.find((s) => s.address === stock);
-  const payoutAsset = pairMode === "stock" ? (stockPick?.symbol ?? "the quote token") : "ETH";
 
   const feeSlices: Slice[] = [
     { label: "You", value: alloc.dev, note: "sent to your wallet on each trade" },
@@ -634,24 +608,9 @@ export function LaunchVenture() {
                   <p className="dp-sec" style={{ marginTop: 20 }}>ETH drip
                     <span className="dp-agate">{alloc.dividends}% of the fee drips to holders</span></p>
 
-                  {STOCK_PAIRS_ENABLED ? (
-                    <div className="dp-field"><label htmlFor="v-payout">Paid out in</label>
-                      <select id="v-payout" value={pairMode} onChange={(e) => setPairMode(e.target.value as "eth" | "stock")}>
-                        <option value="eth">ETH</option>
-                        <option value="stock">A tokenized stock</option>
-                      </select>
-                      {pairMode === "stock" && (
-                        <select value={stock} onChange={(e) => setStock(e.target.value)} style={{ marginTop: 8 }}>
-                          {STOCKS.map((st) => <option key={st.address} value={st.address}>{st.symbol} ({st.name})</option>)}
-                        </select>
-                      )}
-                      <span className="dp-hint">This is also your market's quote asset: holders are paid in whatever
-                        your token trades against.</span></div>
-                  ) : (
-                    <p className="dp-hint" style={{ margin: "0 0 14px" }}>
-                      Paid out in <b className="dp-up">ETH</b>, your market's quote asset.
-                    </p>
-                  )}
+                  <p className="dp-hint" style={{ margin: "0 0 14px" }}>
+                    Paid out in <b className="dp-up">ETH</b>, your market's quote asset.
+                  </p>
 
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 22px" }}>
                     <div className="dp-field">
@@ -701,7 +660,7 @@ export function LaunchVenture() {
                   <dt>Trading fee</dt><dd>{buyTaxPct}% buy / {sellTaxPct}% sell</dd>
                   <dt>Fee split</dt><dd>you {alloc.dev}%, holders {alloc.dividends}%, liquidity {alloc.liquidity}%, market-making {alloc.mm}%</dd>
                   <dt>ETH drip</dt><dd>{paysDividends
-                    ? `${alloc.dividends}% of the fee, paid in ${payoutAsset}${minHold > 0
+                    ? `${alloc.dividends}% of the fee, paid in ETH${minHold > 0
                         ? `, to wallets holding ${minHold.toLocaleString("en-US")}+ $${(form.symbol || "TICK").toUpperCase()}`
                         : ", to every holder"}${divMode === 1 ? ", tiered up to 2x for larger stakes" : ""}`
                     : "none"}</dd>

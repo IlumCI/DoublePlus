@@ -35,7 +35,7 @@ export const VENTURE = {
   weth: envAddress(vite.VITE_WETH_ADDRESS, "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73"),
   startBlock: envBigint(vite.VITE_VENTURE_START_BLOCK),
   /** ETH/USD 8dp fallback for chains whose explorer can't price ETH (testnet).
-   *  The curve sizes its $3k start FDV from this when live pricing fails. */
+   *  The curve sizes its $750 start FDV from this when live pricing fails. */
   ethUsd8Fallback: envBigint(vite.VITE_ETH_USD_8_FALLBACK),
   /** Protocol fee charged on every trade, mirrors the hook's immutable value. */
   platformFeeBps: envBps(vite.VITE_PLATFORM_FEE_BPS, 55),
