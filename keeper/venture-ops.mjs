@@ -83,6 +83,9 @@ const FACTORY_ABI = [
   "function vestingOf(address) view returns (address)",
   "function finalize(address) returns (bytes32)",
   "function abort(address)",
+  "function terms(address) view returns (uint16 founderRaiseBps, uint256 maxBuyWei, address vesting, uint128 basePriceWei, uint128 slopeQ, uint8 mode, bool swept)",
+  "event FeeAccrued(address indexed token, address indexed recipient, uint256 amount)",
+  "event FeesWithdrawn(address indexed recipient, uint256 amount)",
 ];
 const TOKEN_ABI = [
   "function pendingRewards(address) view returns (uint256)",
@@ -236,7 +239,43 @@ async function main() {
       console.log(`coin ${coin} failed: ${String(e?.shortMessage ?? e?.message ?? e).slice(0, 160)}`);
     }
   }
-  console.log(JSON.stringify({ keeper: "venture-ops", chain: Number(dep.chainId), ventures: total, ...stats, spentWei: stats.spentWei.toString(), minDeliver: minDeliver.toString(), balanceWei: balance.toString() }));
+  const solvency = await checkSolvency(total, head);
+  console.log(JSON.stringify({ keeper: "venture-ops", solvency, chain: Number(dep.chainId), ventures: total, ...stats, spentWei: stats.spentWei.toString(), minDeliver: minDeliver.toString(), balanceWei: balance.toString() }));
+}
+
+/**
+ * The factory must always hold at least what it owes: the ETH escrowed in
+ * every raise that hasn't graduated or been swept, plus every fee credited
+ * and not yet withdrawn (reconstructed from FeeAccrued and FeesWithdrawn).
+ * A shortfall means a bug or an exploit; the run then exits non-zero, which
+ * fails the workflow and notifies the repo owner.
+ */
+async function checkSolvency(total, head) {
+  let escrow = 0n;
+  for (let i = 0; i < total; i++) {
+    const coin = await factory.allTokens(i);
+    const [st, t] = await Promise.all([factory.curveState(coin), factory.terms(coin)]);
+    if (!st.finalized && !t.swept) escrow += st.raisedWei;
+  }
+  let accrued = 0n, withdrawn = 0n;
+  const from = Number(dep.startBlock ?? 0);
+  for (let start = from; start <= head; start += LOG_CHUNK) {
+    const end = Math.min(start + LOG_CHUNK - 1, head);
+    const [a, w] = await Promise.all([
+      factory.queryFilter(factory.filters.FeeAccrued(), start, end),
+      factory.queryFilter(factory.filters.FeesWithdrawn(), start, end),
+    ]);
+    for (const l of a) accrued += BigInt(l.args.amount);
+    for (const l of w) withdrawn += BigInt(l.args.amount);
+  }
+  const owed = escrow + (accrued - withdrawn);
+  const balance = await provider.getBalance(dep.contracts.factory, head);
+  const ok = balance >= owed;
+  if (!ok) {
+    console.error(`CRITICAL factory insolvent: holds ${ethers.formatEther(balance)} ETH, owes ${ethers.formatEther(owed)} (escrow ${ethers.formatEther(escrow)}, fees ${ethers.formatEther(accrued - withdrawn)})`);
+    process.exitCode = 2;
+  }
+  return { ok, balanceWei: balance.toString(), owedWei: owed.toString(), escrowWei: escrow.toString(), feesOwedWei: (accrued - withdrawn).toString() };
 }
 
 async function processCoin(coin, now, head, minDeliver) {
