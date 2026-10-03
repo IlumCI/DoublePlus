@@ -286,7 +286,7 @@ function phaseOf(v: { finalized: boolean; aborted: boolean; deadline: number; ra
   if (v.aborted) return "failed";
   const now = Math.floor(Date.now() / 1000);
   const targetHit = v.raisedWei >= v.targetRaiseWei || v.remainingWhole === 0n;
-  if (targetHit) return "expired"; // fully funded, awaiting the graduation call
+  if (targetHit) return "expired"; // fully funded, awaiting finalize(): only factories from before graduation moved into the filling buy
   // An Open curve carries deadline = uint64 max: it never expires, it only
   // graduates, so this branch is unreachable for it by design.
   if (now >= v.deadline) return "failed"; // past deadline below target (abort pending or done)

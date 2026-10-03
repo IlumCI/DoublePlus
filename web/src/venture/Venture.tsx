@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useBalance, useWalletClient } from "wagmi";
-import { formatEther, parseEther, type Address } from "viem";
+import { formatEther, parseEther, toEventSelector, type Address } from "viem";
 
 import {
   ercAbi, factoryAbi, hookAbi, loadFills, loadUpdates, loadVenture, quoteSellWei, quoteTokens,
@@ -548,10 +548,21 @@ function RaisePanel({ v }: { v: VentureT }) {
     if (!wc || parsed === 0n) return;
     setBusy(true);
     try {
-      const hash = await wc.writeContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "buy", args: [v.address], value: parsed, chain: wc.chain, account: wc.account });
+      // The buy that fills the raise also creates the pool, about 6-7x a plain
+      // buy's gas. A wallet estimate taken before someone else's buy lands
+      // would be a plain buy's, and the tx would run out of gas if it turns out
+      // to be the filling one, so near the line the limit covers graduation.
+      // Only gas used is charged.
+      const left = v.targetRaiseWei > v.raisedWei ? v.targetRaiseWei - v.raisedWei : 0n;
+      const mayFill = funded >= 50 || parsed * 2n >= left;
+      const hash = await wc.writeContract({
+        address: VENTURE.factory, abi: factoryAbi, functionName: "buy", args: [v.address], value: parsed,
+        chain: wc.chain, account: wc.account, ...(mayFill ? { gas: GRADUATING_BUY_GAS } : {}),
+      });
       pushToast({ kind: "info", title: "Backing submitted", txHash: hash });
-      await venturePc.waitForTransactionReceipt({ hash });
-      pushToast({ kind: "success", title: "You're on the cap table", txHash: hash });
+      const rc = await venturePc.waitForTransactionReceipt({ hash });
+      const graduated = rc.logs.some((l) => l.topics[0] === GRADUATED_TOPIC);
+      pushToast({ kind: "success", title: graduated ? "You filled it. Graduated, trading is open." : "You're on the cap table", txHash: hash });
       setAmt("");
     } catch (e) {
       pushToast({ kind: "error", title: "Backing failed", body: errorText(e) });
@@ -672,6 +683,11 @@ function RaisePanel({ v }: { v: VentureT }) {
     </div>
   );
 }
+
+/** Measured on a mainnet fork: a plain curve buy uses ~119k gas, the filling
+ *  buy that graduates ~788k. */
+const GRADUATING_BUY_GAS = 1_200_000n;
+const GRADUATED_TOPIC = toEventSelector("Graduated(address,bytes32,uint256,uint256,uint256)");
 
 function GraduatePanel({ v }: { v: VentureT }) {
   const { isConnected, connectFirst } = useWallet();
