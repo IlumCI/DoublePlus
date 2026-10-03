@@ -7,18 +7,24 @@ export const MAX_BODY = 280;
 export const MAX_LINKS = 2;
 export const SESSION_SECS = 7 * 86_400;
 /** How far a signed-in timestamp may sit from the server clock. */
-export const ISSUED_SKEW_SECS = 10 * 60;
+export const ISSUED_SKEW_SECS = 5 * 60;
 
 const ADDR = /^0x[0-9a-fA-F]{40}$/;
 export const isAddr = (s: unknown): s is string => typeof s === "string" && ADDR.test(s);
 
-/** The exact text a wallet signs to sign in. The site builds the same string. */
-export function authMessage(address: string, issuedAt: string): string {
+export const NONCE = /^[0-9a-f]{16,64}$/;
+
+/** The exact text a wallet signs to sign in. The site builds the same string.
+ *  It names the domain, so a lookalike site asking for this signature is
+ *  visibly asking to sign in to doubleplus.fun, and it carries a nonce, so
+ *  each signature is unique and the worker can refuse it a second time. */
+export function authMessage(address: string, issuedAt: string, nonce: string): string {
   return [
-    "doubleplus.fun comments",
+    "doubleplus.fun wants you to sign in to coin chat.",
     "",
-    `Sign in as ${address.toLowerCase()}`,
+    `Wallet: ${address.toLowerCase()}`,
     `Issued at: ${issuedAt}`,
+    `Nonce: ${nonce}`,
     "",
     "This signature only proves you own this wallet. It cannot move funds.",
   ].join("\n");
@@ -71,3 +77,29 @@ export function cleanBody(raw: unknown): { ok: true; body: string } | { ok: fals
 
 /** Seconds a poster must wait between comments: holders and the dev talk more freely. */
 export const cooldownSecs = (holderOrDev: boolean) => (holderOrDev ? 15 : 120);
+
+/** Largest request body the API reads. A comment is 280 characters. */
+export const MAX_REQUEST_BYTES = 4 * 1024;
+
+/**
+ * Paths no client of this API ever requests, which scanners always do. A hit
+ * is logged and the address blocked for a day. Listed in robots.txt as
+ * disallowed, which well-behaved crawlers respect and scanners read as a map.
+ */
+const TRAPS = [
+  /^\/admin(\/|$)/i, /^\/internal(\/|$)/i, /^\/api\/v\d+\/(export|admin|keys|users)/i,
+  /^\/\.(env|git|aws|ssh|svn|hg|DS_Store|htaccess|htpasswd|npmrc|docker)/i,
+  /^\/(wp-|wordpress|phpmyadmin|pma|xmlrpc\.php|cgi-bin|server-status|actuator|console|jenkins|solr|_profiler)/i,
+  /\.(php|asp|aspx|jsp|cgi|sql|bak|old|swp|zip|tar|gz|7z|pem|key|env|ini|yml|yaml|config)$/i,
+  /^\/(backup|dump|db|database|config|credentials|secrets?)(\.|\/|$)/i,
+  /^\/(graphql|debug|swagger|openapi|metrics)(\/|\.|$)/i,
+];
+export const isTrap = (path: string): boolean => TRAPS.some((re) => re.test(path));
+
+/** The decoy service key served on a bait page. Nothing accepts it; anyone
+ *  presenting it later has crawled the bait and is trying it on purpose. */
+export const DECOY_KEY = "dpk_live_7f3c9a1e5b8d2f6a4c0e9b7d3a5f1c8e";
+export const carriesDecoy = (headers: Headers, url: URL): boolean => {
+  const hay = [headers.get("Authorization"), headers.get("apikey"), headers.get("X-Api-Key"), url.search].join(" ");
+  return hay.includes(DECOY_KEY);
+};

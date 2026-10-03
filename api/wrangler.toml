@@ -10,3 +10,29 @@ SUPABASE_URL = "https://fkdwbaovohfvuqcobbtl.supabase.co"
 RPC_URL = "https://rpc.testnet.chain.robinhood.com"
 FACTORY = "0x6AbCaAD1F8b5272E8006bca288C1Bcc77248E62D"
 ALLOWED_ORIGINS = "https://doubleplus.fun,https://www.doubleplus.fun,http://localhost:5173"
+
+# Blocklist of abusive IPs and spent sign-in signatures, both with TTLs.
+[[kv_namespaces]]
+binding = "GUARD"
+id = "abbb586209cf4ae995c900f2a5179eef"
+
+# Per-IP request budgets (period is 10 or 60 seconds).
+[[ratelimits]]
+name = "RL_READ"
+namespace_id = "2001"
+simple = { limit = 120, period = 60 }
+
+[[ratelimits]]
+name = "RL_WRITE"
+namespace_id = "2002"
+simple = { limit = 12, period = 60 }
+
+[[ratelimits]]
+name = "RL_AUTH"
+namespace_id = "2003"
+simple = { limit = 6, period = 60 }
+
+# Workers Logs: the per-request JSON line, every request.
+[observability]
+enabled = true
+head_sampling_rate = 1

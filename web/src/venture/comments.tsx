@@ -19,15 +19,24 @@ export const COMMENTS_ENABLED = API !== "";
 export interface Comment { id: number; author: string; body: string; holder: boolean; is_dev: boolean; created_at: string }
 
 /** Must match api/src/lib.ts authMessage exactly: the worker verifies this text. */
-function authMessage(address: string, issuedAt: string): string {
+function authMessage(address: string, issuedAt: string, nonce: string): string {
   return [
-    "doubleplus.fun comments",
+    "doubleplus.fun wants you to sign in to coin chat.",
     "",
-    `Sign in as ${address.toLowerCase()}`,
+    `Wallet: ${address.toLowerCase()}`,
     `Issued at: ${issuedAt}`,
+    `Nonce: ${nonce}`,
     "",
     "This signature only proves you own this wallet. It cannot move funds.",
   ].join("\n");
+}
+
+/** 128 random bits, hex: makes every sign-in signature unique, so the worker
+ *  can refuse one it has already seen. */
+function newNonce(): string {
+  const b = new Uint8Array(16);
+  crypto.getRandomValues(b);
+  return [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
 }
 
 const sessionKey = (a: string) => `dp-session:${a.toLowerCase()}`;
@@ -76,15 +85,18 @@ export function Comments({ v }: { v: Venture }) {
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  // Hidden from people; form-filling bots find it and fill it in.
+  const [website, setWebsite] = useState("");
 
   if (!COMMENTS_ENABLED) return null;
 
   const signIn = async (a: string): Promise<string | null> => {
     const issuedAt = new Date().toISOString();
-    const signature = await signMessageAsync({ message: authMessage(a, issuedAt) });
+    const nonce = newNonce();
+    const signature = await signMessageAsync({ message: authMessage(a, issuedAt, nonce) });
     const r = await fetch(`${API}/auth`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ address: a, issuedAt, signature }),
+      body: JSON.stringify({ address: a, issuedAt, nonce, signature }),
     });
     const j = (await r.json()) as { token?: string; expires?: number; error?: string };
     if (!r.ok || !j.token || !j.expires) throw new Error(j.error ?? "sign-in failed");
@@ -101,7 +113,7 @@ export function Comments({ v }: { v: Venture }) {
       let token = readSession(address) ?? (await signIn(address));
       const post = (t: string) => fetch(`${API}/comments`, {
         method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` },
-        body: JSON.stringify({ token: v.address, body: text }),
+        body: JSON.stringify({ token: v.address, body: text, website }),
       });
       let r = await post(token!);
       if (r.status === 401) { dropSession(address); token = await signIn(address); r = await post(token!); }
@@ -121,6 +133,8 @@ export function Comments({ v }: { v: Venture }) {
   return (
     <div className="dp-chat">
       <div className="dp-chat-compose">
+        <input className="dp-hp" tabIndex={-1} autoComplete="off" aria-hidden="true" name="website"
+          value={website} onChange={(e) => setWebsite(e.target.value)} />
         <textarea value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={600} rows={3}
           placeholder={isConnected ? `Say something about $${v.symbol}…` : "Connect a wallet to chat"}
           onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) send(); }} aria-label="Comment" />

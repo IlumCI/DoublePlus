@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { authMessage, cleanBody, issueSession, readSession, SESSION_SECS } from "../src/lib";
+import { authMessage, carriesDecoy, cleanBody, DECOY_KEY, isTrap, issueSession, readSession, SESSION_SECS } from "../src/lib";
 
 const A = "0x1111111111111111111111111111111111111111";
 
@@ -37,7 +37,33 @@ describe("cleanBody", () => {
 });
 
 describe("authMessage", () => {
-  it("is stable and lowercases the address", () => {
-    expect(authMessage(A.replace("0x1", "0xA"), "2026-10-03T00:00:00.000Z")).toContain("Sign in as 0xa111");
+  it("names the domain, lowercases the address and carries the nonce", () => {
+    const m = authMessage(A.replace("0x1", "0xA"), "2026-10-03T00:00:00.000Z", "00ff00ff00ff00ff");
+    expect(m.startsWith("doubleplus.fun wants you to sign in")).toBe(true);
+    expect(m).toContain("Wallet: 0xa111");
+    expect(m).toContain("Nonce: 00ff00ff00ff00ff");
+  });
+});
+
+describe("isTrap", () => {
+  it("catches what scanners probe", () => {
+    for (const p of ["/admin", "/admin/login", "/internal/config", "/.env", "/.git/config", "/wp-login.php",
+      "/phpmyadmin/", "/backup.sql", "/config.yml", "/api/v1/export", "/actuator/health", "/graphql", "/server-status",
+      "/index.php", "/.aws/credentials", "/secrets.json", "/debug"]) {
+      expect(isTrap(p), p).toBe(true);
+    }
+  });
+  it("leaves the real API alone", () => {
+    for (const p of ["/auth", "/comments", "/health", "/robots.txt", "/", "/commentsadmin"]) expect(isTrap(p), p).toBe(false);
+  });
+});
+
+describe("carriesDecoy", () => {
+  it("spots the decoy key in a header or the query string", () => {
+    const u = new URL("https://api.example/comments");
+    expect(carriesDecoy(new Headers({ Authorization: `Bearer ${DECOY_KEY}` }), u)).toBe(true);
+    expect(carriesDecoy(new Headers({ apikey: DECOY_KEY }), u)).toBe(true);
+    expect(carriesDecoy(new Headers(), new URL(`https://api.example/x?key=${DECOY_KEY}`))).toBe(true);
+    expect(carriesDecoy(new Headers({ Authorization: "Bearer 0xabc.123.mac" }), u)).toBe(false);
   });
 });

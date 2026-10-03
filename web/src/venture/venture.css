@@ -646,3 +646,7 @@ main { container-type: inline-size; }
   .dp-chartpanel .dp-phead { flex-wrap: wrap; }
   .dp-blotter td:last-child { display: none; }
 }
+
+/* Honeypot field in the chat form: off-screen, not display:none, which some
+   bots skip. */
+.dp-hp { position: absolute; left: -10000px; width: 1px; height: 1px; opacity: 0; }
