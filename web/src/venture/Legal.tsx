@@ -10,7 +10,7 @@ import { env } from "../lib/env";
  *  This is standard template wording and has not been through counsel. It
  *  needs a review pass before the mainnet deployment carries real money. */
 
-const UPDATED = "17 September 2026";
+const UPDATED = "3 October 2026";
 
 function Section({ n, title, children }: { n: string; title: string; children: React.ReactNode }) {
   return (
@@ -183,6 +183,18 @@ export default function Legal() {
           Those providers may log your IP address and request data under their own privacy policies.
           Activity recorded on a public blockchain is permanent, public and outside the control of any
           operator of this interface.
+        </p>
+        <p>
+          Coin chat is the one feature that stores data off-chain. If you sign in to chat, the
+          interface's API (run on Cloudflare, with messages stored at Supabase) records your wallet
+          address, each message you post and when you posted it, and shows the messages publicly on the
+          coin's page. Signing in keeps a session token in your browser for up to seven days. Those
+          providers may log your IP address when you use the chat. Messages can be hidden by the
+          operators; ask through the project's X account to have yours removed.
+        </p>
+        <p>
+          Alerts you turn on for a coin are stored only in your browser. If you allow notifications,
+          your browser shows them; nothing about them is sent to the interface.
         </p>
       </Section>
 
