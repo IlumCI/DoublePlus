@@ -68,8 +68,8 @@ function resolveEthUsd(): Promise<number> {
 
 export function useEthUsd(): number {
   const configured = Number(VENTURE.ethUsd8Fallback) / 1e8;
-  // Same band for the configured price: a mis-scaled env value (it once said
-  // $1,865,000) must not inflate every dollar figure on the site.
+  // Same band for the configured price: a mis-scaled env value must not
+  // inflate every dollar figure on the site.
   const fallback = configured >= ETH_USD_SANE[0] && configured <= ETH_USD_SANE[1] ? configured : 0;
   const [usd, setUsd] = useState(() => ethUsdCache || fallback);
   useEffect(() => {

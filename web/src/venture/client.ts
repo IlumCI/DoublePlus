@@ -1,4 +1,4 @@
-import { createPublicClient, fallback, http, parseAbiItem, type Address, type PublicClient } from "viem";
+import { createPublicClient, fallback, http, isAddress, parseAbiItem, zeroAddress, type Address, type Hex, type PublicClient } from "viem";
 
 import { chain, env } from "../lib/env";
 import { isProtocolSwap } from "./marketStats";
@@ -7,25 +7,42 @@ import { RevertedOnChain } from "../lib/useWallet";
 import type { RaiseMode } from "./raiseMode";
 import { chainNowSecs } from "./clock";
 
-/** VentureFactory deployment. Defaults target the Robinhood Chain testnet
- *  (46630) deployment; every address is overridable via env so the same build
- *  serves mainnet (4663) with a pure env change. */
+const vite = import.meta.env;
+
+/** A configured address, or `fallback` when the value is missing or malformed.
+ *  A typo in a deploy env must degrade to "not deployed", not a blank page. */
+function envAddress(raw: unknown, fallback: Address = zeroAddress): Address {
+  const v = typeof raw === "string" ? raw.trim() : "";
+  return isAddress(v, { strict: false }) ? v : fallback;
+}
+
+function envBigint(raw: unknown): bigint {
+  return typeof raw === "string" && /^\d+$/.test(raw.trim()) ? BigInt(raw.trim()) : 0n;
+}
+
+function envBps(raw: unknown, fallback: number): number {
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 0 && n <= 10_000 ? n : fallback;
+}
+
+/** VentureFactory deployment, all from env so one build serves testnet
+ *  (46630) and mainnet (4663). Unset contracts read as the zero address. */
 export const VENTURE = {
-  factory: (import.meta.env.VITE_VENTURE_FACTORY ?? "0x0000000000000000000000000000000000000000") as Address,
-  tokenDeployer: (import.meta.env.VITE_VENTURE_TOKEN_DEPLOYER ?? "0x0000000000000000000000000000000000000000") as Address,
-  hook: (import.meta.env.VITE_VENTURE_HOOK ?? "0x0000000000000000000000000000000000000000") as Address,
-  router: (import.meta.env.VITE_VENTURE_ROUTER ?? "0x0000000000000000000000000000000000000000") as Address,
-  weth: (import.meta.env.VITE_WETH_ADDRESS ?? "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73") as Address,
-  startBlock: BigInt(String(import.meta.env.VITE_VENTURE_START_BLOCK ?? "0")),
+  factory: envAddress(vite.VITE_VENTURE_FACTORY),
+  tokenDeployer: envAddress(vite.VITE_VENTURE_TOKEN_DEPLOYER),
+  hook: envAddress(vite.VITE_VENTURE_HOOK),
+  router: envAddress(vite.VITE_VENTURE_ROUTER),
+  weth: envAddress(vite.VITE_WETH_ADDRESS, "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73"),
+  startBlock: envBigint(vite.VITE_VENTURE_START_BLOCK),
   /** ETH/USD 8dp fallback for chains whose explorer can't price ETH (testnet).
    *  The curve sizes its $3k start FDV from this when live pricing fails. */
-  ethUsd8Fallback: BigInt(String(import.meta.env.VITE_ETH_USD_8_FALLBACK ?? "0")),
+  ethUsd8Fallback: envBigint(vite.VITE_ETH_USD_8_FALLBACK),
   /** Protocol fee charged on every trade, mirrors the hook's immutable value. */
-  platformFeeBps: Number(import.meta.env.VITE_PLATFORM_FEE_BPS ?? 55),
+  platformFeeBps: envBps(vite.VITE_PLATFORM_FEE_BPS, 55),
   /** Referrer's cut of the protocol fee, mirrors the hook's immutable value. */
-  refShareBps: Number(import.meta.env.VITE_REF_SHARE_BPS ?? 2000),
-  updates: (import.meta.env.VITE_VENTURE_UPDATES ?? "0x0000000000000000000000000000000000000000") as Address,
-  poolManager: (import.meta.env.VITE_V4_POOL_MANAGER ?? "0x8366a39cc670b4001a1121b8f6a443a643e40951") as Address,
+  refShareBps: envBps(vite.VITE_REF_SHARE_BPS, 2000),
+  updates: envAddress(vite.VITE_VENTURE_UPDATES),
+  poolManager: envAddress(vite.VITE_V4_POOL_MANAGER, "0x8366a39cc670b4001a1121b8f6a443a643e40951"),
 };
 
 export const TOTAL_SUPPLY = 1_000_000_000;
@@ -247,7 +264,7 @@ export interface Venture {
   pair: Address;
   taxBps: number;
   createdAt: number;
-  poolId: string;
+  poolId: Hex;
   meta: VentureMeta;
   deadline: number;
   priceWei: bigint;
@@ -343,7 +360,7 @@ export async function loadVenture(address: Address): Promise<Venture> {
     if (e instanceof NotListed) throw e;
     const listing = await venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "listings", args: [address] })
       .catch(() => null);
-    if (listing && listing[0] === "0x0000000000000000000000000000000000000000") throw new NotListed(address);
+    if (listing && listing[0] === zeroAddress) throw new NotListed(address);
     throw e;
   }
 }
@@ -354,7 +371,7 @@ export async function loadVenture(address: Address): Promise<Venture> {
  *  15 s for every coin cost each visitor megabytes a minute and grew with
  *  every launch. */
 interface Statics {
-  creator: Address; pair: Address; taxBps: number; createdAt: number; poolId: string;
+  creator: Address; pair: Address; taxBps: number; createdAt: number; poolId: Hex;
   name: string; symbol: string; meta: VentureMeta;
   founderRaiseBps: number; maxBuyWei: bigint; vesting: Address; basePriceWei: bigint; slopeQ: bigint; mode: RaiseMode; swept: boolean;
   policy: Venture["policy"];
@@ -372,11 +389,11 @@ async function readStatics(address: Address): Promise<Statics> {
     venturePc.readContract({ address, abi: ercAbi, functionName: "metadataURI" }).catch(() => ""),
   ]);
   const [creator, pair, taxBps, createdAt, poolId] = listing;
-  if (creator === "0x0000000000000000000000000000000000000000") throw new NotListed(address);
+  if (creator === zeroAddress) throw new NotListed(address);
   const t = terms;
   const pol = policyRaw;
   return {
-    creator, pair, taxBps: Number(taxBps), createdAt: Number(createdAt), poolId: String(poolId),
+    creator, pair, taxBps: Number(taxBps), createdAt: Number(createdAt), poolId,
     // Hostile or broken metadata must not be able to break the page: see safe.ts.
     name: cleanText(name, 64) || "Unnamed", symbol: cleanText(symbol, 16) || "?", meta: parseMeta(metaRaw),
     founderRaiseBps: Number(t[0]), maxBuyWei: t[1], vesting: t[2], basePriceWei: t[3], slopeQ: t[4],
@@ -402,7 +419,7 @@ async function readVenture(address: Address): Promise<Venture> {
   // they still can change.
   if (c[6] && st.poolId === ZERO_ID) {
     const l = await venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "listings", args: [address] });
-    st.poolId = String(l[4]);
+    st.poolId = l[4];
   }
   if (c[7] && !st.swept) {
     const t = await venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "terms", args: [address] });
@@ -434,30 +451,19 @@ export interface Fill {
 export async function loadFills(token: Address): Promise<Fill[]> {
   const latest = await venturePc.getBlockNumber();
   const logs = await venturePc.getLogs({
-    address: VENTURE.factory, event: boughtEvent, args: { token }, fromBlock: VENTURE.startBlock, toBlock: latest,
+    address: VENTURE.factory, event: boughtEvent, args: { token }, fromBlock: VENTURE.startBlock, toBlock: latest, strict: true,
   });
   return logs
     .map((l) => ({
-      buyer: l.args.buyer as Address,
-      ethIn: l.args.ethIn as bigint,
-      tokensOut: l.args.tokensOut as bigint,
-      priceWei: l.args.priceWei as bigint,
+      buyer: l.args.buyer,
+      ethIn: l.args.ethIn,
+      tokensOut: l.args.tokensOut,
+      priceWei: l.args.priceWei,
       txHash: l.transactionHash,
       blockNumber: Number(l.blockNumber),
     }))
     .reverse();
 }
-
-/** Client-side mirror of the on-chain integral pricing, for instant quotes
- *  between polls. cost(q) = q*p0 + k*(2Sq + q^2)/2e18, all in whole tokens. */
-
-/** Mirror of VentureFactory.curveCost: the exact integral, so the sell quote
- *  the panel shows is the one the contract computes. */
-
-/** What selling `qWhole` back to the curve pays, net of the protocol fee.
- *  Guaranteed mode caps the gross at the seller's pro-rata cost basis — that
- *  cap is what keeps the refund pot solvent, so the quote must respect it. */
-
 
 // ---------------------------------------------------------------------------
 // Post-graduation market data, straight from the pool's V4 swap log.
@@ -483,18 +489,19 @@ function priceFromSqrt(sqrtPriceX96: bigint, coinIsC0: boolean): bigint {
 }
 
 export async function loadPoolTrades(v: Venture): Promise<PoolTrade[]> {
-  if (!v.finalized || v.poolId === "0x" + "0".repeat(64)) return [];
+  if (!v.finalized || v.poolId === ZERO_ID) return [];
   const latest = await venturePc.getBlockNumber();
   const logs = await venturePc.getLogs({
     address: VENTURE.poolManager,
     event: poolSwapEvent,
-    args: { id: v.poolId as `0x${string}` },
+    args: { id: v.poolId },
     fromBlock: VENTURE.startBlock,
     toBlock: latest,
+    strict: true,
   });
   // Drop the hook's own fee conversions: they are protocol mechanics riding
   // the same transaction as the trade that caused them, not trader activity.
-  const swaps = logs.filter((l) => !isProtocolSwap(String(l.args.sender), {
+  const swaps = logs.filter((l) => !isProtocolSwap(l.args.sender, {
     hook: VENTURE.hook, factory: VENTURE.factory,
   }));
   if (swaps.length === 0) return [];
@@ -507,14 +514,14 @@ export async function loadPoolTrades(v: Venture): Promise<PoolTrade[]> {
   ]);
   const perBlock = lastB > firstB ? Number(last.timestamp - first.timestamp) / (lastB - firstB) : 1;
   return swaps.map((l) => {
-    const a0 = l.args.amount0 as bigint, a1 = l.args.amount1 as bigint;
+    const a0 = l.args.amount0, a1 = l.args.amount1;
     const coinDelta = coinIsC0 ? a0 : a1;
     const pairDelta = coinIsC0 ? a1 : a0;
     return {
       isBuy: coinDelta > 0n, // positive delta = paid out of the pool to the swapper
       coinAmount: coinDelta < 0n ? -coinDelta : coinDelta,
       pairAmount: pairDelta < 0n ? -pairDelta : pairDelta,
-      priceWei: priceFromSqrt(l.args.sqrtPriceX96 as bigint, coinIsC0),
+      priceWei: priceFromSqrt(l.args.sqrtPriceX96, coinIsC0),
       blockNumber: Number(l.blockNumber),
       ts: Number(first.timestamp) + Math.round((Number(l.blockNumber) - firstB) * perBlock),
       txHash: l.transactionHash,
@@ -524,14 +531,14 @@ export async function loadPoolTrades(v: Venture): Promise<PoolTrade[]> {
 
 /** All updates a founder posted for a venture, oldest first. */
 export async function loadUpdates(token: Address): Promise<{ author: Address; text: string; blockNumber: number; txHash: string }[]> {
-  if (VENTURE.updates === "0x0000000000000000000000000000000000000000") return [];
+  if (VENTURE.updates === zeroAddress) return [];
   const latest = await venturePc.getBlockNumber();
   const logs = await venturePc.getLogs({
-    address: VENTURE.updates, event: updatePostedEvent, args: { token }, fromBlock: VENTURE.startBlock, toBlock: latest,
+    address: VENTURE.updates, event: updatePostedEvent, args: { token }, fromBlock: VENTURE.startBlock, toBlock: latest, strict: true,
   });
   return logs.map((l) => ({
-    author: l.args.author as Address,
-    text: cleanText(String(l.args.update), 4000, true),
+    author: l.args.author,
+    text: cleanText(l.args.update, 4000, true),
     blockNumber: Number(l.blockNumber),
     txHash: l.transactionHash,
   }));
@@ -541,12 +548,12 @@ export async function loadUpdates(token: Address): Promise<{ author: Address; te
 export async function loadReferralEarnings(referrer: Address): Promise<Map<string, bigint>> {
   const latest = await venturePc.getBlockNumber();
   const logs = await venturePc.getLogs({
-    address: VENTURE.hook, event: referralPaidEvent, args: { referrer }, fromBlock: VENTURE.startBlock, toBlock: latest,
+    address: VENTURE.hook, event: referralPaidEvent, args: { referrer }, fromBlock: VENTURE.startBlock, toBlock: latest, strict: true,
   });
   const sums = new Map<string, bigint>();
   for (const l of logs) {
-    const c = String(l.args.currency).toLowerCase();
-    sums.set(c, (sums.get(c) ?? 0n) + (l.args.amount as bigint));
+    const c = l.args.currency.toLowerCase();
+    sums.set(c, (sums.get(c) ?? 0n) + l.args.amount);
   }
   return sums;
 }

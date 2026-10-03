@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { isAddress, type Address } from "viem";
+import { isAddress } from "viem";
 
 import { NotListed, loadFills, loadVenture, type Fill, type Venture as VentureT } from "../client";
 import { useDexProfile } from "../../lib/dexscreener";
@@ -27,21 +27,21 @@ export function VenturePage() {
   const [state, setState] = useState<"loading" | "missing" | "down">("loading");
   const [attempt, setAttempt] = useState(0);
   const ethUsd = useEthUsd();
-  const valid = !!address && isAddress(address);
+  const coin = address && isAddress(address) ? address : null;
 
   useEffect(() => {
-    if (!valid) { setState("missing"); return; }
+    if (!coin) { setState("missing"); return; }
     let live = true;
     const refresh = () => {
-      loadVenture(address as Address)
+      loadVenture(coin)
         .then((x) => { if (live) { setV(x); setState("loading"); } })
         .catch((e) => { if (live) setState(e instanceof NotListed ? "missing" : "down"); });
-      loadFills(address as Address).then((f) => live && setFills(f)).catch(() => undefined);
+      loadFills(coin).then((f) => live && setFills(f)).catch(() => undefined);
     };
     refresh();
     const id = setInterval(refresh, 10_000);
     return () => { live = false; clearInterval(id); };
-  }, [address, valid, attempt]);
+  }, [coin, attempt]);
 
   usePageMeta(v ? `${v.name} ($${v.symbol})` : null, v?.meta.pitch);
 

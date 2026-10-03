@@ -47,7 +47,7 @@ export function Desk() {
     return () => { live = false; clearInterval(id); };
   }, [me, busy]);
 
-  if (!isConnected) {
+  if (!isConnected || !me) {
     return (
       <div className="dp-shell" style={{ paddingBottom: 60 }}>
         <div className="dp-page-head">
@@ -101,7 +101,7 @@ export function Desk() {
         return hash;
       };
       if (!r.v.aborted) await send("abort");
-      const allowance = (await venturePc.readContract({ address: r.v.address, abi: ercAbi, functionName: "allowance", args: [me!, VENTURE.factory] })) as bigint;
+      const allowance = (await venturePc.readContract({ address: r.v.address, abi: ercAbi, functionName: "allowance", args: [wc.account.address, VENTURE.factory] }));
       if (allowance < r.bought) {
         const a = await wc.writeContract({ address: r.v.address, abi: ercAbi, functionName: "approve", args: [VENTURE.factory, r.bought], chain: wc.chain, account: wc.account });
         await confirmTx(a);
@@ -141,7 +141,7 @@ export function Desk() {
   const totalPending = (rows ?? []).reduce((a, r) => a + r.pending, 0n);
   const wethEarned = refEarned.get(VENTURE.weth.toLowerCase()) ?? 0n;
   const otherEarned = [...refEarned.entries()].filter(([c]) => c !== VENTURE.weth.toLowerCase());
-  const founderRows = (rows ?? []).filter((r) => r.v.creator.toLowerCase() === me!.toLowerCase());
+  const founderRows = (rows ?? []).filter((r) => r.v.creator.toLowerCase() === me.toLowerCase());
 
   return (
     <div className="dp-shell" style={{ paddingBottom: 70 }}>
@@ -222,8 +222,8 @@ export function Desk() {
             </p>
             <div className="dp-chit">
               <button className="dp-mono" style={{ background: "none", border: "none", padding: 0, color: "var(--up)", fontSize: 11, textAlign: "left", wordBreak: "break-all" }}
-                onClick={() => navigator.clipboard?.writeText(refLink(me!)).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); })}>
-                {copied ? "Copied" : refLink(me!)}
+                onClick={() => navigator.clipboard?.writeText(refLink(me)).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); })}>
+                {copied ? "Copied" : refLink(me)}
               </button>
             </div>
             {otherEarned.length > 0 && (

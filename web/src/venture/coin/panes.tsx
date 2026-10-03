@@ -1,3 +1,4 @@
+import { zeroAddress } from "viem";
 import { useEffect, useState } from "react";
 import { useWalletClient } from "wagmi";
 
@@ -70,7 +71,7 @@ export function BackersPane({ v, fills }: { v: VentureT; fills: Fill[] }) {
 
 export function TermsPane({ v }: { v: VentureT }) {
   const days = Math.max(1, Math.round((v.deadline - v.createdAt) / 86_400));
-  const founderSupply = v.vesting === "0x0000000000000000000000000000000000000000" ? 0 : 10;
+  const founderSupply = v.vesting === zeroAddress ? 0 : 10;
   const supplySlices: Slice[] = [
     { label: "Sold on the curve", value: 60 },
     { label: "Pool liquidity", value: 40 - founderSupply },
@@ -106,7 +107,7 @@ export function TermsPane({ v }: { v: VentureT }) {
 }
 
 export function ContractCard({ v }: { v: VentureT }) {
-  const vested = v.vesting !== "0x0000000000000000000000000000000000000000";
+  const vested = v.vesting !== zeroAddress;
   const deployed = new Date(v.createdAt * 1000).toLocaleDateString("en-GB", {
     day: "numeric", month: "short", year: "numeric",
   });
@@ -175,7 +176,7 @@ export function VestingCard({ v }: { v: VentureT }) {
   const [busy, setBusy] = useState(false);
   const [state, setState] = useState<{ start: number; duration: number; total: bigint; released: bigint; claimable: bigint } | null>(null);
 
-  const none = v.vesting === "0x0000000000000000000000000000000000000000";
+  const none = v.vesting === zeroAddress;
   useEffect(() => {
     if (none) return;
     let live = true;
@@ -186,7 +187,7 @@ export function VestingCard({ v }: { v: VentureT }) {
         venturePc.readContract({ address: v.vesting, abi: vestingAbi, functionName: "totalAllocation" }),
         venturePc.readContract({ address: v.vesting, abi: vestingAbi, functionName: "released" }),
         venturePc.readContract({ address: v.vesting, abi: vestingAbi, functionName: "claimable" }),
-      ]).then(([s, d, t, r, c]) => live && setState({ start: Number(s), duration: Number(d), total: t as bigint, released: r as bigint, claimable: c as bigint }))
+      ]).then(([s, d, t, r, c]) => live && setState({ start: Number(s), duration: Number(d), total: t, released: r, claimable: c }))
         .catch(() => undefined);
     refresh();
     const id = setInterval(refresh, 30_000);

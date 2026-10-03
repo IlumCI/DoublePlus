@@ -59,21 +59,21 @@ async function calibrate(head: bigint) {
 async function read(from: bigint, to: bigint): Promise<FeedItem[]> {
   const f = VENTURE.factory;
   const [launched, bought, sold, grads, routed] = await Promise.all([
-    venturePc.getLogs({ address: f, event: launchedEvent, fromBlock: from, toBlock: to }),
-    venturePc.getLogs({ address: f, event: boughtEvent, fromBlock: from, toBlock: to }),
-    venturePc.getLogs({ address: f, event: soldEvent, fromBlock: from, toBlock: to }),
-    venturePc.getLogs({ address: f, event: graduatedEvent, fromBlock: from, toBlock: to }),
-    venturePc.getLogs({ address: VENTURE.router, event: routedEvent, fromBlock: from, toBlock: to }),
+    venturePc.getLogs({ address: f, event: launchedEvent, fromBlock: from, toBlock: to, strict: true }),
+    venturePc.getLogs({ address: f, event: boughtEvent, fromBlock: from, toBlock: to, strict: true }),
+    venturePc.getLogs({ address: f, event: soldEvent, fromBlock: from, toBlock: to, strict: true }),
+    venturePc.getLogs({ address: f, event: graduatedEvent, fromBlock: from, toBlock: to, strict: true }),
+    venturePc.getLogs({ address: VENTURE.router, event: routedEvent, fromBlock: from, toBlock: to, strict: true }),
   ]);
   const out: FeedItem[] = [];
   const key = (l: { transactionHash: string | null; logIndex: number | null }) => `${l.transactionHash}:${l.logIndex}`;
-  for (const l of launched) out.push({ kind: "launch", token: l.args.token!, who: l.args.creator!, eth: l.args.targetRaiseWei ?? 0n, block: Number(l.blockNumber), ts: tsOf(l.blockNumber!), key: key(l) });
-  for (const l of bought) out.push({ kind: "buy", token: l.args.token!, who: l.args.buyer!, eth: l.args.ethIn ?? 0n, block: Number(l.blockNumber), ts: tsOf(l.blockNumber!), key: key(l) });
-  for (const l of sold) out.push({ kind: "sell", token: l.args.token!, who: l.args.seller!, eth: l.args.ethOut ?? 0n, block: Number(l.blockNumber), ts: tsOf(l.blockNumber!), key: key(l) });
-  for (const l of grads) out.push({ kind: "graduate", token: l.args.token!, who: null, eth: l.args.raisedWei ?? 0n, block: Number(l.blockNumber), ts: tsOf(l.blockNumber!), key: key(l) });
+  for (const l of launched) out.push({ kind: "launch", token: l.args.token, who: l.args.creator, eth: l.args.targetRaiseWei, block: Number(l.blockNumber), ts: tsOf(l.blockNumber), key: key(l) });
+  for (const l of bought) out.push({ kind: "buy", token: l.args.token, who: l.args.buyer, eth: l.args.ethIn, block: Number(l.blockNumber), ts: tsOf(l.blockNumber), key: key(l) });
+  for (const l of sold) out.push({ kind: "sell", token: l.args.token, who: l.args.seller, eth: l.args.ethOut, block: Number(l.blockNumber), ts: tsOf(l.blockNumber), key: key(l) });
+  for (const l of grads) out.push({ kind: "graduate", token: l.args.token, who: null, eth: l.args.raisedWei, block: Number(l.blockNumber), ts: tsOf(l.blockNumber), key: key(l) });
   for (const l of routed) {
     const buy = !!l.args.isBuy;
-    out.push({ kind: buy ? "buy" : "sell", token: l.args.coin!, who: l.args.trader!, eth: buy ? l.args.ethIn ?? 0n : l.args.ethOut ?? 0n, block: Number(l.blockNumber), ts: tsOf(l.blockNumber!), key: key(l) });
+    out.push({ kind: buy ? "buy" : "sell", token: l.args.coin, who: l.args.trader, eth: buy ? l.args.ethIn : l.args.ethOut, block: Number(l.blockNumber), ts: tsOf(l.blockNumber), key: key(l) });
   }
   return out;
 }

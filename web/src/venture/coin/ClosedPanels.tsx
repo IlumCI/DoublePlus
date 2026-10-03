@@ -56,9 +56,9 @@ export function FailPanel({ v }: { v: VentureT }) {
   useEffect(() => {
     if (!me) return;
     venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "spentWei", args: [v.address, me] })
-      .then((x) => setSpent(x as bigint)).catch(() => undefined);
+      .then((x) => setSpent(x)).catch(() => undefined);
     venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "boughtTokens", args: [v.address, me] })
-      .then((x) => setBought(x as bigint)).catch(() => undefined);
+      .then((x) => setBought(x)).catch(() => undefined);
   }, [me, v.address, busy]);
 
   const act = async (fn: "abort" | "refund") => {
@@ -67,7 +67,7 @@ export function FailPanel({ v }: { v: VentureT }) {
     setBusy(true);
     try {
       if (fn === "refund") {
-        const allowance = (await venturePc.readContract({ address: v.address, abi: ercAbi, functionName: "allowance", args: [wc.account!.address, VENTURE.factory] })) as bigint;
+        const allowance = (await venturePc.readContract({ address: v.address, abi: ercAbi, functionName: "allowance", args: [wc.account.address, VENTURE.factory] }));
         if (allowance < bought) {
           const a = await wc.writeContract({ address: v.address, abi: ercAbi, functionName: "approve", args: [VENTURE.factory, 2n ** 256n - 1n], chain: wc.chain, account: wc.account });
           await confirmTx(a);

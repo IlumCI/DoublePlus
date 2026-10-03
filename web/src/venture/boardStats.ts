@@ -36,13 +36,13 @@ async function refresh() {
   if (from > head) return;
   const f = VENTURE.factory;
   const [l, bo, so] = await Promise.all([
-    venturePc.getLogs({ address: f, event: launchedEvent, fromBlock: from, toBlock: head }),
-    venturePc.getLogs({ address: f, event: boughtEvent, fromBlock: from, toBlock: head }),
-    venturePc.getLogs({ address: f, event: soldEvent, fromBlock: from, toBlock: head }),
+    venturePc.getLogs({ address: f, event: launchedEvent, fromBlock: from, toBlock: head, strict: true }),
+    venturePc.getLogs({ address: f, event: boughtEvent, fromBlock: from, toBlock: head, strict: true }),
+    venturePc.getLogs({ address: f, event: soldEvent, fromBlock: from, toBlock: head, strict: true }),
   ]);
-  launches = launches.concat(l.map((x) => ({ token: x.args.token!, creator: x.args.creator!, block: x.blockNumber! })));
-  buys = buys.concat(bo.map((x) => ({ token: x.args.token!, who: x.args.buyer!, tokens: x.args.tokensOut ?? 0n, eth: x.args.ethIn ?? 0n, block: x.blockNumber! })));
-  sells = sells.concat(so.map((x) => ({ token: x.args.token!, who: x.args.seller!, tokens: x.args.tokensIn ?? 0n, eth: x.args.ethOut ?? 0n, block: x.blockNumber! })));
+  launches = launches.concat(l.map((x) => ({ token: x.args.token, creator: x.args.creator, block: x.blockNumber })));
+  buys = buys.concat(bo.map((x) => ({ token: x.args.token, who: x.args.buyer, tokens: x.args.tokensOut, eth: x.args.ethIn, block: x.blockNumber })));
+  sells = sells.concat(so.map((x) => ({ token: x.args.token, who: x.args.seller, tokens: x.args.tokensIn, eth: x.args.ethOut, block: x.blockNumber })));
   lastBlock = head;
   stats = computeStats(launches, buys, sells, secsPerBlock);
 }

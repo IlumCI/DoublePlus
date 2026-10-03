@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useBalance, useWalletClient } from "wagmi";
-import { parseEther } from "viem";
+import { parseEther, zeroAddress } from "viem";
 
 import { confirmTx, ercAbi, factoryAbi, hookAbi, VENTURE, venturePc, type Venture as VentureT } from "../client";
 import { capState, feePct, gradValueWei, priceImpactPct, quoteBuy, quoteSellWei } from "../curve";
@@ -36,8 +36,8 @@ export function RaisePanel({ v }: { v: VentureT }) {
     if (!me) return;
     const read = (fn: "spentWei" | "boughtTokens") =>
       venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: fn, args: [v.address, me] });
-    read("spentWei").then((x) => setSpent(x as bigint)).catch(() => undefined);
-    read("boughtTokens").then((x) => setBought(x as bigint)).catch(() => undefined);
+    read("spentWei").then((x) => setSpent(x)).catch(() => undefined);
+    read("boughtTokens").then((x) => setBought(x)).catch(() => undefined);
   }, [me, v.address, busy]);
 
   const parsed = useMemo(() => { try { return amt ? parseEther(amt) : 0n; } catch { return 0n; } }, [amt]);
@@ -52,7 +52,7 @@ export function RaisePanel({ v }: { v: VentureT }) {
   useEffect(() => {
     if (!me) { setReferred(false); return; }
     venturePc.readContract({ address: VENTURE.hook, abi: hookAbi, functionName: "referrerOf", args: [me] })
-      .then((r) => setReferred(String(r) !== "0x0000000000000000000000000000000000000000")).catch(() => undefined);
+      .then((r) => setReferred(r !== zeroAddress)).catch(() => undefined);
   }, [me, busy]);
   const { fee: entryFee, tokensOut } = quoteBuy(v, parsed, fees.buyBps, referred);
   const funded = pct(v.raisedWei, v.targetRaiseWei);
@@ -114,7 +114,7 @@ export function RaisePanel({ v }: { v: VentureT }) {
     setBusy(true);
     try {
       const need = sellWhole * 10n ** 18n;
-      const allowance = (await venturePc.readContract({ address: v.address, abi: ercAbi, functionName: "allowance", args: [wc.account!.address, VENTURE.factory] })) as bigint;
+      const allowance = (await venturePc.readContract({ address: v.address, abi: ercAbi, functionName: "allowance", args: [wc.account.address, VENTURE.factory] }));
       if (allowance < need) {
         const a = await wc.writeContract({ address: v.address, abi: ercAbi, functionName: "approve", args: [VENTURE.factory, 2n ** 256n - 1n], chain: wc.chain, account: wc.account });
         await confirmTx(a);

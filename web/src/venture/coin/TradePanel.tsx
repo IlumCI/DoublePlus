@@ -28,8 +28,8 @@ export function TradePanel({ v }: { v: VentureT }) {
     if (!me) return;
     let live = true;
     const refresh = () => {
-      venturePc.readContract({ address: v.address, abi: ercAbi, functionName: "balanceOf", args: [me] }).then((x) => live && setBal(x as bigint)).catch(() => undefined);
-      venturePc.readContract({ address: v.address, abi: ercAbi, functionName: "pendingRewards", args: [me] }).then((x) => live && setPending(x as bigint)).catch(() => undefined);
+      venturePc.readContract({ address: v.address, abi: ercAbi, functionName: "balanceOf", args: [me] }).then((x) => live && setBal(x)).catch(() => undefined);
+      venturePc.readContract({ address: v.address, abi: ercAbi, functionName: "pendingRewards", args: [me] }).then((x) => live && setPending(x)).catch(() => undefined);
     };
     refresh();
     const id = setInterval(refresh, 12_000);
@@ -49,7 +49,7 @@ export function TradePanel({ v }: { v: VentureT }) {
       const sim = side === "buy"
         ? venturePc.simulateContract({ address: VENTURE.router, abi: routerAbi, functionName: "buy", args: [v.address, "0x", 0n], value: parsed, account })
         : venturePc.simulateContract({ address: VENTURE.router, abi: routerAbi, functionName: "sell", args: [v.address, parsed, "0x", 0n], account });
-      sim.then((r) => { if (live) setQuote(r.result as bigint); })
+      sim.then((r) => { if (live) setQuote(r.result); })
         .catch(() => { if (live) setQuote(null); })
         .finally(() => { if (live) setQuoting(false); });
     }, 350);
@@ -69,7 +69,7 @@ export function TradePanel({ v }: { v: VentureT }) {
       if (side === "buy") {
         hash = await wc.writeContract({ address: VENTURE.router, abi: routerAbi, functionName: "buy", args: [v.address, "0x", minOut], value: parsed, chain: wc.chain, account: wc.account });
       } else {
-        const allowance = (await venturePc.readContract({ address: v.address, abi: ercAbi, functionName: "allowance", args: [wc.account!.address, VENTURE.router] })) as bigint;
+        const allowance = (await venturePc.readContract({ address: v.address, abi: ercAbi, functionName: "allowance", args: [wc.account.address, VENTURE.router] }));
         if (allowance < parsed) {
           const a = await wc.writeContract({ address: v.address, abi: ercAbi, functionName: "approve", args: [VENTURE.router, 2n ** 256n - 1n], chain: wc.chain, account: wc.account });
           await confirmTx(a);

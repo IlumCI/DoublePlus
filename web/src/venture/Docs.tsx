@@ -23,10 +23,14 @@ export function Docs() {
   usePageMeta("How it works");
   const [p, setP] = useState<{ grad: bigint; floor: bigint; buy: number; sell: number } | null>(null);
   useEffect(() => {
-    const read = (fn: "graduationRaiseWei" | "minTargetWei" | "curveBuyFeeBps" | "curveSellFeeBps") =>
-      venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: fn });
-    Promise.all([read("graduationRaiseWei"), read("minTargetWei"), read("curveBuyFeeBps"), read("curveSellFeeBps")])
-      .then(([g, f, b, s]) => setP({ grad: g as bigint, floor: f as bigint, buy: Number(b) / 100, sell: Number(s) / 100 }))
+    const f = { address: VENTURE.factory, abi: factoryAbi } as const;
+    Promise.all([
+      venturePc.readContract({ ...f, functionName: "graduationRaiseWei" }),
+      venturePc.readContract({ ...f, functionName: "minTargetWei" }),
+      venturePc.readContract({ ...f, functionName: "curveBuyFeeBps" }),
+      venturePc.readContract({ ...f, functionName: "curveSellFeeBps" }),
+    ])
+      .then(([g, f, b, s]) => setP({ grad: g, floor: f, buy: Number(b) / 100, sell: Number(s) / 100 }))
       .catch(() => undefined);
   }, []);
   const grad = p ? `${fmtEth(p.grad, 3)} ETH` : "a set amount of ETH";

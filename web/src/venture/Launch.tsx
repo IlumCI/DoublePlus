@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useWalletClient } from "wagmi";
-import { concatHex, encodeAbiParameters, getContractAddress, keccak256, parseEther, toEventSelector } from "viem";
+import { concatHex, encodeAbiParameters, getContractAddress, isAddress, keccak256, parseEther, toEventSelector, zeroAddress, type Address, type Hex } from "viem";
 
 import { confirmTx, factoryAbi, VENTURE, venturePc } from "./client";
 import { minGrossTargetEth, raiseFields, requiresTarget, targetIssue } from "./raiseMode";
@@ -104,7 +104,9 @@ export function LaunchVenture() {
       for (const px of [256, 192, 128, 96]) {
         const c = document.createElement("canvas");
         c.width = px; c.height = px;
-        c.getContext("2d")!.drawImage(bmp, (bmp.width - side) / 2, (bmp.height - side) / 2, side, side, 0, 0, px, px);
+        const g = c.getContext("2d");
+        if (!g) throw new Error("no canvas");
+        g.drawImage(bmp, (bmp.width - side) / 2, (bmp.height - side) / 2, side, side, 0, 0, px, px);
         for (const q of [0.8, 0.6, 0.45]) {
           out = c.toDataURL("image/webp", q);
           if (out.length <= LOGO_MAX_CHARS) break;
@@ -187,12 +189,12 @@ export function LaunchVenture() {
         );
       }
 
-      const pair = (STOCK_PAIRS_ENABLED && pairMode === "stock" ? stock : VENTURE.weth) as `0x${string}`;
-      let v3Path: `0x${string}` = "0x";
+      const pair: Address = STOCK_PAIRS_ENABLED && pairMode === "stock" && isAddress(stock) ? stock : VENTURE.weth;
+      let v3Path: Hex = "0x";
       if (pair.toLowerCase() !== VENTURE.weth.toLowerCase()) {
         const route = await resolvePairRoute(venturePc, pair);
         if (!route.buy || route.buy === "0x") throw new Error("No live route to that stock. Pick another.");
-        v3Path = route.buy as `0x${string}`;
+        v3Path = route.buy;
       }
 
       const metadataURI = JSON.stringify({
@@ -233,10 +235,10 @@ export function LaunchVenture() {
           BigInt(minHold) * 10n ** 18n, divMode,
         ],
       );
-      const initCodeHash = keccak256(concatHex([QUIVER_TOKEN_BYTECODE as `0x${string}`, args]));
-      let salt: `0x${string}` | null = null;
+      const initCodeHash = keccak256(concatHex([QUIVER_TOKEN_BYTECODE, args]));
+      let salt: Hex | null = null;
       for (let i = 0n; i < 3_000_000n; i++) {
-        const s = `0x${i.toString(16).padStart(64, "0")}` as `0x${string}`;
+        const s: Hex = `0x${i.toString(16).padStart(64, "0")}`;
         const addr = getContractAddress({ opcode: "CREATE2", from: VENTURE.tokenDeployer, salt: s, bytecodeHash: initCodeHash });
         // The mark counts at EITHER end — 0x2add… or 0x…2add — which halves
         // the search (two targets, same odds each) and keeps it inside the
@@ -263,7 +265,7 @@ export function LaunchVenture() {
             pair,
             buyTaxBps,
             sellTaxBps: Math.round(sellTaxPct * 100),
-            devWallet: "0x0000000000000000000000000000000000000000" as const, // defaults to the founder
+            devWallet: zeroAddress, // defaults to the founder
             devBps: alloc.dev * 100,
             dividendBps: alloc.dividends * 100,
             liquidityBps: alloc.liquidity * 100,
@@ -351,11 +353,16 @@ export function LaunchVenture() {
     : "The maximum. Expect fewer quick flips.";
 
   useEffect(() => {
-    const read = (fn: "creationFeeWei" | "graduationRaiseWei" | "curveBuyFeeBps" | "curveSellFeeBps" | "minTargetWei") =>
-      venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: fn });
-    Promise.all([read("creationFeeWei"), read("graduationRaiseWei"), read("curveBuyFeeBps"), read("curveSellFeeBps"), read("minTargetWei")])
+    const f = { address: VENTURE.factory, abi: factoryAbi } as const;
+    Promise.all([
+      venturePc.readContract({ ...f, functionName: "creationFeeWei" }),
+      venturePc.readContract({ ...f, functionName: "graduationRaiseWei" }),
+      venturePc.readContract({ ...f, functionName: "curveBuyFeeBps" }),
+      venturePc.readContract({ ...f, functionName: "curveSellFeeBps" }),
+      venturePc.readContract({ ...f, functionName: "minTargetWei" }),
+    ])
       .then(([c, g, b, sl, mt]) =>
-        setChain({ creation: c as bigint, grad: g as bigint, buyBps: Number(b), sellBps: Number(sl), minTarget: mt as bigint }))
+        setChain({ creation: c, grad: g, buyBps: Number(b), sellBps: Number(sl), minTarget: mt }))
       .catch(() => undefined);
   }, []);
 

@@ -1,4 +1,4 @@
-import { parseAbiItem, type Address } from "viem";
+import { parseAbiItem, zeroAddress, type Address } from "viem";
 
 import { boughtEvent, ercAbi, factoryAbi, loadVentures, routedEvent, VENTURE, venturePc, vestingAbi, type Venture } from "./client";
 import { curveValue, marketValue, position, type Flows, type Position } from "./pnl";
@@ -36,7 +36,6 @@ export interface Portfolio {
   factoryOwed: bigint;
 }
 
-const ZERO = "0x0000000000000000000000000000000000000000";
 
 type Flow = Flows;
 const emptyFlows = (): Flow => ({ curveIn: 0n, curveOut: 0n, routerIn: 0n, routerOut: 0n });
@@ -80,8 +79,8 @@ async function holding(me: Address, v: Venture, fl: Flow | undefined, sellFeeBps
   if (balance === 0n && pending === 0n && spent === 0n && !isCreator && !fl) return null;
 
   let vestingClaimable = 0n;
-  if (isCreator && v.vesting !== ZERO) {
-    vestingClaimable = (await venturePc.readContract({ address: v.vesting, abi: vestingAbi, functionName: "claimable" }).catch(() => 0n)) as bigint;
+  if (isCreator && v.vesting !== zeroAddress) {
+    vestingClaimable = (await venturePc.readContract({ address: v.vesting, abi: vestingAbi, functionName: "claimable" }).catch(() => 0n));
   }
 
   // A failed raise pays back the booked spend, as long as the wallet still
