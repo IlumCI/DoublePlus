@@ -56,9 +56,10 @@ interface ISwapRouterV3V {
 ///             yields exactly the same tokens as one buy. There is nothing to
 ///             game with ordering.
 ///           - Per-wallet spend cap (founder-set, default 2% of target).
-///           - Hard graduation: finalize() only once the ETH target is raised
-///             (or the curve sells out). The founder takes their declared cut
-///             of the raise (max 30%); the remainder becomes pool liquidity.
+///           - Hard graduation, inside the buy that fills the target (or
+///             sells out the curve), so a funded raise never sits frozen
+///             waiting on a separate call. The founder takes their declared
+///             cut of the raise (max 30%); the remainder becomes pool liquidity.
 ///           - All-or-nothing: if the deadline passes below target, the raise
 ///             aborts and every buyer refunds their full spend against
 ///             returning their tokens. The founder's vested allocation burns.
@@ -605,11 +606,18 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
 
         IERC20(token).safeTransfer(msg.sender, tokensOut);
         _splitCurveFee(token, feeIn);
+        emit CurveBuy(token, msg.sender, spend, tokensOut, price);
+        // The buy that fills the raise graduates it in the same transaction.
+        // A separate finalize() left a funded curve frozen — no buys, no
+        // sells, no pool — until someone paid to push it over, which is the
+        // moment a launch has the most attention. The filling buyer pays the
+        // graduation gas; finalize() stays as the fallback for any curve that
+        // reached its target without one (e.g. within rounding tolerance).
+        if (_reached(token)) _graduate(token);
         if (netValue > spend) {
             (bool ok,) = payable(msg.sender).call{value: netValue - spend}("");
             if (!ok) revert EthTransferFailed();
         }
-        emit CurveBuy(token, msg.sender, spend, tokensOut, price);
     }
 
     // ---------------------------------------------------------------------
@@ -671,27 +679,41 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
 
     function finalize(address token) external nonReentrant returns (bytes32 poolId) {
         Curve storage c = _curves[token];
-        Listing storage l = listings[token];
         if (c.basePriceWei == 0) revert InvalidParams();
         if (c.finalized) revert AlreadyFinalized();
         if (c.aborted) revert CurveClosed();
-        // One whole token of tolerance on the target, because the curve only
-        // moves in whole tokens. A buy books curveCost(q)+1 for the largest
-        // whole q its value covers and refunds the rest, so every buy can leave
-        // up to one token's price unbooked; filling a raise in slices lands
-        // short by that much. Observed live: a 2 ETH raise filled in three
-        // slices stopped 6.26 gwei short, and the wallet that filled it could
-        // not close the gap either, because its per-wallet cap had exactly that
-        // much headroom while the buy needed one wei more.
-        //
-        // A different wallet could still close it, so this is a tolerance, not
-        // an impossibility proof: a raise within one token of target counts as
-        // reached rather than waiting on a stranger to spend a few gwei, or
-        // running to its deadline and refunding everyone over rounding dust.
-        // The shortfall is bounded by the price of one token.
-        if (c.raisedWei < c.targetRaiseWei && c.soldWhole < CURVE_SUPPLY_WHOLE) {
-            if (c.targetRaiseWei - c.raisedWei > curveCost(token, 1, c.soldWhole)) revert CurveLive();
-        }
+        if (!_reached(token)) revert CurveLive();
+        return _graduate(token);
+    }
+
+    /// @dev Whether the raise counts as filled: target raised, curve sold out,
+    ///      or within one whole token of the target.
+    ///
+    ///      One whole token of tolerance on the target, because the curve only
+    ///      moves in whole tokens. A buy books curveCost(q)+1 for the largest
+    ///      whole q its value covers and refunds the rest, so every buy can leave
+    ///      up to one token's price unbooked; filling a raise in slices lands
+    ///      short by that much. Observed live: a 2 ETH raise filled in three
+    ///      slices stopped 6.26 gwei short, and the wallet that filled it could
+    ///      not close the gap either, because its per-wallet cap had exactly that
+    ///      much headroom while the buy needed one wei more.
+    ///
+    ///      A different wallet could still close it, so this is a tolerance, not
+    ///      an impossibility proof: a raise within one token of target counts as
+    ///      reached rather than waiting on a stranger to spend a few gwei, or
+    ///      running to its deadline and refunding everyone over rounding dust.
+    ///      The shortfall is bounded by the price of one token.
+    function _reached(address token) internal view returns (bool) {
+        Curve storage c = _curves[token];
+        if (c.raisedWei >= c.targetRaiseWei || c.soldWhole >= CURVE_SUPPLY_WHOLE) return true;
+        return c.targetRaiseWei - c.raisedWei <= curveCost(token, 1, c.soldWhole);
+    }
+
+    /// @dev Pay the founder cut, seed the locked pool, start vesting. Callers
+    ///      have checked the curve is live and `_reached`.
+    function _graduate(address token) internal returns (bytes32 poolId) {
+        Curve storage c = _curves[token];
+        Listing storage l = listings[token];
         c.finalized = true;
 
         // 1) Founder's declared cut of the raise, credited to the founder's

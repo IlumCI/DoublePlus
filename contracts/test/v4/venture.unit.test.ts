@@ -296,33 +296,26 @@ describe("Venture bonding-curve launchpad (unit)", function () {
     expect((await factory.curveState(coin)).raisedWei).to.equal(0n);
   });
 
-  it("freezes the curve both ways once the graduation trigger is crossed", async () => {
+  it("never leaves a funded curve frozen: the filling buy graduates or reverts whole", async () => {
+    // Graduation runs inside the buy that fills the raise. This suite has no
+    // real PoolManager, so graduation cannot succeed here, and the property
+    // that matters is that the buy then reverts as a unit: no state where the
+    // target is crossed but the pool does not exist. The fork suite covers
+    // the successful path, including the closed curve afterwards.
     const [, creator, buyer1] = await ethers.getSigners();
     const { factory, tokenDeployer, weth } = await deployStack();
     const coin = await launch(factory, tokenDeployer, creator, await weth.getAddress(), {
       maxBuyWei: ethers.parseEther("10"),
     });
-    const erc = await ethers.getContractAt("QuiverToken", coin);
+    await (await factory.connect(buyer1).buy(coin, { value: ethers.parseEther("0.5") })).wait();
+    const before = await factory.curveState(coin);
 
-    await (await factory.connect(buyer1).buy(coin, { value: ethers.parseEther("2.4") })).wait();
-    expect((await factory.curveState(coin)).raisedWei).to.be.greaterThanOrEqual(TARGET);
-
-    // A sell here could drag a funded raise back under target and make it
-    // abortable, so the lock has to close both directions, not just buys.
-    const held = await erc.balanceOf(buyer1.address);
-    await (await erc.connect(buyer1).approve(await factory.getAddress(), held)).wait();
-    await expect(factory.connect(buyer1).sell(coin, 1000n, 0)).to.be.revertedWithCustomError(
-      factory,
-      "CurveClosed",
-    );
-    await expect(
-      factory.connect(buyer1).buy(coin, { value: 10n ** 15n }),
-    ).to.be.revertedWithCustomError(factory, "CurveClosed");
-
-    // Frozen above target, abort can never fire.
-    await network.provider.send("evm_increaseTime", [3 * DAY]);
-    await network.provider.send("evm_mine");
-    await expect(factory.abort(coin)).to.be.revertedWithCustomError(factory, "CurveLive");
+    await expect(factory.connect(buyer1).buy(coin, { value: ethers.parseEther("2.4") })).to.be.reverted;
+    const after = await factory.curveState(coin);
+    expect(after.raisedWei).to.equal(before.raisedWei);
+    expect(after.soldWhole).to.equal(before.soldWhole);
+    expect(after.finalized).to.equal(false);
+    expect(after.raisedWei).to.be.lessThan(TARGET);
   });
 
   it("open mode: no deadline, no founder cut, uncapped sells, creator earns curve fees", async () => {

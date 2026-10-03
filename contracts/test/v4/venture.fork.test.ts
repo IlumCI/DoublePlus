@@ -116,9 +116,12 @@ describe("Venture bonding-curve launchpad (fork)", function () {
     expect(st.remainingWhole).to.equal(0n);
     expect(st.raisedWei).to.be.closeTo(TARGET, ethers.parseEther("0.001"));
 
-    // Graduation: founder's declared 30% cut is credited (pulled, never
-    // pushed), pool goes live, vesting clock starts.
-    await (await factory.finalize(coin)).wait();
+    // Graduation happened inside the filling buy: founder's declared 30% cut
+    // is credited (pulled, never pushed), pool goes live, vesting clock starts.
+    // There is no window where a funded curve sits frozen waiting on finalize.
+    expect(st.finalized, "the filling buy graduates the raise").to.equal(true);
+    expect((await factory.listings(coin)).poolId).to.not.equal(ethers.ZeroHash);
+    await expect(factory.finalize(coin)).to.be.revertedWithCustomError(factory, "AlreadyFinalized");
     const founderCut = await factory.feesAccrued(founder.address);
     expect(founderCut).to.be.closeTo((st.raisedWei * 3000n) / 10000n, ethers.parseEther("0.001"));
     const founderEthBefore = await ethers.provider.getBalance(founder.address);
@@ -201,6 +204,40 @@ describe("Venture bonding-curve launchpad (fork)", function () {
     expect(await erc.balanceOf(founder.address)).to.be.greaterThanOrEqual(claimable);
   });
 
+  it("graduates inside the filling buy, even when slicing leaves the raise a few wei short", async () => {
+    // The live stall: fill in slices from one wallet whose cap equals the
+    // target. Each buy books curveCost(q)+1 for the largest whole q its value
+    // covers, so the raise can land just short, by less than one token's
+    // price, with the wallet's cap spent. That buy must still graduate: a
+    // funded raise never sits frozen, and never runs to its deadline over dust.
+    const [admin, founder, , whale, , treasury] = await ethers.getSigners();
+    const { factory, tokenDeployer } = await deployAll(admin, treasury);
+    const coin = await launch(factory, tokenDeployer, founder, WETH);
+    const erc = await ethers.getContractAt("QuiverToken", coin);
+
+    const buyBps = BigInt(await factory.curveBuyFeeBps());
+    const gross = (TARGET * 10_000n) / (10_000n - buyBps) + 10n;
+    const slice = gross / 3n;
+    await (await factory.connect(whale).buy(coin, { value: slice })).wait();
+    await (await factory.connect(whale).buy(coin, { value: slice })).wait();
+    expect((await factory.curveState(coin)).finalized, "not before the target").to.equal(false);
+    await (await factory.connect(whale).buy(coin, { value: gross - 2n * slice })).wait();
+
+    const st = await factory.curveState(coin);
+    expect(st.finalized, "the filling slice graduates").to.equal(true);
+    expect(st.targetRaiseWei - st.raisedWei).to.be.lessThanOrEqual(await factory.curveCost(coin, 1, st.soldWhole));
+    expect((await factory.listings(coin)).poolId).to.not.equal(ethers.ZeroHash);
+
+    // The curve is closed both ways and the raise can no longer abort.
+    const held = await erc.balanceOf(whale.address);
+    await (await erc.connect(whale).approve(await factory.getAddress(), held)).wait();
+    await expect(factory.connect(whale).sell(coin, 1000n, 0)).to.be.revertedWithCustomError(factory, "CurveClosed");
+    await expect(factory.connect(whale).buy(coin, { value: 10n ** 15n })).to.be.revertedWithCustomError(factory, "CurveClosed");
+    await network.provider.send("evm_increaseTime", [4 * DAY]);
+    await network.provider.send("evm_mine");
+    await expect(factory.abort(coin)).to.be.revertedWithCustomError(factory, "AlreadyFinalized");
+  });
+
   it("graduates even when the creator cannot receive ETH", async () => {
     // The founder cut used to be pushed inside finalize(). A creator contract
     // with no receive() made finalize revert forever, and abort() is closed
@@ -224,8 +261,7 @@ describe("Venture bonding-curve launchpad (fork)", function () {
     const coin = await factory.allTokens((await factory.totalTokens()) - 1n);
     expect((await factory.listings(coin)).creator).to.equal(creator);
 
-    await (await factory.connect(whale).buy(coin, { value: ethers.parseEther("2.1") })).wait();
-    await (await factory.finalize(coin)).wait();
+    await (await factory.connect(whale).buy(coin, { value: ethers.parseEther("2.1") })).wait(); // fills and graduates
     expect((await factory.listings(coin)).poolId).to.not.equal(ethers.ZeroHash);
 
     const raised = (await factory.curveState(coin)).raisedWei;
@@ -279,8 +315,7 @@ describe("Venture bonding-curve launchpad (fork)", function () {
     const coin = await factory.allTokens((await factory.totalTokens()) - 1n);
     const erc = await ethers.getContractAt("QuiverToken", coin);
 
-    await (await factory.connect(whale).buy(coin, { value: ethers.parseEther("2.1") })).wait();
-    await (await factory.finalize(coin)).wait();
+    await (await factory.connect(whale).buy(coin, { value: ethers.parseEther("2.1") })).wait(); // fills and graduates
     expect((await factory.listings(coin)).poolId).to.not.equal(ethers.ZeroHash);
 
     await network.provider.send("evm_increaseTime", [20]);
@@ -308,8 +343,7 @@ describe("Venture bonding-curve launchpad (fork)", function () {
     const erc = await ethers.getContractAt("QuiverToken", coin);
     const startBlock = await ethers.provider.getBlockNumber();
 
-    await (await factory.connect(whale).buy(coin, { value: ethers.parseEther("2.1") })).wait();
-    await (await factory.finalize(coin)).wait();
+    await (await factory.connect(whale).buy(coin, { value: ethers.parseEther("2.1") })).wait(); // fills and graduates
     await network.provider.send("evm_increaseTime", [20]);
     await network.provider.send("evm_mine");
 
