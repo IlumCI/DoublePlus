@@ -428,8 +428,12 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         if (p.buyTaxBps > hook.MAX_SIDE_TAX_BPS() || p.sellTaxBps > hook.MAX_SIDE_TAX_BPS()) revert InvalidParams();
         if (uint256(p.devBps) + p.dividendBps + p.liquidityBps + p.mmBps != BPS) revert InvalidParams();
         if (p.ethUsdPrice8 < minEthUsd8 || p.ethUsdPrice8 > maxEthUsd8) revert InvalidParams();
-        if (p.pair == address(0) || p.pair.code.length == 0) revert InvalidParams();
-        if (p.pair != address(weth) && p.v3Path.length == 0) revert InvalidParams();
+        // WETH pairs only, for now. A stock-paired coin graduates, but trading
+        // it through the router fails on mainnet with CurrencyNotSettled from
+        // the hook's fee plumbing in the stock currency (venture.fork.test.ts).
+        // The interface already hid stock pairs; this stops a direct launch
+        // creating a coin nobody can buy. Remove once the hook path is fixed.
+        if (p.pair != address(weth)) revert InvalidParams();
         bool open = p.mode == RaiseMode.Open;
         // Open mode has no deadline and no cut of a raise: the creator is paid
         // out of curve fees instead, so there is nothing to hold to a target.

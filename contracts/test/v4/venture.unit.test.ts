@@ -296,6 +296,16 @@ describe("Venture bonding-curve launchpad (unit)", function () {
     expect((await factory.curveState(coin)).raisedWei).to.equal(0n);
   });
 
+  it("refuses a pair other than WETH", async () => {
+    const [, creator] = await ethers.getSigners();
+    const { factory, tokenDeployer, weth } = await deployStack();
+    const other = await (await ethers.getContractFactory("WETH9")).deploy();
+    await expect(
+      launch(factory, tokenDeployer, creator, await other.getAddress(), { v3Path: "0x01" }, 0n, true),
+    ).to.be.revertedWithCustomError(factory, "InvalidParams");
+    await launch(factory, tokenDeployer, creator, await weth.getAddress()); // WETH still launches
+  });
+
   it("caps every wallet at 1% of the target for the first minute, in either mode", async () => {
     const [, creator, sniper, later] = await ethers.getSigners();
     const { factory, tokenDeployer, weth } = await deployStack();

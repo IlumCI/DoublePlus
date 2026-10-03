@@ -65,7 +65,10 @@ export function Docs() {
           <p>
             The first token sells at a price that values the whole coin at $750, and the price rises with every token
             sold. Buying in one go or in several smaller buys costs exactly the same. Each buy pays a {buyFee} fee,
-            and each sale back to the curve pays {sellFee}.
+            and each sale back to the curve pays {sellFee}. For the first minute after launch, each wallet can put
+            in at most 1% of the target, so the cheapest tokens aren't all taken in the first block. Every buy and
+            sell carries a slippage limit: if someone else's trade moves the price past it first, yours is cancelled
+            instead of filling at a worse price.
           </p>
 
           <H id="kinds">Two kinds of launch</H>
