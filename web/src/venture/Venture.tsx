@@ -17,6 +17,7 @@ import { refLink, storedRef } from "./referral";
 import { ShareBar } from "./share";
 import { Comments, COMMENTS_ENABLED } from "./comments";
 import { loadHolding, type Holding } from "./portfolio";
+import { useWatched } from "./alerts";
 import { Donut, Legend, SplitBar, type Slice } from "./charts";
 import { usePageMeta } from "./seo";
 import { ago, BuySellStrength, CopyButton, Countdown, Delta, DexBadge, fmtEth, fmtMcap,
@@ -89,7 +90,7 @@ function VentureBody({ v, fills, ethUsd }: { v: VentureT; fills: Fill[]; ethUsd:
           {(v.meta.pitch || v.meta.description) && <p className="dp-oneliner">{v.meta.pitch || v.meta.description}</p>}
           <p className="dp-prov" style={{ margin: "4px 0 0" }}>
             created by <b>{short(v.creator)}</b> · {ago(v.createdAt)} ago
-            {v.meta.sector ? <> · {v.meta.sector}</> : null} · <StatusBadge v={v} /> <DexBadge profile={dex} />
+            {v.meta.sector ? <> · {v.meta.sector}</> : null} · <StatusBadge v={v} /> <DexBadge profile={dex} /> <AlertToggle v={v} />
           </p>
           <Socials meta={v.meta} dex={dex} />
         </div>
@@ -614,6 +615,19 @@ function RaisePanel({ v }: { v: VentureT }) {
  *  buy that graduates ~788k. */
 const GRADUATING_BUY_GAS = 1_200_000n;
 const GRADUATED_TOPIC = toEventSelector("Graduated(address,bytes32,uint256,uint256,uint256)");
+
+/** Watch a coin: an alert when it is nearly full, graduates, or opens
+ *  refunds, so nobody has to sit on the chart. Off until someone asks. */
+function AlertToggle({ v }: { v: VentureT }) {
+  const [on, set] = useWatched(v.address);
+  if (v.phase === "graduated" || v.phase === "failed") return null; // nothing left to wait for
+  return (
+    <button className={`dp-bell${on ? " on" : ""}`} onClick={() => set(!on)}
+      title={on ? "Alerts on: nearly full, graduated, refunds open. Click to stop." : "Get an alert when it's nearly full, graduates, or opens refunds"}>
+      {on ? "🔔 alerts on" : "🔔 alert me"}
+    </button>
+  );
+}
 
 /** One line under the market cap: what this wallet's bag is worth if it
  *  cashed out now, and how that compares with what it put in. Nothing when

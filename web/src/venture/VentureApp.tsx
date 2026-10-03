@@ -14,6 +14,8 @@ import { FilterDefs } from "./ui";
 import { Sidebar } from "./longhorn/Sidebar";
 import { Wallpaper } from "./longhorn/Wallpaper";
 import { useVentures } from "./useVentures";
+import { diffWatched, notify } from "./alerts";
+import { useUi } from "../store";
 import "./venture.css";
 import "./longhorn.css";
 
@@ -95,6 +97,17 @@ function Shell() {
 
   // The window body is the scroller now, so each navigation starts at its top.
   useEffect(() => { mainRef.current?.scrollTo(0, 0); setMinimized(false); }, [pathname]);
+
+  // Alerts for coins the viewer chose to watch, diffed on every board poll.
+  const navigate = useNavigate();
+  const pushToast = useUi((s) => s.pushToast);
+  useEffect(() => {
+    if (!ventures) return;
+    for (const a of diffWatched(ventures)) {
+      pushToast({ kind: "info", title: a.title, body: a.body });
+      notify(a, () => navigate(`/venture/${a.token}`));
+    }
+  }, [ventures, navigate, pushToast]);
 
   // Flare the wallpaper when money comes in anywhere on the board.
   const [pulse, setPulse] = useState(0);

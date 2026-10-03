@@ -815,3 +815,8 @@ main { container-type: inline-size; }
 .dp-coinhead .dp-bag .dp-k { letter-spacing: .06em; }
 .dp-coinhead .dp-bag .dp-up { color: var(--up); }
 .dp-coinhead .dp-bag .dp-down { color: var(--down); }
+
+/* Alert toggle, inline in the coin's provenance line. */
+.dp-bell { background: none; border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; font: inherit; font-size: 10.5px; color: var(--dim); cursor: pointer; }
+.dp-bell:hover { color: var(--text); border-color: var(--dim); }
+.dp-bell.on { color: var(--up); border-color: var(--up); }
