@@ -112,7 +112,7 @@ no serverless functions do not need `assemble.sh`.
 ## Deploying contracts
 
 Hardhat only. No Foundry. Solidity 0.8.26, `viaIR`, `runs: 400`, with
-`VentureFactory.sol` overridden to `runs: 1` — it sits at 23,218 of the 24,576
+`VentureFactory.sol` overridden to `runs: 1` — it sits at 23,795 of the 24,576
 byte limit, so **any addition to it must be size-checked before it can ship**.
 
 Network config is env-driven; the single `robinhood` network entry serves both
@@ -382,7 +382,7 @@ if it passes when it should fail, the whole suite is meaningless.
   creation fee. Re-run it as the last step of every deploy.
 - **Two factories are at the bytecode limit.** `HammrFactory` is 24,524 of 24,576
   — 52 bytes spare — and `HoodFactory` has 381. Neither can be modified again,
-  only redeployed. `VentureFactory` is at 23,218 and still growing; check the
+  only redeployed. `VentureFactory` is at 23,795 and still growing; check the
   size before adding to it.
 - **Nine `*.fork.test.ts` files and fourteen scripts mined CREATE2 salts against
   a stale `QuiverToken` ABI** after the constructor gained two dividend
