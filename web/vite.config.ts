@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
@@ -91,8 +93,45 @@ function brandHtml(): Plugin {
   };
 }
 
+/**
+ * Every flavor shares web/public, so a plain build ships every brand's
+ * banners and the arcx diagnostics page on every domain: it ties the brands
+ * together for anyone looking and widens what a scanner can poke at. The
+ * venture build keeps an allowlist and drops the rest from dist, and writes
+ * a plain robots.txt. (The bait paths and decoy key live on the API, which
+ * can log; this static host can't.)
+ */
+function ventureDist(): Plugin {
+  const KEEP = [
+    /^index\.html$/, /^assets\//, /^favicon(-32)?\.png$/, /^apple-touch-icon\.png$/, /^doubleplus-card\.png$/,
+    /^fonts\/dp\//, /^rewards\/venture\//, /^robots\.txt$/,
+  ];
+  let outDir = "dist";
+  return {
+    name: "venture-dist",
+    apply: "build",
+    configResolved(c) { outDir = c.build.outDir; },
+    closeBundle() {
+      if (String(process.env.VITE_BRAND) !== "venture") return;
+      const root = path.resolve(outDir);
+      const walk = (dir: string): string[] => fs.readdirSync(dir, { withFileTypes: true })
+        .flatMap((e) => e.isDirectory() ? walk(path.join(dir, e.name)) : [path.join(dir, e.name)]);
+      for (const f of walk(root)) {
+        const rel = path.relative(root, f).split(path.sep).join("/");
+        if (!KEEP.some((re) => re.test(rel))) fs.rmSync(f);
+      }
+      for (const d of walk(root).length ? fs.readdirSync(root) : []) {
+        const p = path.join(root, d);
+        if (fs.statSync(p).isDirectory() && fs.readdirSync(p).length === 0) fs.rmdirSync(p);
+      }
+      fs.writeFileSync(path.join(root, "robots.txt"),
+        "User-agent: *\nAllow: /\n");
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), tailwindcss(), brandHtml()],
+  plugins: [react(), tailwindcss(), brandHtml(), ventureDist()],
   build: {
     rollupOptions: {
       output: {

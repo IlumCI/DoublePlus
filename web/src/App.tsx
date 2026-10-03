@@ -2,14 +2,16 @@ import { lazy, Suspense } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WagmiProvider } from "wagmi";
 
-import { BRAND_FLAVOR } from "./lib/brand";
 import { wagmiConfig } from "./lib/wagmi";
 
 // Each self-contained flavor is its own chunk: a doubleplus visitor should not
 // download hammr's auction app, and the reverse.
-const HammrApp = lazy(() => import("./hammr/HammrApp").then((m) => ({ default: m.HammrApp })));
-const VentureApp = lazy(() => import("./venture/VentureApp").then((m) => ({ default: m.VentureApp })));
-const DefaultApp = lazy(() => import("./DefaultApp").then((m) => ({ default: m.DefaultApp })));
+// The flavor is fixed at build time (import.meta.env is substituted), so the
+// bundler drops the apps a build can never show: a doubleplus build carries
+// no hammr or board code at all, not even as unused chunks.
+const HammrApp = import.meta.env.VITE_BRAND === "hammr" ? lazy(() => import("./hammr/HammrApp").then((m) => ({ default: m.HammrApp }))) : null;
+const VentureApp = import.meta.env.VITE_BRAND === "venture" ? lazy(() => import("./venture/VentureApp").then((m) => ({ default: m.VentureApp }))) : null;
+const DefaultApp = import.meta.env.VITE_BRAND !== "hammr" && import.meta.env.VITE_BRAND !== "venture" ? lazy(() => import("./DefaultApp").then((m) => ({ default: m.DefaultApp }))) : null;
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -21,7 +23,7 @@ const queryClient = new QueryClient({
 
 export default function App() {
   // The hammr flavor is a self-contained auction app with its own chrome.
-  if (BRAND_FLAVOR === "hammr") {
+  if (HammrApp) {
     return (
       <WagmiProvider config={wagmiConfig}>
         <QueryClientProvider client={queryClient}>
@@ -31,7 +33,7 @@ export default function App() {
     );
   }
   // The venture flavor is the self-contained startup-funding launchpad.
-  if (BRAND_FLAVOR === "venture") {
+  if (VentureApp) {
     return (
       <WagmiProvider config={wagmiConfig}>
         <QueryClientProvider client={queryClient}>
@@ -43,7 +45,7 @@ export default function App() {
   return (
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
-        <Suspense fallback={null}><DefaultApp /></Suspense>
+        <Suspense fallback={null}>{DefaultApp && <DefaultApp />}</Suspense>
       </QueryClientProvider>
     </WagmiProvider>
   );
