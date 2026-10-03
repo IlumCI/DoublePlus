@@ -24,6 +24,10 @@
 //   LOG_CHUNK           (default 500000) block span per getLogs page
 //   CONFIRMATIONS       (default 3)
 //   DRY_RUN             set to log intended actions without sending txs
+//   MAX_SPEND_ETH       (default 0.01) gas this run may spend before it stops;
+//                       bounds what a flood of spam coins can cost the treasury
+//   DELIVER_GAS_MULT    (default 4) a payout is only pushed when it is worth at
+//                       least this many times the gas it costs to push
 import { ethers } from "ethers";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -51,6 +55,22 @@ const SPACING = 60; // the factory's pools all use tickSpacing 60
 const LOG_CHUNK = Number(process.env.LOG_CHUNK ?? "500000");
 const CONFIRMATIONS = Number(process.env.CONFIRMATIONS ?? "3");
 const DRY_RUN = process.env.DRY_RUN != null;
+const MAX_SPEND_WEI = ethers.parseEther(process.env.MAX_SPEND_ETH ?? "0.01");
+const DELIVER_GAS_MULT = BigInt(process.env.DELIVER_GAS_MULT ?? "4");
+// Gas one holder adds to a claimForMany batch, measured on testnet, with room.
+const GAS_PER_DELIVERY = 60_000n;
+
+// Every tx goes through send(): it counts what the run has spent and refuses
+// to go past MAX_SPEND_WEI, so spam can cost a run at most that much.
+const stats = { sent: 0, spentWei: 0n, graduated: 0, aborted: 0, skippedEmptyAborts: 0, delivered: 0, recentered: 0, stoppedAtCap: false, failed: 0 };
+class SpendCap extends Error {}
+async function send(label, fn) {
+  if (DRY_RUN) return;
+  if (stats.spentWei >= MAX_SPEND_WEI) { stats.stoppedAtCap = true; throw new SpendCap(label); }
+  const rc = await (await fn()).wait();
+  stats.sent++;
+  stats.spentWei += (rc?.gasUsed ?? 0n) * (rc?.gasPrice ?? rc?.effectiveGasPrice ?? 0n);
+}
 
 const ZERO = "0x0000000000000000000000000000000000000000";
 const DEAD = "0x000000000000000000000000000000000000dead";
@@ -141,7 +161,8 @@ async function maybeRecenter(coin, poolId, toBlock) {
   });
   if (!stale) return;
   console.log(`recenter ${coin}: ${bands.length} wall band(s), tick ${tick}`);
-  if (!DRY_RUN) await (await hook.recenter(coin, bands)).wait();
+  await send(`recenter ${coin}`, () => hook.recenter(coin, bands));
+  stats.recentered++;
 }
 
 async function holdersOf(coin, toBlock) {
@@ -187,22 +208,53 @@ async function main() {
   const total = Number(await factory.totalTokens());
   console.log(`venture-ops: ${total} ventures, head-${CONFIRMATIONS}=${head}, keeper=${wallet.address}${DRY_RUN ? " [DRY_RUN]" : ""}`);
 
+  // A payout is only worth pushing if it beats the gas to push it, with margin;
+  // otherwise splitting a bag across thousands of wallets would make the
+  // keeper pay more in gas than it delivers.
+  const fee = await provider.getFeeData();
+  const gasPrice = fee.gasPrice ?? fee.maxFeePerGas ?? 0n;
+  const gasFloor = GAS_PER_DELIVERY * gasPrice * DELIVER_GAS_MULT;
+  const minDeliver = gasFloor > MIN_DELIVER ? gasFloor : MIN_DELIVER;
+  const balance = await provider.getBalance(wallet.address);
+  if (balance < MAX_SPEND_WEI) console.log(`WARNING keeper balance ${ethers.formatEther(balance)} ETH is below one run's cap`);
+
   for (let i = 0; i < total; i++) {
     const coin = await factory.allTokens(i);
+    try {
+      await processCoin(coin, now, head, minDeliver);
+    } catch (e) {
+      if (e instanceof SpendCap) { console.log(`spend cap reached at ${e.message}; stopping this run`); break; }
+      // One coin failing must not stop the rest: a single hostile or broken
+      // coin would otherwise block refunds and payouts for every later one.
+      stats.failed++;
+      console.log(`coin ${coin} failed: ${String(e?.shortMessage ?? e?.message ?? e).slice(0, 160)}`);
+    }
+  }
+  console.log(JSON.stringify({ keeper: "venture-ops", chain: Number(dep.chainId), ventures: total, ...stats, spentWei: stats.spentWei.toString(), minDeliver: minDeliver.toString(), balanceWei: balance.toString() }));
+}
+
+async function processCoin(coin, now, head, minDeliver) {
+  {
     const st = await factory.curveState(coin);
 
     if (!st.finalized && !st.aborted) {
       const targetHit = st.raisedWei >= st.targetRaiseWei || st.remainingWhole === 0n;
       if (targetHit) {
         console.log(`graduate ${coin} (raised ${ethers.formatEther(st.raisedWei)} ETH)`);
-        if (!DRY_RUN) await (await factory.finalize(coin)).wait();
+        await send(`finalize ${coin}`, () => factory.finalize(coin));
+        stats.graduated++;
       } else if (now >= Number(st.deadline)) {
+        // Nobody's money is in a raise that raised nothing, so there is no
+        // refund to open. Aborting it would only spend gas, which is exactly
+        // what a flood of dead launches is for.
+        if (st.raisedWei === 0n) { stats.skippedEmptyAborts++; return; }
         console.log(`abort ${coin} (deadline passed at ${ethers.formatEther(st.raisedWei)}/${ethers.formatEther(st.targetRaiseWei)} ETH)`);
-        if (!DRY_RUN) await (await factory.abort(coin)).wait();
+        await send(`abort ${coin}`, () => factory.abort(coin));
+        stats.aborted++;
       }
-      continue; // dividends only exist after graduation
+      return; // dividends only exist after graduation
     }
-    if (!st.finalized) continue;
+    if (!st.finalized) return;
 
     // Keep the quote walls hugging the price.
     try {
@@ -216,15 +268,15 @@ async function main() {
     const holders = await holdersOf(coin, head);
     const due = [];
     for (const h of holders) {
-      try { if ((await token.pendingRewards(h)) >= MIN_DELIVER) due.push(h); } catch { /* skip */ }
+      try { if ((await token.pendingRewards(h)) >= minDeliver) due.push(h); } catch { /* skip */ }
     }
-    if (due.length === 0) continue;
+    if (due.length === 0) return;
     console.log(`deliver dividends on ${coin}: ${due.length} holder(s)`);
     for (let j = 0; j < due.length; j += 100) {
       const batch = due.slice(j, j + 100);
-      if (!DRY_RUN) await (await token.claimForMany(batch)).wait();
+      await send(`claimForMany ${coin}`, () => token.claimForMany(batch));
+      stats.delivered += batch.length;
     }
   }
-  console.log("venture-ops: done");
 }
 main().catch((e) => { console.error(e); process.exit(1); });
