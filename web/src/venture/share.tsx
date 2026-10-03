@@ -4,7 +4,7 @@ import { BRAND } from "../lib/brand";
 import { useWallet } from "../lib/useWallet";
 import type { Venture } from "./client";
 import { refLink } from "./referral";
-import { fmtEth, pct } from "./ui";
+import { fmtEth, pct, safeImageUrl } from "./ui";
 
 /**
  * Share cards: an image-first post for X. Photos earn far more reposts than
@@ -77,7 +77,8 @@ export async function drawShareCard(v: Venture): Promise<Blob | null> {
 
   // Logo or monogram.
   const lx = 100, ly = 150, ls = 150;
-  const logo = v.meta.logo ? await loadImage(v.meta.logo) : null;
+  const logoUrl = safeImageUrl(v.meta.logo);
+  const logo = logoUrl ? await loadImage(logoUrl) : null;
   ctx.save();
   ctx.beginPath(); ctx.roundRect(lx, ly, ls, ls, 22); ctx.clip();
   if (logo) ctx.drawImage(logo, lx, ly, ls, ls);

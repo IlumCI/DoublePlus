@@ -100,14 +100,18 @@ export const fmtMcap = (v: Venture, ethUsd: number): string => {
   return ethUsd > 0 ? fmtUsdV(eth * ethUsd) : `${eth.toFixed(3)} ETH`;
 };
 
+export { safeImageUrl } from "./safe";
+import { safeImageUrl } from "./safe";
+
 /** Deterministic monogram tint so a venture keeps the same colour everywhere. */
 export function Monogram({ v, size = "sm" }: { v: Venture; size?: "sm" | "lg" }) {
   const tints = ["", "m2", "m3", "m4"];
   const tint = tints[Number(BigInt(v.address) % 4n)];
   const cls = `dp-monogram ${tint ? `dp-${tint}` : ""} ${size === "lg" ? "dp-lg" : ""}`.replace(/\s+/g, " ").trim();
-  if (v.meta.logo) {
+  const logo = safeImageUrl(v.meta.logo);
+  if (logo) {
     return <span className={cls} style={{ padding: 0, overflow: "hidden", background: "var(--panel-2)" }}>
-      <img src={v.meta.logo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+      <img src={logo} alt="" referrerPolicy="no-referrer" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
     </span>;
   }
   return <span className={cls}>{v.name.slice(0, 1).toUpperCase()}</span>;
@@ -310,7 +314,7 @@ export function DexBadge({ profile, title }: { profile: DexProfile; title?: bool
       ? "A DEX Screener profile order is placed but not approved yet."
       : "Listed on DEX Screener with no paid token info: no logo, banner or links there.";
   const badge = <span className={`dp-badge ${cls}`} title={title === false ? undefined : tip}>{label}</span>;
-  return profile.url
+  return profile.url && /^https:\/\//i.test(profile.url)
     ? <a href={profile.url} target="_blank" rel="noreferrer noopener" style={{ textDecoration: "none" }}>{badge}</a>
     : badge;
 }

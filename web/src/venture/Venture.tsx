@@ -17,10 +17,11 @@ import { refLink, storedRef } from "./referral";
 import { ShareBar } from "./share";
 import { Comments, COMMENTS_ENABLED } from "./comments";
 import { loadHolding, type Holding } from "./portfolio";
+import { safeLinkUrl } from "./safe";
 import { useWatched } from "./alerts";
 import { Donut, Legend, SplitBar, type Slice } from "./charts";
 import { usePageMeta } from "./seo";
-import { ago, BuySellStrength, CopyButton, Countdown, Delta, DexBadge, fmtEth, fmtMcap,
+import { ago, BuySellStrength, CopyButton, safeImageUrl, Countdown, Delta, DexBadge, fmtEth, fmtMcap,
   fmtTok, fmtUsdPrice, fmtUsdV, Monogram, pct, short, StatCell, StatusBadge, useEthUsd, useTick } from "./ui";
 import { useWallet, errorText } from "../lib/useWallet";
 import { useUi } from "../store";
@@ -78,8 +79,8 @@ function VentureBody({ v, fills, ethUsd }: { v: VentureT; fills: Fill[]; ethUsd:
   return (
     <div className="dp-shell" style={{ paddingBottom: 70 }}>
 
-      {v.meta.banner && (
-        <div className="dp-banner"><img src={v.meta.banner} alt="" loading="lazy" /></div>
+      {safeImageUrl(v.meta.banner) && (
+        <div className="dp-banner"><img src={safeImageUrl(v.meta.banner)} alt="" loading="lazy" referrerPolicy="no-referrer" /></div>
       )}
 
       <div className="dp-coinhead">
@@ -144,7 +145,7 @@ function VentureBody({ v, fills, ethUsd }: { v: VentureT; fills: Fill[]; ethUsd:
 function Socials({ meta, dex }: { meta: VentureT["meta"]; dex?: DexProfile }) {
   const onChain: { label: string; url: string }[] = SOCIAL_FIELDS
     .map(([key, label]) => ({ label: label as string, url: meta[key] ?? "" }))
-    .filter((l) => /^https?:\/\//i.test(l.url));
+    .map((l) => ({ ...l, url: safeLinkUrl(l.url) })).filter((l) => l.url);
   // A paid DEX Screener profile often carries a channel the founder never put
   // in the on-chain metadata. Show it, but never shadow the on-chain value:
   // that one the contract vouches for, this one a third party holds.
