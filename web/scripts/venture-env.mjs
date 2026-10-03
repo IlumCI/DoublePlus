@@ -53,8 +53,10 @@ const values = {
   VITE_WETH_ADDRESS: d.contracts.weth,
   VITE_PLATFORM_FEE_BPS: String(d.platformFeeBps),
   VITE_REF_SHARE_BPS: String(d.refShareBps),
-  // Mainnet prices ETH live; the testnet's explorer can't, so it keeps its fallback.
-  ...(which === "mainnet" ? { VITE_ETH_USD_8_FALLBACK: "" } : {}),
+  // Live pricing first; the fallback stays set on mainnet too, so a failed
+  // price read can't block every launch. Keep it near the real price: it
+  // sizes a curve's starting value when live pricing is down.
+  ...(which === "mainnet" ? { VITE_ETH_USD_8_FALLBACK: process.env.ETH_USD_8_FALLBACK ?? "200000000000" } : {}),
 };
 
 function patchEnv(file) {

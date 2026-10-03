@@ -102,6 +102,7 @@ export const fmtMcap = (v: Venture, ethUsd: number): string => {
 
 export { safeImageUrl } from "./safe";
 import { safeImageUrl } from "./safe";
+import { chainNowSecs } from "./clock";
 
 /** Deterministic monogram tint so a venture keeps the same colour everywhere. */
 export function Monogram({ v, size = "sm" }: { v: Venture; size?: "sm" | "lg" }) {
@@ -142,7 +143,7 @@ export function CurveBar({ v }: { v: Venture }) {
 
 /** Relative age, as launchpads print provenance: "created by X 2m ago". */
 export function ago(unixSecs: number): string {
-  const s = Math.max(0, Math.floor(Date.now() / 1000) - unixSecs);
+  const s = Math.max(0, chainNowSecs() - unixSecs);
   if (s < 60) return `${s}s`;
   if (s < 3600) return `${Math.floor(s / 60)}m`;
   if (s < 86_400) return `${Math.floor(s / 3600)}h`;
@@ -162,7 +163,7 @@ export function useTick(): number {
 
 export function Countdown({ deadline }: { deadline: number }) {
   useTick();
-  const left = Math.max(0, deadline - Math.floor(Date.now() / 1000));
+  const left = Math.max(0, deadline - chainNowSecs());
   const d = Math.floor(left / 86_400);
   const h = Math.floor((left % 86_400) / 3600);
   const m = Math.floor((left % 3600) / 60);
@@ -258,7 +259,7 @@ export function Delta({ pct: p, size = 13, sinceInception, ageSecs }: {
   // 24h on a two-hour-old pool answers nothing — but four identical numbers
   // read as a broken widget unless the strip says why.
   const title = sinceInception
-    ? `The pool is only ${ageSecs !== undefined ? ago(Math.floor(Date.now() / 1000) - ageSecs) : "minutes"} old, so this is the change since its first trade.`
+    ? `The pool is only ${ageSecs !== undefined ? ago(chainNowSecs() - ageSecs) : "minutes"} old, so this is the change since its first trade.`
     : undefined;
   return (
     <span

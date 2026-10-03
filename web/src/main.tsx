@@ -1,3 +1,4 @@
+import "./lib/storageShim"; // must run before any wallet code reads storage
 import React from "react";
 import ReactDOM from "react-dom/client";
 

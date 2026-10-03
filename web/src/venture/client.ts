@@ -5,6 +5,7 @@ import { isProtocolSwap } from "./marketStats";
 import { cleanText, parseMeta } from "./safe";
 import { RevertedOnChain } from "../lib/useWallet";
 import type { RaiseMode } from "./raiseMode";
+import { chainNowSecs } from "./clock";
 
 /** VentureFactory deployment. Defaults target the Robinhood Chain testnet
  *  (46630) deployment; every address is overridable via env so the same build
@@ -286,7 +287,7 @@ export { curveCostWei, quoteTokens, quoteSellWei, entryFeeWei, quoteBuy, capStat
 function phaseOf(v: { finalized: boolean; aborted: boolean; deadline: number; raisedWei: bigint; targetRaiseWei: bigint; remainingWhole: bigint }): Phase {
   if (v.finalized) return "graduated";
   if (v.aborted) return "failed";
-  const now = Math.floor(Date.now() / 1000);
+  const now = chainNowSecs();
   const targetHit = v.raisedWei >= v.targetRaiseWei || v.remainingWhole === 0n;
   if (targetHit) return "expired"; // fully funded, awaiting finalize(): only factories from before graduation moved into the filling buy
   // An Open curve carries deadline = uint64 max: it never expires, it only

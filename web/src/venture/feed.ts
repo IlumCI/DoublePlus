@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { parseAbiItem, type Address } from "viem";
 
 import { boughtEvent, routedEvent, VENTURE, venturePc } from "./client";
+import { chainNowSecs } from "./clock";
 
 /**
  * The live tape: every launch, curve buy/sell, graduation and post-graduation
@@ -90,7 +91,7 @@ async function refresh() {
     items = found.sort((a, b) => b.block - a.block).slice(0, KEEP);
     loaded = true;
   } else if (head > lastBlock) {
-    anchor = { block: head, ts: Math.round(Date.now() / 1000) };
+    anchor = { block: head, ts: chainNowSecs() };
     const fresh = await read(lastBlock + 1n, head);
     if (fresh.length) {
       const seen = new Set(items.map((i) => i.key));
@@ -124,6 +125,6 @@ export function useLiveFeed(): { items: FeedItem[]; loaded: boolean } {
 
 /** Tokens with a buy inside the last `secs` seconds: the honest "hot" signal. */
 export function hotTokens(feed: FeedItem[], secs = 900): Set<string> {
-  const cutoff = Date.now() / 1000 - secs;
+  const cutoff = chainNowSecs() - secs;
   return new Set(feed.filter((i) => i.kind === "buy" && i.ts >= cutoff).map((i) => i.token.toLowerCase()));
 }

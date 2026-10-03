@@ -26,6 +26,7 @@ import { ago, BuySellStrength, CopyButton, safeImageUrl, Countdown, Delta, DexBa
 import { useWallet, errorText } from "../lib/useWallet";
 import { useUi } from "../store";
 import { env } from "../lib/env";
+import { chainNowSecs } from "./clock";
 
 type Tab = "project" | "chat" | "updates" | "trades" | "backers" | "terms";
 
@@ -191,7 +192,7 @@ function Socials({ meta, dex }: { meta: VentureT["meta"]; dex?: DexProfile }) {
 
 /** Price, size and momentum, read straight off the swap log. */
 function StatBar({ v, trades, ethUsd }: { v: VentureT; trades: PoolTrade[]; ethUsd: number }) {
-  const st = useMemo(() => marketStats(trades), [trades]);
+  const st = useMemo(() => marketStats(trades, chainNowSecs()), [trades]);
   const priceEth = Number(st.priceWei) / 1e18;
   return (
     <>
@@ -494,7 +495,8 @@ function RaisePanel({ v }: { v: VentureT }) {
   const funded = pct(v.raisedWei, v.targetRaiseWei);
   // Mirrors VentureFactory.LAUNCH_WINDOW_SECS: for the first minute every
   // wallet may put in at most 1% of the target.
-  const now = Math.floor(useTick() / 1000);
+  useTick();
+  const now = chainNowSecs();
   const windowLeft = v.createdAt + LAUNCH_WINDOW_SECS - now;
   const windowCap = v.targetRaiseWei / 100n;
   const inWindow = windowLeft > 0;

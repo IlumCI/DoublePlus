@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useWalletClient } from "wagmi";
-import { concatHex, encodeAbiParameters, getContractAddress, keccak256, parseEther } from "viem";
+import { concatHex, encodeAbiParameters, getContractAddress, keccak256, parseEther, toEventSelector } from "viem";
 
 import { confirmTx, factoryAbi, VENTURE, venturePc } from "./client";
 import { minGrossTargetEth, raiseFields, requiresTarget, targetIssue } from "./raiseMode";
@@ -33,6 +33,7 @@ const CURVE_SHARE = 0.6; // 60% of supply sells on the curve
 const START_FDV_USD = 750; // mirrors VentureFactory.START_MCAP_USD_8
 const MIN_TARGET_ETH = 2; // mirrors VentureFactory.minTargetWei on mainnet
 const MAX_RAISE_DAYS = 14;
+const LAUNCHED_TOPIC = toEventSelector("Launched(address,address,address,uint16,uint256,uint64,address)");
 // On-chain metadata budget. A launch transaction is capped at 2^24 gas, and
 // storing ~25 KB of metadata already reaches it; leave room for the rest.
 const LOGO_MAX_CHARS = 12_000;
@@ -158,8 +159,21 @@ export function LaunchVenture() {
     }
     setBusy(true);
     try {
-      const ethUsd8 = BigInt(Math.round(ethUsd * 1e8));
-      if (ethUsd8 <= 0n) throw new Error("Could not read the ETH price. Try again in a moment.");
+      // The price may still be loading if the form was filled fast, or the
+      // pool read may have failed: ask again (bounded), then the configured
+      // fallback. It only sizes the curve's $750 starting value, and the
+      // factory refuses anything outside its band, so a fallback is safe.
+      let usd = ethUsd;
+      if (!(usd > 0)) {
+        usd = await Promise.race([
+          pairUsd(VENTURE.weth, venturePc).catch(() => 0),
+          new Promise<number>((r) => setTimeout(() => r(0), 5000)),
+        ]);
+        if (!(usd > 0)) usd = Number(VENTURE.ethUsd8Fallback) / 1e8;
+        if (usd > 0) setEthUsd(usd);
+      }
+      const ethUsd8 = BigInt(Math.round((Number.isFinite(usd) ? usd : 0) * 1e8));
+      if (ethUsd8 <= 0n) throw new Error("Couldn't read the ETH price. Try again in a moment.");
       // The factory only accepts an ETH/USD price inside its deployed band, so
       // a launcher cannot open their own curve near zero. Check before
       // signing so the founder gets a reason instead of a bare revert. A
@@ -278,9 +292,13 @@ export function LaunchVenture() {
         account: wc.account,
       });
       pushToast({ kind: "info", title: "Launching…", txHash: hash });
-      await confirmTx(hash);
+      const rc = await confirmTx(hash);
       pushToast({ kind: "success", title: `$${form.symbol.toUpperCase()} is live`, body: "Share the link: people can buy it now." });
-      navigate("/");
+      // Straight to the new coin's page, where the share buttons are. The
+      // token is the first indexed topic of the factory's Launched event.
+      const launched = rc.logs.find((l) => l.address.toLowerCase() === VENTURE.factory.toLowerCase() && l.topics[0] === LAUNCHED_TOPIC);
+      const coin = launched?.topics[1] ? `0x${launched.topics[1].slice(26)}` : null;
+      navigate(coin ? `/venture/${coin}` : "/");
     } catch (err) {
       setMining(false);
       pushToast({ kind: "error", title: "Launch failed", body: errorText(err) });

@@ -89,6 +89,9 @@ export function errorText(err: unknown): string {
   if (/insufficient funds|exceeds (the )?balance|gas required exceeds|Missing or invalid parameters/i.test(raw)) {
     return "Not enough ETH to cover this and the network fee.";
   }
+  if (/unknown RPC error|Failed to fetch|NetworkError|HTTP request failed|fetch failed|network (is )?(down|error|changed)|ERR_INTERNET_DISCONNECTED|timed? ?out/i.test(raw)) {
+    return "Couldn't reach the network. Check your connection; nothing was sent, so you can try again.";
+  }
   const named = /Error: (\w+)\(/.exec(raw)?.[1] ?? /errorName[":\s]+(\w+)/.exec(raw)?.[1];
   if (named && CONTRACT_ERRORS[named]) return CONTRACT_ERRORS[named];
   const sel = /0x[0-9a-fA-F]{8}\b/.exec(raw.slice(raw.search(/signature|reverted|revert/i) + 1))?.[0]?.toLowerCase();

@@ -8,6 +8,7 @@ import { useUi } from "../store";
 import { useVentures } from "./useVentures";
 import { useLiveFeed, type FeedItem } from "./feed";
 import { useCurveStats, type CurveStats } from "./boardStats";
+import { chainNowSecs } from "./clock";
 
 type Filter = "all" | "raising" | "soon" | "graduated";
 type Col = "age" | "mcap" | "progress" | "bought" | "buyers";
@@ -27,7 +28,7 @@ export function Board() {
   const curve = useCurveStats();
   // ETH bought per coin over the last hour: what "trending" actually means.
   const bought1h = useMemo(() => {
-    const cutoff = Date.now() / 1000 - 3600;
+    const cutoff = chainNowSecs() - 3600;
     const m = new Map<string, bigint>();
     for (const i of feed.items) if (i.kind === "buy" && i.ts >= cutoff) m.set(i.token.toLowerCase(), (m.get(i.token.toLowerCase()) ?? 0n) + i.eth);
     return m;

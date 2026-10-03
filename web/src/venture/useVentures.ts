@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
-import { loadVentures, type Venture } from "./client";
+import { loadVentures, venturePc, type Venture } from "./client";
+import { syncChainClock } from "./clock";
 
 /** One shared, polled copy of the board so the chrome, the activity strip and
  *  every page read the same list instead of each hitting the RPC on its own.
@@ -15,8 +16,8 @@ function emit() { subs.forEach((f) => f()); }
 
 export function refreshVentures(): Promise<void> {
   if (inflight) return inflight;
-  inflight = loadVentures()
-    .then((v) => { cache = v; lastError = null; })
+  inflight = Promise.all([loadVentures(), venturePc.getBlock().then((b) => syncChainClock(Number(b.timestamp))).catch(() => undefined)])
+    .then(([v]) => { cache = v; lastError = null; })
     .catch((e: unknown) => { lastError = e instanceof Error ? e.message : String(e); })
     .finally(() => { inflight = null; emit(); });
   return inflight;
