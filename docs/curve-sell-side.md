@@ -1,8 +1,20 @@
 # Curve sell side + curve fees — next contract round
 
-Status: spec, not implemented. Targets `VentureFactory.sol`, with one new
-launch parameter and two new entry points. No change to the curve math: the
-existing `curveCost` integral is already symmetric, so the sell side reuses it.
+Status: implemented in `VentureFactory.sol` (both raise modes, `sell()`, the
+curve fees, the high-water lock). Kept as the design record. Where the shipped
+contract differs from this spec, the contract wins; the differences so far:
+
+- `graduationRaiseWei` defaults to **4 ETH**, not 0.5, and mainnet's
+  `minTargetWei` is **2 ETH**. At 0.5 ETH a coin graduated at roughly $2.4k
+  FDV, too small to register on trackers.
+- Graduation runs inside the buy that fills the curve; `finalize()` is only
+  the fallback. There is no funded-but-frozen state.
+- `buy()` takes `minTokensOut`.
+- The first 60 seconds after launch cap every wallet at 1% of the target.
+- A wallet with a bound referrer pays 10% less of the curve fees.
+- Pairs other than WETH are refused for now.
+
+The original spec follows.
 
 ## Why
 
