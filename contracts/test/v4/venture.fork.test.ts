@@ -241,6 +241,32 @@ describe("Venture bonding-curve launchpad (fork)", function () {
     await expect(factory.abort(coin)).to.be.revertedWithCustomError(factory, "AlreadyFinalized");
   });
 
+  it("can't be griefed by donations to the factory before the filling buy", async () => {
+    // Stray coins, ETH and WETH sent to the factory must neither block the
+    // graduation nor change what the raise booked.
+    const [admin, founder, backer, whale, , treasury] = await ethers.getSigners();
+    const { factory, tokenDeployer } = await deployAll(admin, treasury);
+    const coin = await launch(factory, tokenDeployer, founder, WETH);
+    const erc = await ethers.getContractAt("QuiverToken", coin);
+    const fAddr = await factory.getAddress();
+    await (await factory.connect(backer).buy(coin, 0, { value: ethers.parseEther("0.3") })).wait();
+    // Donate: the backer's own coins, raw ETH via a balance bump, and WETH.
+    await (await erc.connect(backer).transfer(fAddr, (await erc.balanceOf(backer.address)) / 2n)).wait();
+    const bal = await ethers.provider.getBalance(fAddr);
+    await network.provider.send("hardhat_setBalance", [fAddr, "0x" + (bal + ethers.parseEther("1")).toString(16)]);
+    const weth = await ethers.getContractAt("WETH9", WETH);
+    await (await weth.connect(backer).deposit({ value: ethers.parseEther("0.1") })).wait();
+    await (await weth.connect(backer).transfer(fAddr, ethers.parseEther("0.1"))).wait();
+
+    const raisedBefore = (await factory.curveState(coin)).raisedWei;
+    await (await factory.connect(whale).buy(coin, 0, { value: ethers.parseEther("2.1") })).wait();
+    const st = await factory.curveState(coin);
+    expect(st.finalized, "graduated despite the donations").to.equal(true);
+    expect(st.raisedWei).to.be.closeTo(TARGET, ethers.parseEther("0.001"));
+    expect(st.raisedWei).to.be.greaterThan(raisedBefore);
+    expect((await factory.listings(coin)).poolId).to.not.equal(ethers.ZeroHash);
+  });
+
   it("graduates even when the creator cannot receive ETH", async () => {
     // The founder cut used to be pushed inside finalize(). A creator contract
     // with no receive() made finalize revert forever, and abort() is closed
