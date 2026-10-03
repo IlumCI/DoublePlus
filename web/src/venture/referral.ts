@@ -23,10 +23,6 @@ export function storedRef(): Address | null {
   }
 }
 
-export function clearStoredRef() {
-  try { localStorage.removeItem(KEY); } catch { /* ignore */ }
-}
-
 /** The share link for the current page, crediting `me`. */
 export function refLink(me: Address): string {
   const url = new URL(location.href);

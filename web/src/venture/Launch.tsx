@@ -76,10 +76,7 @@ export function LaunchVenture() {
   // Where the founder tax goes, in % that must total 100.
   const [alloc, setAlloc] = useState({ dev: 40, dividends: 30, liquidity: 15, mm: 15 });
   const allocTotal = alloc.dev + alloc.dividends + alloc.liquidity + alloc.mm;
-  const setBucket = (k: keyof typeof alloc) => (e: React.ChangeEvent<HTMLInputElement>) => {
-    const v = Math.max(0, Math.min(100, Math.round(Number(e.target.value) || 0)));
-    setAlloc((a) => ({ ...a, [k]: v }));
-  };
+
   const [logoData, setLogoData] = useState("");
   const [busy, setBusy] = useState(false);
   const [mining, setMining] = useState(false);

@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 
 import { env } from "../../lib/env";
 import type { Venture } from "../client";
-import { ago, pct, useEthUsd, useTick } from "../ui";
+import { pct, useEthUsd, useTick } from "../ui";
 
 /** Next flywheel epoch: the keeper runs Mondays 12:00 UTC (.github/workflows/venture-keepers.yml). */
 function nextEpoch(now: number): number {
@@ -40,7 +40,6 @@ export function Sidebar({ ventures }: { ventures: Venture[] | null }) {
   const ethUsd = useEthUsd();
   const live = (ventures ?? []).filter((v) => v.phase === "raising");
   const hot = [...live].sort((a, b) => pct(b.raisedWei, b.targetRaiseWei) - pct(a.raisedWei, a.targetRaiseWei)).slice(0, 4);
-  const fresh = [...(ventures ?? [])].sort((a, b) => b.createdAt - a.createdAt).slice(0, 4);
 
   return (
     <aside className="lh-sidebar" aria-label="Market sidebar">

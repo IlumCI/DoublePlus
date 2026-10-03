@@ -6,17 +6,6 @@ import { fmtUsdPrice } from "./format";
 
 export { fmtUsdPrice };
 
-/** Flag-on-a-block mark: a raised founder flag. */
-export function Flag({ size = 22 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path d="M6 21V4" stroke="var(--up, #a5dbb2)" strokeWidth="2.4" strokeLinecap="round" />
-      <path d="M6.8 4.6c2.6-1.7 4.9-1.7 7.4 0 2 1.3 3.6 1.4 5.4.5v7c-1.8.9-3.4.8-5.4-.5-2.5-1.7-4.8-1.7-7.4 0z" fill="var(--up, #a5dbb2)" opacity="0.9" />
-      <path d="M3.5 21h9" stroke="var(--faint, #6f6c80)" strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  );
-}
-
 /** SVG filter defs the stamps and paper grain reference. Mounted once. */
 export function FilterDefs() {
   return (
@@ -58,7 +47,7 @@ export const pct = (num: bigint, den: bigint): number =>
   den === 0n ? 0 : Math.min(100, Number((num * 10_000n) / den) / 100);
 
 /** Fully-diluted value from the curve price — what a launchpad calls market cap. */
-export const fdvWei = (v: Venture): bigint => v.priceWei * BigInt(TOTAL_SUPPLY);
+const fdvWei = (v: Venture): bigint => v.priceWei * BigInt(TOTAL_SUPPLY);
 
 /** ETH/USD for headline numbers, resolved once per session. Testnet explorers
  *  cannot price their own WETH, so the env-configured fallback stands in. */
@@ -134,13 +123,6 @@ export function StatusBadge({ v }: { v: Venture }) {
   return <span className="dp-badge dp-live">live</span>;
 }
 
-/** Bonding-curve progress, the meter every launchpad shows. */
-export function CurveBar({ v }: { v: Venture }) {
-  const funded = v.phase === "graduated" ? 100 : pct(v.raisedWei, v.targetRaiseWei);
-  const cls = v.phase === "failed" ? "dp-dead" : funded >= 100 ? "dp-done" : "";
-  return <div className={`dp-curvebar ${cls}`} style={{ ["--pct" as string]: `${funded}%` }}><i /></div>;
-}
-
 /** Relative age, as launchpads print provenance: "created by X 2m ago". */
 export function ago(unixSecs: number): string {
   const s = Math.max(0, chainNowSecs() - unixSecs);
@@ -175,17 +157,6 @@ export function Countdown({ deadline }: { deadline: number }) {
   );
 }
 
-/** ETH with its dollar value beside it — nobody thinks in 0.000002 ETH. */
-export function EthUsd({ wei, digits = 4, usd }: { wei: bigint; digits?: number; usd: number }) {
-  const eth = Number(wei) / 1e18;
-  return (
-    <>
-      <span className="dp-mono">{fmtEth(wei, digits)} ETH</span>
-      {usd > 0 && eth > 0 && <span className="dp-mono" style={{ color: "var(--faint)" }}> · {fmtUsdV(eth * usd)}</span>}
-    </>
-  );
-}
-
 /** Copy-to-clipboard for addresses and links; confirms in place. */
 export function CopyButton({ value, label, className }: { value: string; label?: string; className?: string }) {
   const [done, setDone] = useState(false);
@@ -199,24 +170,6 @@ export function CopyButton({ value, label, className }: { value: string; label?:
     >
       {done ? "Copied" : (label ?? short(value))}
     </button>
-  );
-}
-
-/** Percent change between the first and last close in a window. */
-export function changePct(points: { close: number }[]): number | null {
-  if (points.length < 2) return null;
-  const first = points[0].close;
-  const last = points[points.length - 1].close;
-  if (!(first > 0)) return null;
-  return ((last - first) / first) * 100;
-}
-
-export function Change({ pct: p }: { pct: number | null }) {
-  if (p === null) return <span className="dp-mono" style={{ color: "var(--faint)" }}>—</span>;
-  return (
-    <span className="dp-mono" style={{ color: p >= 0 ? "var(--up)" : "var(--down)" }}>
-      {p >= 0 ? "+" : ""}{p.toFixed(1)}%
-    </span>
   );
 }
 

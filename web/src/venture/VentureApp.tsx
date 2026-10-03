@@ -25,7 +25,7 @@ captureRef();
 // The board is the landing page and ships with the app; every other page is
 // its own chunk, so the chart libraries (klinecharts, recharts) and the
 // trade/launch flows only download when someone opens them.
-const VenturePage = lazy(() => import("./Venture").then((m) => ({ default: m.VenturePage })));
+const VenturePage = lazy(() => import("./coin").then((m) => ({ default: m.VenturePage })));
 const LaunchVenture = lazy(() => import("./Launch").then((m) => ({ default: m.LaunchVenture })));
 const Desk = lazy(() => import("./Desk").then((m) => ({ default: m.Desk })));
 const Flywheel = lazy(() => import("./Flywheel").then((m) => ({ default: m.Flywheel })));

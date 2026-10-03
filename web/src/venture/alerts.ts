@@ -16,7 +16,7 @@ const KEY = "dp-watch";
 const pct = (a: bigint, b: bigint): number => (b === 0n ? 0 : Math.min(100, Number((a * 10_000n) / b) / 100));
 const NEARLY_FULL = 90;
 
-export interface Snapshot { phase: Phase; funded: number }
+interface Snapshot { phase: Phase; funded: number }
 export interface Alert { token: string; symbol: string; title: string; body: string }
 
 /** What changed for one coin between two polls, as alerts. Pure. */
@@ -35,7 +35,7 @@ export function alertsFor(prev: Snapshot | undefined, v: Venture): Alert[] {
   return out;
 }
 
-export function snapshot(v: Venture): Snapshot {
+function snapshot(v: Venture): Snapshot {
   return { phase: v.phase, funded: v.phase === "graduated" ? 100 : pct(v.raisedWei, v.targetRaiseWei) };
 }
 
@@ -45,9 +45,9 @@ function readWatched(): Set<string> {
 let watched = readWatched();
 const subs = new Set<() => void>();
 
-export function isWatched(token: string): boolean { return watched.has(token.toLowerCase()); }
+function isWatched(token: string): boolean { return watched.has(token.toLowerCase()); }
 
-export async function setWatched(token: string, on: boolean): Promise<void> {
+async function setWatched(token: string, on: boolean): Promise<void> {
   const k = token.toLowerCase();
   if (on) watched.add(k); else watched.delete(k);
   try { localStorage.setItem(KEY, JSON.stringify([...watched])); } catch { /* private mode: this tab only */ }

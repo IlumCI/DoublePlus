@@ -122,9 +122,3 @@ export function useLiveFeed(): { items: FeedItem[]; loaded: boolean } {
   }, []);
   return { items, loaded };
 }
-
-/** Tokens with a buy inside the last `secs` seconds: the honest "hot" signal. */
-export function hotTokens(feed: FeedItem[], secs = 900): Set<string> {
-  const cutoff = chainNowSecs() - secs;
-  return new Set(feed.filter((i) => i.kind === "buy" && i.ts >= cutoff).map((i) => i.token.toLowerCase()));
-}

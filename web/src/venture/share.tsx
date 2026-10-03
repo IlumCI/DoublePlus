@@ -50,7 +50,7 @@ function ribbon(ctx: CanvasRenderingContext2D, y0: number, amp: number, color: s
   ctx.restore();
 }
 
-export async function drawShareCard(v: Venture): Promise<Blob | null> {
+async function drawShareCard(v: Venture): Promise<Blob | null> {
   const c = document.createElement("canvas");
   c.width = W; c.height = H;
   const ctx = c.getContext("2d");

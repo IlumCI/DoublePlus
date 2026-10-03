@@ -14,7 +14,7 @@ const subs = new Set<() => void>();
 
 function emit() { subs.forEach((f) => f()); }
 
-export function refreshVentures(): Promise<void> {
+function refreshVentures(): Promise<void> {
   if (inflight) return inflight;
   inflight = Promise.all([loadVentures(), venturePc.getBlock().then((b) => syncChainClock(Number(b.timestamp))).catch(() => undefined)])
     .then(([v]) => { cache = v; lastError = null; })
@@ -23,7 +23,7 @@ export function refreshVentures(): Promise<void> {
   return inflight;
 }
 
-export interface BoardState {
+interface BoardState {
   ventures: Venture[] | null;
   error: string | null;
   retry: () => void;

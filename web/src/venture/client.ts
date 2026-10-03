@@ -187,16 +187,16 @@ export const updatesAbi = [
   { type: "function", name: "postUpdate", stateMutability: "nonpayable", inputs: [{ type: "address" }, { type: "string" }], outputs: [] },
 ] as const;
 
-export const updatePostedEvent = parseAbiItem(
+const updatePostedEvent = parseAbiItem(
   "event UpdatePosted(address indexed token, address indexed author, string update)",
 );
-export const referralPaidEvent = parseAbiItem(
+const referralPaidEvent = parseAbiItem(
   "event ReferralPaid(address indexed trader, address indexed referrer, address currency, uint256 amount)",
 );
 export const routedEvent = parseAbiItem(
   "event Routed(address indexed trader, address indexed coin, bool isBuy, uint256 ethIn, uint256 ethOut)",
 );
-export const poolSwapEvent = parseAbiItem(
+const poolSwapEvent = parseAbiItem(
   "event Swap(bytes32 indexed id, address indexed sender, int128 amount0, int128 amount1, uint160 sqrtPriceX96, uint128 liquidity, int24 tick, uint24 fee)",
 );
 
@@ -277,12 +277,6 @@ export interface Venture {
   phase: Phase;
 }
 
-// Defined in raiseMode.ts, which is the one place that decides what differs
-// between the modes. Re-exported here so `import { GUARANTEED } from
-// "./client"` keeps working, but there is only one declaration.
-export { GUARANTEED, OPEN, type RaiseMode } from "./raiseMode";
-// Curve arithmetic lives in curve.ts so it can be tested without a chain.
-export { curveCostWei, quoteTokens, quoteSellWei, entryFeeWei, quoteBuy, capState, feePct, taxPct } from "./curve";
 
 function phaseOf(v: { finalized: boolean; aborted: boolean; deadline: number; raisedWei: bigint; targetRaiseWei: bigint; remainingWhole: bigint }): Phase {
   if (v.finalized) return "graduated";
@@ -348,7 +342,7 @@ export async function loadVenture(address: Address): Promise<Venture> {
     // check can say so; tell "not a coin" apart from "chain unreachable".
     if (e instanceof NotListed) throw e;
     const listing = await venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "listings", args: [address] })
-      .catch(() => null) as unknown as [Address] | null;
+      .catch(() => null);
     if (listing && listing[0] === "0x0000000000000000000000000000000000000000") throw new NotListed(address);
     throw e;
   }
@@ -377,10 +371,10 @@ async function readStatics(address: Address): Promise<Statics> {
     venturePc.readContract({ address, abi: ercAbi, functionName: "symbol" }),
     venturePc.readContract({ address, abi: ercAbi, functionName: "metadataURI" }).catch(() => ""),
   ]);
-  const [creator, pair, taxBps, createdAt, poolId] = listing as unknown as [Address, Address, number, bigint, string];
+  const [creator, pair, taxBps, createdAt, poolId] = listing;
   if (creator === "0x0000000000000000000000000000000000000000") throw new NotListed(address);
-  const t = terms as unknown as [number, bigint, Address, bigint, bigint, number, boolean];
-  const pol = policyRaw as unknown as [Address, number, number, number, number, number, number];
+  const t = terms;
+  const pol = policyRaw;
   return {
     creator, pair, taxBps: Number(taxBps), createdAt: Number(createdAt), poolId: String(poolId),
     // Hostile or broken metadata must not be able to break the page: see safe.ts.
@@ -402,16 +396,16 @@ async function readVenture(address: Address): Promise<Venture> {
     st = await readStatics(address);
     statics.set(key, st);
   }
-  const c = (await curve) as unknown as [bigint, bigint, bigint, bigint, bigint, bigint, boolean, boolean];
+  const c = await curve;
   // The two fields that change once: the pool id at graduation, and the
   // swept flag after an aborted raise's claim window. Re-read only while
   // they still can change.
   if (c[6] && st.poolId === ZERO_ID) {
-    const l = (await venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "listings", args: [address] })) as unknown as [Address, Address, number, bigint, string];
+    const l = await venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "listings", args: [address] });
     st.poolId = String(l[4]);
   }
   if (c[7] && !st.swept) {
-    const t = (await venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "terms", args: [address] })) as unknown as [number, bigint, Address, bigint, bigint, number, boolean];
+    const t = await venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "terms", args: [address] });
     st.swept = Boolean(t[6]);
   }
   const base = { finalized: c[6], aborted: c[7], deadline: Number(c[0]), raisedWei: c[4], targetRaiseWei: c[5], remainingWhole: c[3] };
@@ -479,8 +473,6 @@ export interface PoolTrade {
   txHash: string;
 }
 
-export interface Candle { time: number; open: number; high: number; low: number; close: number }
-
 const Q96 = 2n ** 96n;
 
 function priceFromSqrt(sqrtPriceX96: bigint, coinIsC0: boolean): bigint {
@@ -528,25 +520,6 @@ export async function loadPoolTrades(v: Venture): Promise<PoolTrade[]> {
       txHash: l.transactionHash,
     };
   });
-}
-
-/** Bucket trades into candles of `intervalSecs` (price in pair per coin, 1e18-scaled to float). */
-export function toCandles(trades: PoolTrade[], intervalSecs: number): Candle[] {
-  const out: Candle[] = [];
-  let cur: Candle | null = null;
-  for (const t of trades) {
-    const bucket = Math.floor(t.ts / intervalSecs) * intervalSecs;
-    const px = Number(t.priceWei) / 1e18;
-    if (!cur || cur.time !== bucket) {
-      if (cur) out.push(cur);
-      cur = { time: bucket, open: cur ? cur.close : px, high: px, low: px, close: px };
-    }
-    cur.high = Math.max(cur.high, px);
-    cur.low = Math.min(cur.low, px);
-    cur.close = px;
-  }
-  if (cur) out.push(cur);
-  return out;
 }
 
 /** All updates a founder posted for a venture, oldest first. */

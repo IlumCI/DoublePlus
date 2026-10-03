@@ -58,7 +58,7 @@ export function quoteTokens(v: CurveState, valueWei: bigint): bigint {
  *  curve fills: the closing price of a fully sold curve. Graduation seeds the
  *  pool at exactly that price, so this is the bag's value the moment trading
  *  opens, before anyone else trades. */
-export const CURVE_SUPPLY_WHOLE = 600_000_000n;
+const CURVE_SUPPLY_WHOLE = 600_000_000n;
 export function gradValueWei(v: CurveState, qWhole: bigint): bigint {
   const endPrice = v.basePriceWei + (v.slopeQ * CURVE_SUPPLY_WHOLE) / 10n ** 18n;
   return qWhole * endPrice;
@@ -99,7 +99,7 @@ export function quoteSellWei(
 
 /** VentureFeeHook.REFEREE_DISCOUNT_BPS: a wallet with a bound referrer pays
  *  10% less of the curve fees, as it does of the platform fee after graduation. */
-export const REFEREE_DISCOUNT_BPS = 1_000n;
+const REFEREE_DISCOUNT_BPS = 1_000n;
 
 /** A curve fee as VentureFactory._feeFor computes it. */
 export function curveFeeWei(amountWei: bigint, bps: number, referred = false): bigint {

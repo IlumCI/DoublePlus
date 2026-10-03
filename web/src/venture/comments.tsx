@@ -16,7 +16,7 @@ import { ago, short } from "./ui";
 const API = String(import.meta.env.VITE_VENTURE_API_URL ?? "").replace(/\/$/, "");
 export const COMMENTS_ENABLED = API !== "";
 
-export interface Comment { id: number; author: string; body: string; holder: boolean; is_dev: boolean; created_at: string }
+interface Comment { id: number; author: string; body: string; holder: boolean; is_dev: boolean; created_at: string }
 
 /** Must match api/src/lib.ts authMessage exactly: the worker verifies this text. */
 function authMessage(address: string, issuedAt: string, nonce: string): string {
@@ -56,7 +56,7 @@ function dropSession(a: string) {
 }
 
 /** Polled thread for one token. */
-export function useComments(token: string) {
+function useComments(token: string) {
   const [comments, setComments] = useState<Comment[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const load = useCallback(async () => {
