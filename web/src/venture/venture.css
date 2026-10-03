@@ -626,3 +626,23 @@ main { container-type: inline-size; }
 .dp-props dt { color: var(--dim); }
 .dp-props dd { margin: 0; color: var(--text); font-variant-numeric: tabular-nums; }
 @media (max-width: 520px) { .dp-props > div { grid-template-columns: 1fr; gap: 2px; } }
+
+/* Coin page, narrow screens: one column in the order a trader needs it,
+   chart, then the buy box, then the tabs; nothing wider than the screen. */
+.dp-coingrid > * { min-width: 0; }
+.dp-tfchips { flex-wrap: wrap; justify-content: flex-end; }
+.dp-tabbar { overflow-x: auto; scrollbar-width: none; }
+.dp-tabbar button { white-space: nowrap; }
+.dp-blotter { overflow-x: auto; }
+@media (max-width: 940px) {
+  .dp-coinmain { display: contents; }
+  .dp-coinmain > .dp-chartpanel { order: 1; }
+  .dp-coinside { order: 2; }
+  .dp-coinmain > :not(.dp-chartpanel) { order: 3; }
+}
+@media (max-width: 760px) {
+  .dp-statbar { grid-template-columns: repeat(2, 1fr); }
+  .dp-statbar > :nth-child(4), .dp-statbar > :nth-child(5), .dp-statbar > :nth-child(6) { display: none; }
+  .dp-chartpanel .dp-phead { flex-wrap: wrap; }
+  .dp-blotter td:last-child { display: none; }
+}

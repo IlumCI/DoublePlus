@@ -104,7 +104,7 @@ function VentureBody({ v, fills, ethUsd }: { v: VentureT; fills: Fill[]; ethUsd:
 
       <div className="dp-coingrid">
         {/* LEFT: the market, then everything that justifies it */}
-        <div>
+        <div className="dp-coinmain">
           {v.phase === "graduated" ? <PriceChart v={v} trades={trades} /> : <CurvePanel v={v} />}
 
           <div className="dp-tabbar">
@@ -125,7 +125,7 @@ function VentureBody({ v, fills, ethUsd }: { v: VentureT; fills: Fill[]; ethUsd:
         </div>
 
         {/* RIGHT: the money box, always above the fold */}
-        <div>
+        <div className="dp-coinside">
           {v.phase === "raising" && <RaisePanel v={v} />}
           {v.phase === "expired" && <GraduatePanel v={v} />}
           {v.phase === "failed" && <FailPanel v={v} />}
