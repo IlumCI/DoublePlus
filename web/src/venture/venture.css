@@ -601,7 +601,7 @@ main { container-type: inline-size; }
 @media (max-width: 960px) { .dp-wizard { grid-template-columns: 1fr; } }
 .dp-companion { position: sticky; top: 70px; display: grid; }
 @media (max-width: 960px) { .dp-companion { position: static; } }
-.dp-companion-label { font-size: 10px; letter-spacing: .14em; color: var(--faint); margin: 0 0 8px; }
+.dp-companion-label { font: 12px var(--body); color: var(--faint); margin: 0 0 8px; }
 
 .dp-wizard-nav { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
 

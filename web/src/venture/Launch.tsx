@@ -134,7 +134,7 @@ export function LaunchVenture() {
       // Say which of the two floors is binding, because the fix differs: one
       // is fixed by asking for more, the other by taking a smaller cut.
       const body = curveFloorEth >= minTargetEth
-        ? `Minimum is ~${minTargetEth.toFixed(4)} ETH — what the curve's own supply costs at the $${START_FDV_USD} starting valuation.`
+        ? `The minimum is about ${minTargetEth.toFixed(4)} ETH: what the curve's coins cost at its $${START_FDV_USD} starting value.`
         : founderCut > 0
           ? `Minimum is ~${minTargetEth.toFixed(4)} ETH, so ${platformFloorEth} ETH still reaches the pool after your ${founderCut}% cut. Lower the cut to ask for less.`
           : `Minimum is ${platformFloorEth} ETH.`;
@@ -258,9 +258,9 @@ export function LaunchVenture() {
         chain: wc.chain,
         account: wc.account,
       });
-      pushToast({ kind: "info", title: "Opening your raise…", txHash: hash });
+      pushToast({ kind: "info", title: "Launching…", txHash: hash });
       await venturePc.waitForTransactionReceipt({ hash });
-      pushToast({ kind: "success", title: "Your raise is live", body: "The term sheet is on-chain. Go find your backers." });
+      pushToast({ kind: "success", title: `$${form.symbol.toUpperCase()} is live`, body: "Share the link: people can buy it now." });
       navigate("/");
     } catch (err) {
       setMining(false);
@@ -308,12 +308,13 @@ export function LaunchVenture() {
     setPreset("custom");
   };
 
+  // What traders will compare it with, stated flatly.
   const taxMood = (t: number) =>
-    t === 0 ? "free to trade — pure volume play"
-    : t <= 1.5 ? "barely noticed, volume stays high"
-    : t <= 2.5 ? "standard for a funded project"
-    : t <= 3.5 ? "chunky; your holders will want it back"
-    : "steep — you will need to earn this one";
+    t === 0 ? "No fee. Cheapest to trade, nothing to share out."
+    : t <= 1.5 ? "Low. Close to what plain Uniswap pools charge."
+    : t <= 2.5 ? "Typical for a launchpad coin."
+    : t <= 3.5 ? "High. Active traders notice it."
+    : "The maximum. Expect fewer quick flips.";
 
   useEffect(() => {
     const read = (fn: "creationFeeWei" | "graduationRaiseWei" | "curveBuyFeeBps" | "curveSellFeeBps" | "minTargetWei") =>
@@ -338,13 +339,13 @@ export function LaunchVenture() {
   const payoutAsset = pairMode === "stock" ? (stockPick?.symbol ?? "the quote token") : "ETH";
 
   const feeSlices: Slice[] = [
-    { label: "You", value: alloc.dev, note: "paid on every trade, forever" },
-    { label: "Holders", value: alloc.dividends, note: "a reason to hold, not flip" },
-    { label: "Liquidity", value: alloc.liquidity, note: "calmer chart, deeper book" },
-    { label: "Market-making", value: alloc.mm, note: "always a buyer on the bid" },
+    { label: "You", value: alloc.dev, note: "sent to your wallet on each trade" },
+    { label: "Holders", value: alloc.dividends, note: "paid out to people holding the coin" },
+    { label: "Liquidity", value: alloc.liquidity, note: "added to the pool, so prices move less" },
+    { label: "Market-making", value: alloc.mm, note: "buy and sell orders kept near the price" },
   ];
 
-  const STEPS = ["Your project", "Your raise", "How trading works", "Review"];
+  const STEPS = ["Your coin", "The raise", "Trading fees", "Review"];
   const canAdvance =
     step === 0 ? form.name.trim().length > 0 && form.symbol.trim().length > 0 && form.pitch.trim().length > 0
     : step === 1 ? open || (parsedTarget > 0n && (minTargetEth === 0 || Number(target) >= minTargetEth * 0.999))
@@ -354,9 +355,10 @@ export function LaunchVenture() {
   return (
     <div className="dp-shell" style={{ paddingBottom: 70, maxWidth: 1120 }}>
       <div className="dp-page-head">
-        <h1 className="dp-page-title">Launch a coin. Get paid on every trade.</h1>
+        <h1 className="dp-page-title">Launch a coin</h1>
         <p style={{ maxWidth: "64ch", color: "var(--dim)", fontSize: 13.5 }}>
-          You set your cut: up to 4% of every trade, forever, plus up to 30% of the raise when it graduates. Four steps, one transaction. The defaults work — change nothing and you get a sensible launch.
+          You can take up to 4% of every trade, and in a raise with a target, up to 30% of what it raises.
+          The defaults are reasonable if you'd rather not change anything.
         </p>
       </div>
 
@@ -375,7 +377,7 @@ export function LaunchVenture() {
           {/* ---------------------------------------------------- step 1 */}
           {step === 0 && (
             <div className="dp-form-sheet">
-              <p className="dp-sec">Your project</p>
+              <p className="dp-sec">Your coin</p>
               <div style={{ display: "flex", alignItems: "flex-start", gap: 16 }}>
                 <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }}
                   onChange={(e) => { const f = e.target.files?.[0]; if (f) onLogo(f); }} />
@@ -386,14 +388,13 @@ export function LaunchVenture() {
                 </button>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "0 16px" }}>
-                    <div className="dp-field"><label htmlFor="v-name">Project name</label>
+                    <div className="dp-field"><label htmlFor="v-name">Name</label>
                       <input id="v-name" value={form.name} onChange={set("name")} placeholder="Openkernel" maxLength={32} required /></div>
                     <div className="dp-field"><label htmlFor="v-sym">Ticker</label>
                       <input id="v-sym" value={form.symbol} onChange={set("symbol")} placeholder="KERN" maxLength={8}
                         style={{ textTransform: "uppercase" }} required /></div>
                   </div>
-                  <p className="dp-hint">Your logo is what makes the card recognisable at a glance — projects
-                    without one are much easier to scroll past.</p>
+                  <p className="dp-hint">Square works best. It's stored on-chain with the coin.</p>
                 </div>
               </div>
 
@@ -401,25 +402,19 @@ export function LaunchVenture() {
                 <label htmlFor="v-pitch">One-liner <span className="dp-count">{form.pitch.length}/140</span></label>
                 <textarea id="v-pitch" value={form.pitch} onChange={set("pitch")} rows={2} maxLength={140}
                   placeholder="Memory-safety fuzzing lab for the mainline kernel. All findings published open." required />
-                <span className="dp-hint">This is the whole pitch on the board. Say what it is and who it is for — skip the adjectives.</span>
+                <span className="dp-hint">Shown next to the name in the coin list. Say what it is.</span>
               </div>
-              <div className="dp-field"><label htmlFor="v-long">The full story <span className="dp-agate">· optional</span></label>
+              <div className="dp-field"><label htmlFor="v-long">Description <span className="dp-agate">(optional)</span></label>
                 <textarea id="v-long" value={longDesc} onChange={(e) => setLongDesc(e.target.value)} rows={5}
                   placeholder="What you are building, who it is for, and what the money buys." />
-                <span className="dp-hint">Shown on your project page under the one-liner. The one-liner sells the
-                  click; this is what someone reads before they commit.</span></div>
+                <span className="dp-hint">Shown on the coin's page.</span></div>
 
-              <p className="dp-sec" style={{ marginTop: 18 }}>Links and media
-                <span className="dp-agate">optional, but don't skip them</span></p>
+              <p className="dp-sec" style={{ marginTop: 18 }}>Links <span className="dp-agate">(optional)</span></p>
               {/* pump.fun data: launches with Telegram, X and a site graduate
                   roughly 9–17x as often as bare ones (correlation, not a promise). */}
-              <p className="dp-hint dp-links-push">
-                Coins with X, Telegram and a website graduate many times more often than bare ones.
-                Traders check these before they buy, and your card shows which ones you filled in.
-              </p>
+              <p className="dp-hint">Most buyers check for these first.</p>
               <div className="dp-field"><label htmlFor="v-sector">Sector</label>
-                <input id="v-sector" value={form.sector} onChange={set("sector")} placeholder="research · open source" />
-                <span className="dp-hint">Include “research” to file under Research.</span></div>
+                <input id="v-sector" value={form.sector} onChange={set("sector")} placeholder="e.g. games, AI, research" /></div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0 16px" }}>
                 <div className="dp-field"><label htmlFor="v-site">Website</label>
                   <input id="v-site" value={form.website} onChange={set("website")} placeholder="https://" /></div>
@@ -436,21 +431,20 @@ export function LaunchVenture() {
               </div>
               <div className="dp-field"><label htmlFor="v-banner">Cover image URL</label>
                 <input id="v-banner" value={form.banner} onChange={set("banner")} placeholder="https://…/cover.jpg" />
-                <span className="dp-hint">Sits behind your header, roughly 1500×500. A link rather than an upload:
-                  the logo already rides on-chain and a cover would not fit beside it.</span></div>
+                <span className="dp-hint">Shown across the top of the coin's page, about 1500×500. Paste a link to the image.</span></div>
             </div>
           )}
 
           {/* ---------------------------------------------------- step 2 */}
           {step === 1 && (
             <div className="dp-form-sheet">
-              <p className="dp-sec">Your raise <button type="button" className="dp-linkbtn" onClick={() => setExpertRaise(!expertRaise)}>
-                {expertRaise ? "hide expert settings" : "expert settings"}</button></p>
+              <p className="dp-sec">The raise <button type="button" className="dp-linkbtn" onClick={() => setExpertRaise(!expertRaise)}>
+                {expertRaise ? "Fewer settings" : "More settings"}</button></p>
 
               <div className="dp-presets" style={{ gridTemplateColumns: "1fr 1fr" }}>
                 {([
-                  [0, "Refund or Rocket", "Ask for an amount", "Fill the target and it rockets to Uniswap with the raise. Miss it and every backer gets their ETH back: nobody is exit liquidity."],
-                  [1, "Open curve", "Trade from second one", "No target, no deadline. It graduates on its own once the curve fills."],
+                  [0, "Raise with a target", "Refund or rocket", "You set a target and a deadline. Hit it and the coin moves to Uniswap. Miss it and every buyer gets their ETH back."],
+                  [1, "Open curve", "No target", "No deadline and no refunds. People can buy and sell from the start, and it moves to Uniswap when the curve fills."],
                 ] as const).map(([m, title, line, why]) => (
                   <button type="button" key={m} className={mode === m ? "on" : ""} onClick={() => setMode(m)}>
                     <b>{title}</b>
@@ -480,42 +474,39 @@ export function LaunchVenture() {
                     onChange={(e) => setTarget(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="4.0"
                     required={requiresTarget(mode)} />
                   <span className="dp-hint">
-                    In ETH{targetUsd > 0 ? ` — about ${fmtUsdV(targetUsd)} today` : ""}.
+                    In ETH{targetUsd > 0 ? `, about ${fmtUsdV(targetUsd)} today` : ""}.
                     {targetUsd > 0 ? ` Graduates at about ${fmtUsdV(gradFdvUsd(Number(target), ethUsd))} market cap.` : ""}
                     {minTargetEth > 0 ? ` Minimum ${minTargetEth.toFixed(4)} ETH.` : ""}
                     {" "}Ask for what the next milestone costs: backers fund plans, not round numbers.
                   </span>
                 </div>
-                <div className="dp-field"><label htmlFor="v-days">How long to raise it? — {days} days</label>
+                <div className="dp-field"><label htmlFor="v-days">How long to raise it: {days} days</label>
                   <input id="v-days" type="range" min={1} max={MAX_RAISE_DAYS} value={days} onChange={(e) => setDays(Number(e.target.value))} />
                   <span className="dp-hint">Miss the deadline and every backer takes their curve spend back, automatically.
                     Short windows create urgency; long ones give word of mouth time to work.</span></div>
               </div>
 
-              <div className="dp-field" style={{ display: open ? "none" : undefined }}><label htmlFor="v-cut">How much of the raise do you take? — {founderCut}%</label>
+              <div className="dp-field" style={{ display: open ? "none" : undefined }}><label htmlFor="v-cut">Your cut of the raise: {founderCut}%</label>
                 <input id="v-cut" type="range" min={0} max={30} value={founderCut} onChange={(e) => setFounderCut(Number(e.target.value))} />
                 <span className="dp-hint">
                   {cutEth > 0 ? `${cutEth.toFixed(4)} ETH at this target. ` : ""}
-                  Paid only if the raise succeeds; the rest becomes locked liquidity for your market.
-                  Backers read this number as how much you need versus how much you want — under 20% reads as confident.
+                  Paid only if it hits the target. The rest goes into the locked Uniswap pool.
                 </span>
               </div>
 
               {expertRaise && (
                 <div className="dp-expert">
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 22px" }}>
-                    <div className="dp-field"><label htmlFor="v-stake">Your token stake — {founderStake}%</label>
+                    <div className="dp-field"><label htmlFor="v-stake">Coins you keep: {founderStake}% of supply</label>
                       <input id="v-stake" type="range" min={0} max={15} value={founderStake} onChange={(e) => setFounderStake(Number(e.target.value))} />
-                      <span className="dp-hint">Your upside if the project works. It burns if the raise fails.</span></div>
-                    <div className="dp-field"><label htmlFor="v-vest">Vesting — {vestDays} days</label>
+                      <span className="dp-hint">Locked until graduation, then released over the vesting period. Burned if the raise misses.</span></div>
+                    <div className="dp-field"><label htmlFor="v-vest">Vesting: {vestDays} days</label>
                       <input id="v-vest" type="range" min={0} max={730} step={30} value={vestDays}
                         onChange={(e) => setVestDays(Number(e.target.value))} disabled={founderStake === 0} />
-                      <span className="dp-hint">Unlocks linearly from graduation. Longer vesting is the cheapest
-                        credibility you can buy — it tells the market you cannot dump on it.</span></div>
-                    <div className="dp-field" style={{ display: open ? "none" : undefined }}><label htmlFor="v-cap">Per-wallet cap — {capPct}% of target</label>
+                      <span className="dp-hint">Released evenly, starting at graduation. Buyers can see the schedule.</span></div>
+                    <div className="dp-field" style={{ display: open ? "none" : undefined }}><label htmlFor="v-cap">Most one wallet can put in: {capPct}% of target</label>
                       <input id="v-cap" type="range" min={1} max={100} value={capPct} onChange={(e) => setCapPct(Number(e.target.value))} />
-                      <span className="dp-hint">Stops one wallet taking the whole round and controlling your market
-                        afterwards. Low caps spread the cap table; high caps fill faster.</span></div>
+                      <span className="dp-hint">Lower spreads the coins across more buyers. Higher fills faster.</span></div>
                   </div>
                 </div>
               )}
@@ -525,7 +516,7 @@ export function LaunchVenture() {
           {/* ---------------------------------------------------- step 3 */}
           {step === 2 && (
             <div className="dp-form-sheet">
-              <p className="dp-sec">How trading works</p>
+              <p className="dp-sec">Trading fees</p>
 
               {/* the fee dials — always visible, always yours */}
               <div className="dp-dials">
@@ -558,10 +549,10 @@ export function LaunchVenture() {
               <p className="dp-sec" style={{ marginTop: 20 }}>Where the fee goes</p>
               <div className="dp-presets">
                 {([
-                  ["community", "Community-focus", "Half to holders", "Rewards holding. Stickier cap table."],
-                  ["balanced", "Balanced", "Spread across four", "What most projects ship."],
-                  ["profit", "Profit-focus", "Most to your wallet", "Maximum runway."],
-                  ["custom", "Custom", "You decide", "Move a slider, the rest rebalances."],
+                  ["community", "Holders first", "Half to holders", "Pays people to keep holding."],
+                  ["balanced", "Balanced", "Spread across four", "A quarter to each."],
+                  ["profit", "Creator first", "Most to you", "The largest share to your wallet."],
+                  ["custom", "Custom", "Set it yourself", "Moving one slider rebalances the others."],
                 ] as const).map(([k, title, line, why]) => (
                   <button type="button" key={k} className={preset === k ? "on" : ""} onClick={() => applyPreset(k)}>
                     <b>{title}</b>
@@ -605,12 +596,12 @@ export function LaunchVenture() {
                   {STOCK_PAIRS_ENABLED ? (
                     <div className="dp-field"><label htmlFor="v-payout">Paid out in</label>
                       <select id="v-payout" value={pairMode} onChange={(e) => setPairMode(e.target.value as "eth" | "stock")}>
-                        <option value="eth">ETH — the default market</option>
+                        <option value="eth">ETH</option>
                         <option value="stock">A tokenized stock</option>
                       </select>
                       {pairMode === "stock" && (
                         <select value={stock} onChange={(e) => setStock(e.target.value)} style={{ marginTop: 8 }}>
-                          {STOCKS.map((st) => <option key={st.address} value={st.address}>{st.symbol} — {st.name}</option>)}
+                          {STOCKS.map((st) => <option key={st.address} value={st.address}>{st.symbol} ({st.name})</option>)}
                         </select>
                       )}
                       <span className="dp-hint">This is also your market's quote asset: holders are paid in whatever
@@ -636,14 +627,14 @@ export function LaunchVenture() {
                       <label htmlFor="v-tiered">Reward bigger holders more</label>
                       <select id="v-tiered" value={tiered ? "on" : "off"} onChange={(e) => setTiered(e.target.value === "on")}
                         disabled={minHold === 0}>
-                        <option value="off">Flat — every token earns the same</option>
-                        <option value="on">Tiered — a larger stake earns more per token</option>
+                        <option value="off">Flat: every token earns the same</option>
+                        <option value="on">Tiered: larger holdings earn more per token</option>
                       </select>
                       <span className="dp-hint">
                         {minHold === 0
                           ? "Needs a minimum to be a multiple of. Set one first."
                           : divMode === 1
-                          ? `10x the minimum earns 1.25x per token, 100x earns 1.5x, 1000x earns 2x — the cap. Splitting a balance across wallets drops the multiplier, so it never pays to game.`
+                          ? `10x the minimum earns 1.25x per token, 100x earns 1.5x, and 1000x earns 2x, the most. Splitting a balance across wallets lowers the multiplier.`
                           : "Turn on to pay a larger stake more per token, up to 2x."}
                       </span>
                     </div>
@@ -656,53 +647,52 @@ export function LaunchVenture() {
           {/* ---------------------------------------------------- step 4 */}
           {step === 3 && (
             <div className="dp-form-sheet">
-              <p className="dp-sec">Review <span className="dp-agate">this is what goes on-chain</span></p>
+              <p className="dp-sec">Review</p>
               <div className="dp-sheet" style={{ maxWidth: "none" }}>
-                <p className="dp-sec">{form.name || "Your project"} (${(form.symbol || "TICK").toUpperCase()})</p>
+                <p className="dp-sec">{form.name || "Your coin"} (${(form.symbol || "TICK").toUpperCase()})</p>
                 <dl>
                   <dt>Raise</dt><dd>{open
-                    ? `open curve — graduates at ${chain ? (Number(chain.grad) / 1e18).toFixed(2) : "—"} ETH, no deadline`
+                    ? `open curve, moves to Uniswap at ${chain ? (Number(chain.grad) / 1e18).toFixed(2) : "?"} ETH, no deadline`
                     : `${target || "—"} ETH in ${days} days${targetUsd > 0 ? ` (~${fmtUsdV(targetUsd)})` : ""}`}</dd>
-                  {!open && <><dt>You take</dt><dd>{founderCut}% of the raise{cutEth > 0 ? ` — ${cutEth.toFixed(4)} ETH` : ""}, on success only</dd></>}
+                  {!open && <><dt>You take</dt><dd>{founderCut}% of the raise{cutEth > 0 ? ` (${cutEth.toFixed(4)} ETH)` : ""}, only if it hits the target</dd></>}
                   <dt>Your stake</dt><dd>{founderStake}% of supply, vesting {vestDays} days from graduation</dd>
                   {!open && <><dt>Per-wallet cap</dt><dd>{capPct}% of target</dd></>}
                   <dt>Trading fee</dt><dd>{buyTaxPct}% buy / {sellTaxPct}% sell</dd>
-                  <dt>Fee split</dt><dd>dev {alloc.dev} · holders {alloc.dividends} · liquidity {alloc.liquidity} · market-making {alloc.mm}</dd>
+                  <dt>Fee split</dt><dd>you {alloc.dev}%, holders {alloc.dividends}%, liquidity {alloc.liquidity}%, market-making {alloc.mm}%</dd>
                   <dt>ETH drip</dt><dd>{paysDividends
                     ? `${alloc.dividends}% of the fee, paid in ${payoutAsset}${minHold > 0
                         ? `, to wallets holding ${minHold.toLocaleString("en-US")}+ $${(form.symbol || "TICK").toUpperCase()}`
                         : ", to every holder"}${divMode === 1 ? ", tiered up to 2x for larger stakes" : ""}`
-                    : "none — no fee routed to holders"}</dd>
-                  <dt>Story</dt><dd>{form.pitch.trim() || "—"}{longDesc.trim() ? " · full description attached" : ""}</dd>
+                    : "none"}</dd>
+                  <dt>Description</dt><dd>{form.pitch.trim() || "none"}{longDesc.trim() ? ", plus a longer description" : ""}</dd>
                   <dt>Links</dt><dd>{[
                     ["logo", !!logoData], ["cover", !!form.banner.trim()], ["website", !!form.website.trim()],
                     ["X", !!form.twitter.trim()], ["telegram", !!form.telegram.trim()], ["discord", !!form.discord.trim()],
                     ["github", !!form.github.trim()], ["docs", !!form.docs.trim()],
-                  ].filter(([, on]) => on).map(([k]) => k).join(" · ") || "none attached"}</dd>
-                  <dt>Protocol fee</dt><dd>{(VENTURE.platformFeeBps / 100).toFixed(2)}% per trade, {VENTURE.refShareBps / 100}% of it to referrers</dd>
-                  <dt>Costs you today</dt><dd>{chain && chain.creation > 0n
+                  ].filter(([, on]) => on).map(([k]) => k).join(", ") || "none"}</dd>
+                  <dt>Platform fee</dt><dd>{(VENTURE.platformFeeBps / 100).toFixed(2)}% per trade, {VENTURE.refShareBps / 100}% of that to referrers</dd>
+                  <dt>Cost to launch</dt><dd>{chain && chain.creation > 0n
                     ? `${fmtEth(chain.creation, 4)} ETH to launch, plus gas`
                     : "gas only"}</dd>
                 </dl>
               </div>
               <div className="dp-notice" style={{ marginTop: 14 }}>
-                <h3>These numbers are permanent.</h3>
-                <p>The factory writes them into your token and the pool hook at graduation. Nobody can change them
-                  afterwards — not you, not the protocol. Your name, pitch, logo and links stay editable.</p>
+                <h3>None of this can be changed after you launch.</h3>
+                <p>That includes the name, description, logo and links. Neither you nor the platform can edit them.</p>
               </div>
               <label className="dp-confirm">
                 <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
-                <span>I have read the terms above and understand they cannot be changed.</span>
+                <span>I've checked the details above.</span>
               </label>
               <button className="dp-action" type="submit" disabled={busy || !confirmed} style={{ width: "100%", marginTop: 12 }}>
-                {mining ? "Mining your address…" : busy ? "Confirm in wallet…" : isConnected ? "Launch — one transaction" : "Connect wallet"}
+                {mining ? "Finding your address…" : busy ? "Confirm in wallet…" : isConnected ? "Launch" : "Connect wallet"}
               </button>
               <p className="dp-hint" style={{ textAlign: "center", marginTop: 8 }}>
                 {chain && chain.creation > 0n
                   ? <><span className="dp-mono">{fmtEth(chain.creation, 4)} ETH</span> to launch, plus gas. </>
                   : <>Free to launch, gas only. </>}
-                Your token address is mined in your browser to end in{" "}
-                <span className="dp-mono">0x4663</span>.
+                Your browser then searches for a coin address that starts or ends with{" "}
+                <span className="dp-mono">2add</span>, which takes a few seconds.
               </p>
             </div>
           )}
@@ -720,30 +710,23 @@ export function LaunchVenture() {
 
         {/* live preview + the teaching companion */}
         <aside className="dp-companion">
-          <p className="dp-mono dp-companion-label">YOUR CARD ON THE BOARD</p>
-          <div className="dp-tcard" style={{ pointerEvents: "none" }}>
-            <div className="dp-row1">
-              <span className="dp-monogram dp-m2" style={{ padding: 0, overflow: "hidden" }}>
-                {logoData ? <img src={logoData} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                  : (form.name.slice(0, 1) || "?").toUpperCase()}
+          <p className="dp-companion-label">How it will look in the coin list</p>
+          <div className="lh-list" style={{ marginTop: 0 }}>
+            <div className="lh-drow" style={{ ["--cols" as string]: "minmax(0, 1.6fr) minmax(0, 1fr)", pointerEvents: "none" }}>
+              <span className="lh-dname">
+                <span className="dp-monogram dp-m2" style={{ padding: 0, overflow: "hidden" }}>
+                  {logoData ? <img src={logoData} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    : (form.name.slice(0, 1) || "?").toUpperCase()}
+                </span>
+                <span>
+                  <b>{form.name || "Your coin"}</b>
+                  <small>${(form.symbol || "TICK").toUpperCase()}{form.pitch ? ` · ${form.pitch}` : ""}</small>
+                </span>
               </span>
-              <div style={{ minWidth: 0 }}>
-                <h3>{form.name || "Your project"}</h3>
-                <span className="dp-tick">${(form.symbol || "TICK").toUpperCase()}{form.sector ? ` · ${form.sector}` : ""}</span>
-              </div>
-              <span style={{ marginLeft: "auto" }}>
-                <span className={open ? "dp-badge dp-open" : "dp-badge dp-live"}>{open ? "open curve" : "live"}</span>
+              <span className="lh-dstage">
+                <span className="lh-dmeter"><i style={{ width: "0%" }} /></span>
+                <span className="lh-st">0% · {open ? (chain ? (Number(chain.grad) / 1e18).toFixed(2) : "?") : (target || "?")} ETH left</span>
               </span>
-            </div>
-            {form.pitch && <p className="dp-pitch">{form.pitch}</p>}
-            <div className="dp-curvebar" style={{ ["--pct" as string]: "0%" }}><i /></div>
-            <div className="dp-curvelabel">
-              <span><b>0%</b> to graduation</span>
-              <span>0 / {open ? (chain ? (Number(chain.grad) / 1e18).toFixed(2) : "—") : (target || "—")} ETH</span>
-            </div>
-            <div className="dp-prov">
-              <span>by <b>you</b> · just now</span>
-              <span>{paysDividends ? `holders earn ${alloc.dividends}%` : open ? "fees only" : `founder takes ${founderCut}%`}</span>
             </div>
           </div>
 
@@ -752,48 +735,21 @@ export function LaunchVenture() {
             <div className="dp-pbody dp-earn">
               {open ? (
                 <div><b className="dp-up">{(chain ? chain.sellBps / 100 : 1).toFixed(2)}%</b>
-                  <span>of every curve exit, plus your cut of the pool fee once it graduates</span></div>
+                  <span>of every sale back to the curve, then your share of trading fees on Uniswap</span></div>
               ) : (
                 <div><b className="dp-up">{cutEth > 0 ? `${cutEth.toFixed(4)} ETH` : "—"}</b>
-                  <span>your {founderCut}% of the {target || "—"} ETH backers put in, yours to withdraw at graduation</span></div>
+                  <span>your {founderCut}% of the {target || "?"} ETH target, paid when it hits the target</span></div>
               )}
-              <div><b className="dp-up">{(avgTax * alloc.dev / 100).toFixed(2)}%</b><span>of every trade, forever</span></div>
+              <div><b className="dp-up">{(avgTax * alloc.dev / 100).toFixed(2)}%</b><span>of every trade on Uniswap</span></div>
               <div><b className="dp-up">{founderStake}%</b><span>of supply, vesting {vestDays} days</span></div>
               <p className="dp-hint" style={{ marginTop: 4 }}>
                 {open
-                  ? "Paid out of trading, not out of a raise — there is nothing to wait for."
-                  : `The other ${100 - founderCut}% becomes your pool's locked liquidity.`}
+                  ? "Nothing to wait for: it's paid from trading."
+                  : `The other ${100 - founderCut}% goes into the Uniswap pool and is locked there.`}
               </p>
             </div>
           </div>
 
-          <div className="dp-panel" style={{ marginTop: 12 }}>
-            <div className="dp-phead"><span>Why this matters</span></div>
-            <div className="dp-pbody dp-teach">
-              {step === 0 && <p>Backers scan dozens of cards. A real logo, a short name and one concrete sentence
-                are what make yours stop the scroll — the rest of your story lives on the project page.</p>}
-              {step === 1 && (open
-                ? <p>Early buyers pay less, so momentum builds itself. An open curve lives or dies on attention:
-                    there is no deadline forcing the issue, and no refund if it stalls.</p>
-                : <p>Early backers pay less, so momentum builds itself. All-or-nothing: ask for a number you can hit.</p>)}
-              {step === 2 && (
-                <>
-                  <p>This fee runs forever. More to holders, they hold. More to you, more runway.</p>
-                  {paysDividends && (
-                    <p style={{ marginTop: 8 }}>
-                      Holders are paid in <b className="dp-up">{payoutAsset}</b>
-                      {minHold > 0
-                        ? <> once they hold <b className="dp-up">{minHold.toLocaleString("en-US")} ${(form.symbol || "TOKEN").toUpperCase()}</b>. Below that, nothing —
-                          and that forfeited share raises everyone else's.</>
-                        : <>, however little they hold.</>}
-                      {divMode === 1 && <> A stake 1000x the minimum earns double per token.</>}
-                    </p>
-                  )}
-                </>
-              )}
-              {step === 3 && <p>Last look. The contract enforces every number here, and nobody can edit it later.</p>}
-            </div>
-          </div>
         </aside>
       </form>
     </div>
