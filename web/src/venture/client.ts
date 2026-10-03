@@ -294,17 +294,25 @@ function phaseOf(v: { finalized: boolean; aborted: boolean; deadline: number; ra
   return "raising";
 }
 
+const allTokensCache: Address[] = [];
+
 export async function loadVentures(): Promise<Venture[]> {
   const total = Number(
     await venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "totalTokens" }),
   );
   // In parallel: the client batches these into multicalls, where a serial
   // loop paid one round trip per coin and slowed the board with every launch.
-  const addresses = await Promise.all(
-    Array.from({ length: total }, (_, k) => venturePc.readContract({
-      address: VENTURE.factory, abi: factoryAbi, functionName: "allTokens", args: [BigInt(total - 1 - k)],
-    }) as Promise<Address>),
-  );
+  // allTokens is append-only: fetch only the launches since the last poll.
+  const known = allTokensCache.length;
+  if (total > known) {
+    const fresh = await Promise.all(
+      Array.from({ length: total - known }, (_, k) => venturePc.readContract({
+        address: VENTURE.factory, abi: factoryAbi, functionName: "allTokens", args: [BigInt(known + k)],
+      }) as Promise<Address>),
+    );
+    allTokensCache.push(...fresh);
+  }
+  const addresses = allTokensCache.slice(0, total).reverse();
   const loaded = await Promise.all(addresses.map((a) => loadVenture(a).catch(() => null))); // skip one that can't be read this pass
   return loaded.filter((v): v is Venture => v !== null);
 }
@@ -344,10 +352,23 @@ export async function loadVenture(address: Address): Promise<Venture> {
   }
 }
 
-async function readVenture(address: Address): Promise<Venture> {
-  const [listing, curve, terms, policyRaw, name, symbol, metaRaw] = await Promise.all([
+/** What never changes after launch (or changes once and then never again),
+ *  read once per coin per session. Polling then only reads the live state:
+ *  re-reading names, policies and on-chain metadata (logos included) every
+ *  15 s for every coin cost each visitor megabytes a minute and grew with
+ *  every launch. */
+interface Statics {
+  creator: Address; pair: Address; taxBps: number; createdAt: number; poolId: string;
+  name: string; symbol: string; meta: VentureMeta;
+  founderRaiseBps: number; maxBuyWei: bigint; vesting: Address; basePriceWei: bigint; slopeQ: bigint; mode: RaiseMode; swept: boolean;
+  policy: Venture["policy"];
+}
+const statics = new Map<string, Statics>();
+const ZERO_ID = "0x" + "0".repeat(64);
+
+async function readStatics(address: Address): Promise<Statics> {
+  const [listing, terms, policyRaw, name, symbol, metaRaw] = await Promise.all([
     venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "listings", args: [address] }),
-    venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "curveState", args: [address] }),
     venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "terms", args: [address] }),
     venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "feePolicyOf", args: [address] }),
     venturePc.readContract({ address, abi: ercAbi, functionName: "name" }),
@@ -356,53 +377,51 @@ async function readVenture(address: Address): Promise<Venture> {
   ]);
   const [creator, pair, taxBps, createdAt, poolId] = listing as unknown as [Address, Address, number, bigint, string];
   if (creator === "0x0000000000000000000000000000000000000000") throw new NotListed(address);
-  const c = curve as unknown as [bigint, bigint, bigint, bigint, bigint, bigint, boolean, boolean];
   const t = terms as unknown as [number, bigint, Address, bigint, bigint, number, boolean];
   const pol = policyRaw as unknown as [Address, number, number, number, number, number, number];
-  // Hostile or broken metadata must not be able to break the page: see safe.ts.
-  const meta: VentureMeta = parseMeta(metaRaw);
-  const base = {
-    finalized: c[6],
-    aborted: c[7],
-    deadline: Number(c[0]),
-    raisedWei: c[4],
-    targetRaiseWei: c[5],
-    remainingWhole: c[3],
+  return {
+    creator, pair, taxBps: Number(taxBps), createdAt: Number(createdAt), poolId: String(poolId),
+    // Hostile or broken metadata must not be able to break the page: see safe.ts.
+    name: cleanText(name, 64) || "Unnamed", symbol: cleanText(symbol, 16) || "?", meta: parseMeta(metaRaw),
+    founderRaiseBps: Number(t[0]), maxBuyWei: t[1], vesting: t[2], basePriceWei: t[3], slopeQ: t[4],
+    mode: Number(t[5]) as RaiseMode, swept: Boolean(t[6]),
+    policy: {
+      devWallet: pol[0], buyTaxBps: Number(pol[1]), sellTaxBps: Number(pol[2]),
+      devBps: Number(pol[3]), dividendBps: Number(pol[4]), liquidityBps: Number(pol[5]), mmBps: Number(pol[6]),
+    },
   };
+}
+
+async function readVenture(address: Address): Promise<Venture> {
+  const key = address.toLowerCase();
+  let st = statics.get(key);
+  const curve = venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "curveState", args: [address] });
+  if (!st) {
+    st = await readStatics(address);
+    statics.set(key, st);
+  }
+  const c = (await curve) as unknown as [bigint, bigint, bigint, bigint, bigint, bigint, boolean, boolean];
+  // The two fields that change once: the pool id at graduation, and the
+  // swept flag after an aborted raise's claim window. Re-read only while
+  // they still can change.
+  if (c[6] && st.poolId === ZERO_ID) {
+    const l = (await venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "listings", args: [address] })) as unknown as [Address, Address, number, bigint, string];
+    st.poolId = String(l[4]);
+  }
+  if (c[7] && !st.swept) {
+    const t = (await venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "terms", args: [address] })) as unknown as [number, bigint, Address, bigint, bigint, number, boolean];
+    st.swept = Boolean(t[6]);
+  }
+  const base = { finalized: c[6], aborted: c[7], deadline: Number(c[0]), raisedWei: c[4], targetRaiseWei: c[5], remainingWhole: c[3] };
   return {
     address,
-    name: cleanText(name, 64) || "Unnamed",
-    symbol: cleanText(symbol, 16) || "?",
-    creator,
-    pair,
-    taxBps: Number(taxBps),
-    createdAt: Number(createdAt),
-    poolId: String(poolId),
-    meta,
+    name: st.name, symbol: st.symbol, creator: st.creator, pair: st.pair, taxBps: st.taxBps, createdAt: st.createdAt,
+    poolId: st.poolId, meta: st.meta,
     deadline: base.deadline,
-    priceWei: (c[6] ? await poolPriceWei(address, pair) : null) ?? c[1],
-    soldWhole: c[2],
-    remainingWhole: c[3],
-    raisedWei: c[4],
-    targetRaiseWei: c[5],
-    finalized: c[6],
-    aborted: c[7],
-    founderRaiseBps: Number(t[0]),
-    maxBuyWei: t[1],
-    vesting: t[2],
-    policy: {
-      devWallet: pol[0],
-      buyTaxBps: Number(pol[1]),
-      sellTaxBps: Number(pol[2]),
-      devBps: Number(pol[3]),
-      dividendBps: Number(pol[4]),
-      liquidityBps: Number(pol[5]),
-      mmBps: Number(pol[6]),
-    },
-    basePriceWei: t[3],
-    slopeQ: t[4],
-    mode: Number(t[5]) as RaiseMode,
-    swept: Boolean(t[6]),
+    priceWei: (c[6] ? await poolPriceWei(address, st.pair) : null) ?? c[1],
+    soldWhole: c[2], remainingWhole: c[3], raisedWei: c[4], targetRaiseWei: c[5], finalized: c[6], aborted: c[7],
+    founderRaiseBps: st.founderRaiseBps, maxBuyWei: st.maxBuyWei, vesting: st.vesting, policy: st.policy,
+    basePriceWei: st.basePriceWei, slopeQ: st.slopeQ, mode: st.mode, swept: st.swept,
     phase: phaseOf(base),
   };
 }

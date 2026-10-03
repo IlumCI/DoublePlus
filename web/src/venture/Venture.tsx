@@ -120,8 +120,10 @@ function VentureBody({ v, fills, ethUsd }: { v: VentureT; fills: Fill[]; ethUsd:
           <Socials meta={v.meta} dex={dex} />
         </div>
         <div className="dp-mcbig">
-          <span className="dp-k">market cap</span><br />
-          <span className="dp-v">{fmtMcap(v, ethUsd)}</span><br />
+          {v.phase !== "failed" && <>
+            <span className="dp-k">market cap</span><br />
+            <span className="dp-v">{fmtMcap(v, ethUsd)}</span><br />
+          </>}
           <YourBag v={v} />
         </div>
       </div>
@@ -224,8 +226,14 @@ function CurvePanel({ v }: { v: VentureT }) {
   return (
     <div className="dp-panel dp-chartpanel">
       <div className="dp-phead">
-        <span>{filled.toFixed(0)}% filled · {fmtEth(left, 3)} ETH to go</span>
-        <span>graduates at {ethUsd > 0 ? fmtUsdV(gradFdv * ethUsd) : `${gradFdv.toFixed(2)} ETH`} market cap</span>
+        {v.phase === "failed" ? (
+          <><span>Missed its target at {filled.toFixed(0)}%</span><span>refunds are open</span></>
+        ) : (
+          <>
+            <span>{filled.toFixed(0)}% filled · {fmtEth(left, 3)} ETH to go</span>
+            <span>graduates at {ethUsd > 0 ? fmtUsdV(gradFdv * ethUsd) : `${gradFdv.toFixed(2)} ETH`} market cap</span>
+          </>
+        )}
       </div>
       <div className="dp-pbody">
         <svg className="dp-px" width="100%" viewBox="0 0 560 150" preserveAspectRatio="none" style={{ height: 150 }} aria-hidden>
@@ -817,8 +825,8 @@ function FailPanel({ v }: { v: VentureT }) {
       <div className="dp-phead"><span>Refund</span><span className="dp-badge dp-dead">raise failed</span></div>
       <div className="dp-pbody">
         <p style={{ fontSize: 13, color: "var(--dim)", margin: "0 0 12px" }}>
-          Closed below target. Return your ${v.symbol} and take your curve spend back. The founder
-          allocation is burned.
+          It missed its target. Give back your ${v.symbol} and get back the ETH you paid, less the
+          0.5% buy fee. The creator's locked tokens were burned.
         </p>
         {!v.aborted ? (
           <button className="dp-tb-go dp-buy" style={{ background: "var(--up-dim)" }} disabled={busy} onClick={() => act("abort")}>
