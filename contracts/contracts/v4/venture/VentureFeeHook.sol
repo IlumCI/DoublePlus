@@ -69,6 +69,10 @@ contract VentureFeeHook is IHooks, ReentrancyGuard, IUnlockCallback {
     uint24 internal constant LP_FEE = 0;
     uint64 internal constant SNIPE_T1 = 5; // seconds
     uint64 internal constant SNIPE_T2 = 15;
+    /// @notice recenter() only runs once a pool has traded nothing for this
+    ///         long. Without it one transaction could push the price, recenter
+    ///         the walls beside the pushed price, and trade back into them.
+    uint64 public constant RECENTER_QUIET_SECS = 60;
     uint16 internal constant SNIPE_BPS_1 = 1_500; // 15%
     uint16 internal constant SNIPE_BPS_2 = 500; // 5%
 
@@ -112,6 +116,10 @@ contract VentureFeeHook is IHooks, ReentrancyGuard, IUnlockCallback {
 
     mapping(PoolId => Config) public configOf;
     mapping(address coin => PoolId) internal _poolOf;
+    /// @notice When each pool last saw an outside swap (the hook's own
+    ///         plumbing swaps don't count).
+    mapping(PoolId => uint64) public lastSwapAt;
+    error PriceMoving();
 
     error NotPoolManager();
     error NotLauncher();
@@ -227,6 +235,7 @@ contract VentureFeeHook is IHooks, ReentrancyGuard, IUnlockCallback {
         PoolId id = key.toId();
         Config memory c = configOf[id];
         if (!c.set) return (IHooks.afterSwap.selector, 0);
+        lastSwapAt[id] = uint64(block.timestamp);
 
         // Direction: a buy takes the coin OUT of the pool.
         bool coinIsOutput = params.zeroForOne != c.coinIsCurrency0;
@@ -486,8 +495,10 @@ contract VentureFeeHook is IHooks, ReentrancyGuard, IUnlockCallback {
     }
 
     function recenter(address coin, Band[] calldata bands) external nonReentrant {
-        Config storage c = configOf[_poolOf[coin]];
+        PoolId id = _poolOf[coin];
+        Config storage c = configOf[id];
         if (!c.set) revert BadPolicy();
+        if (block.timestamp < uint256(lastSwapAt[id]) + RECENTER_QUIET_SECS) revert PriceMoving();
         if (bands.length == 0) revert BadPolicy();
         poolManager.unlock(abi.encode(coin, bands));
     }

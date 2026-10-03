@@ -89,6 +89,7 @@ const TOKEN_ABI = [
   "function claimForMany(address[])",
 ];
 const HOOK_ABI = [
+  "function lastSwapAt(bytes32) view returns (uint64)",
   "function poolTick(address) view returns (int24)",
   "function recenter(address coin, (int24 lower, int24 upper, uint128 liquidity)[] bands)",
   "event LiquidityAdded(bytes32 indexed id, address currency, uint256 amount, uint128 liquidity, bool wall, int24 tickLower, int24 tickUpper)",
@@ -160,6 +161,11 @@ async function maybeRecenter(coin, poolId, toBlock) {
     return Math.abs(tick - nearEdge) > maxDrift;
   });
   if (!stale) return;
+  // The hook refuses a recenter until the pool has been quiet for a minute
+  // (so nobody can recenter beside a price they just pushed). Don't pay gas
+  // for a tx that would revert; the next run catches it.
+  const last = Number(await hook.lastSwapAt(poolId).catch(() => 0n));
+  if (Math.floor(Date.now() / 1000) < last + 60) { console.log(`recenter ${coin}: price still moving, later`); return; }
   console.log(`recenter ${coin}: ${bands.length} wall band(s), tick ${tick}`);
   await send(`recenter ${coin}`, () => hook.recenter(coin, bands));
   stats.recentered++;

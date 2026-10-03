@@ -417,7 +417,14 @@ describe("Venture bonding-curve launchpad (fork)", function () {
     });
     expect(bands.length).to.be.greaterThan(0);
 
-    // Anyone can recenter; the walls migrate beside the new price.
+    // Not while the price is still moving: that is the sandwich (push the
+    // price, recenter beside it, trade back into the fresh walls).
+    await expect(hook.connect(trader).recenter(coin, bands)).to.be.revertedWithCustomError(hook, "PriceMoving");
+
+    // Once the pool has been quiet for RECENTER_QUIET_SECS anyone can
+    // recenter; the walls migrate beside the settled price.
+    await network.provider.send("evm_increaseTime", [61]);
+    await network.provider.send("evm_mine");
     const tickBefore = await hook.poolTick(coin);
     await (await hook.connect(trader).recenter(coin, bands)).wait();
     const recentered = await hook.queryFilter(hook.filters.WallRecentered(), startBlock);
