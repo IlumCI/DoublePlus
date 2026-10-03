@@ -72,8 +72,8 @@ async function main() {
   await (await factory.connect(creator).launch(params, salt, { value: creationFee })).wait();
   const coin = await factory.allTokens(0n);
 
-  await (await factory.connect(buyer).buy(coin, { value: ethers.parseEther("0.6") })).wait();
-  await (await factory.connect(admin).buy(coin, { value: ethers.parseEther("0.35") })).wait();
+  await (await factory.connect(buyer).buy(coin, 0, { value: ethers.parseEther("0.6") })).wait();
+  await (await factory.connect(admin).buy(coin, 0, { value: ethers.parseEther("0.35") })).wait();
 
   console.log(JSON.stringify({
     factory: await factory.getAddress(),

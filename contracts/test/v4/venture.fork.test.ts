@@ -105,13 +105,13 @@ describe("Venture bonding-curve launchpad (fork)", function () {
 
     // Curve opens at the start price and climbs as it fills.
     const p0 = await factory.priceNow(coin);
-    await (await factory.connect(backer).buy(coin, { value: ethers.parseEther("0.5") })).wait();
+    await (await factory.connect(backer).buy(coin, 0, { value: ethers.parseEther("0.5") })).wait();
     expect(await erc.balanceOf(backer.address)).to.be.greaterThan(0n);
     expect(await factory.priceNow(coin), "price climbs with demand").to.be.greaterThan(p0);
     await expect(factory.finalize(coin)).to.be.revertedWithCustomError(factory, "CurveLive");
 
     // Whale fills the rest; excess ETH beyond the curve is refunded.
-    await (await factory.connect(whale).buy(coin, { value: ethers.parseEther("2") })).wait();
+    await (await factory.connect(whale).buy(coin, 0, { value: ethers.parseEther("2") })).wait();
     const st = await factory.curveState(coin);
     expect(st.remainingWhole).to.equal(0n);
     expect(st.raisedWei).to.be.closeTo(TARGET, ethers.parseEther("0.001"));
@@ -129,7 +129,7 @@ describe("Venture bonding-curve launchpad (fork)", function () {
     expect((await ethers.provider.getBalance(founder.address)) - founderEthBefore + wr!.gasUsed * wr!.gasPrice)
       .to.equal(founderCut);
     expect((await factory.listings(coin)).poolId).to.not.equal(ethers.ZeroHash);
-    await expect(factory.connect(whale).buy(coin, { value: 10n ** 15n })).to.be.revertedWithCustomError(
+    await expect(factory.connect(whale).buy(coin, 0, { value: 10n ** 15n })).to.be.revertedWithCustomError(
       factory, "CurveClosed",
     );
 
@@ -218,10 +218,10 @@ describe("Venture bonding-curve launchpad (fork)", function () {
     const buyBps = BigInt(await factory.curveBuyFeeBps());
     const gross = (TARGET * 10_000n) / (10_000n - buyBps) + 10n;
     const slice = gross / 3n;
-    await (await factory.connect(whale).buy(coin, { value: slice })).wait();
-    await (await factory.connect(whale).buy(coin, { value: slice })).wait();
+    await (await factory.connect(whale).buy(coin, 0, { value: slice })).wait();
+    await (await factory.connect(whale).buy(coin, 0, { value: slice })).wait();
     expect((await factory.curveState(coin)).finalized, "not before the target").to.equal(false);
-    await (await factory.connect(whale).buy(coin, { value: gross - 2n * slice })).wait();
+    await (await factory.connect(whale).buy(coin, 0, { value: gross - 2n * slice })).wait();
 
     const st = await factory.curveState(coin);
     expect(st.finalized, "the filling slice graduates").to.equal(true);
@@ -232,7 +232,7 @@ describe("Venture bonding-curve launchpad (fork)", function () {
     const held = await erc.balanceOf(whale.address);
     await (await erc.connect(whale).approve(await factory.getAddress(), held)).wait();
     await expect(factory.connect(whale).sell(coin, 1000n, 0)).to.be.revertedWithCustomError(factory, "CurveClosed");
-    await expect(factory.connect(whale).buy(coin, { value: 10n ** 15n })).to.be.revertedWithCustomError(factory, "CurveClosed");
+    await expect(factory.connect(whale).buy(coin, 0, { value: 10n ** 15n })).to.be.revertedWithCustomError(factory, "CurveClosed");
     await network.provider.send("evm_increaseTime", [4 * DAY]);
     await network.provider.send("evm_mine");
     await expect(factory.abort(coin)).to.be.revertedWithCustomError(factory, "AlreadyFinalized");
@@ -261,7 +261,7 @@ describe("Venture bonding-curve launchpad (fork)", function () {
     const coin = await factory.allTokens((await factory.totalTokens()) - 1n);
     expect((await factory.listings(coin)).creator).to.equal(creator);
 
-    await (await factory.connect(whale).buy(coin, { value: ethers.parseEther("2.1") })).wait(); // fills and graduates
+    await (await factory.connect(whale).buy(coin, 0, { value: ethers.parseEther("2.1") })).wait(); // fills and graduates
     expect((await factory.listings(coin)).poolId).to.not.equal(ethers.ZeroHash);
 
     const raised = (await factory.curveState(coin)).raisedWei;
@@ -315,7 +315,7 @@ describe("Venture bonding-curve launchpad (fork)", function () {
     const coin = await factory.allTokens((await factory.totalTokens()) - 1n);
     const erc = await ethers.getContractAt("QuiverToken", coin);
 
-    await (await factory.connect(whale).buy(coin, { value: ethers.parseEther("2.1") })).wait(); // fills and graduates
+    await (await factory.connect(whale).buy(coin, 0, { value: ethers.parseEther("2.1") })).wait(); // fills and graduates
     expect((await factory.listings(coin)).poolId).to.not.equal(ethers.ZeroHash);
 
     await network.provider.send("evm_increaseTime", [20]);
@@ -343,7 +343,7 @@ describe("Venture bonding-curve launchpad (fork)", function () {
     const erc = await ethers.getContractAt("QuiverToken", coin);
     const startBlock = await ethers.provider.getBlockNumber();
 
-    await (await factory.connect(whale).buy(coin, { value: ethers.parseEther("2.1") })).wait(); // fills and graduates
+    await (await factory.connect(whale).buy(coin, 0, { value: ethers.parseEther("2.1") })).wait(); // fills and graduates
     await network.provider.send("evm_increaseTime", [20]);
     await network.provider.send("evm_mine");
 

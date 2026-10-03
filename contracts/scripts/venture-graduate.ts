@@ -74,7 +74,7 @@ async function main() {
   const gross = (target * 10_000n) / (10_000n - BigInt(buyBps)) + 10n;
   const slices = [gross / 3n, gross / 3n, gross - 2n * (gross / 3n)];
   for (const [i, slice] of slices.entries()) {
-    await (await factory.buy(coin, { value: slice })).wait();
+    await (await factory.buy(coin, 0, { value: slice })).wait();
     const s = await factory.curveState(coin);
     console.log(`  buy ${i + 1}: sent ${eth(slice)} -> raised ${eth(s.raisedWei)} / ${eth(s.targetRaiseWei)}`);
   }

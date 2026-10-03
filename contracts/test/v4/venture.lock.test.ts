@@ -212,7 +212,7 @@ describe("VentureFactory: locked liquidity and the raise floor", function () {
       const coin = await launch(factory, tokenDeployer, creator, await weth.getAddress(), {
         targetRaiseWei: target, maxBuyWei: target, symbol: "LIVE",
       });
-      await (await factory.connect(buyer).buy(coin, { value: ethers.parseEther("0.5") })).wait();
+      await (await factory.connect(buyer).buy(coin, 0, { value: ethers.parseEther("0.5") })).wait();
       const st = await factory.curveState(coin);
       // Half a raise short is many tokens away, so the curve is still live.
       expect(st.targetRaiseWei - st.raisedWei).to.be.greaterThan(await factory.curveCost(coin, 1, st.soldWhole));

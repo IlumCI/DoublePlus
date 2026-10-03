@@ -579,7 +579,10 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
     // Buy on the curve
     // ---------------------------------------------------------------------
 
-    function buy(address token) external payable nonReentrant returns (uint256 tokensOut) {
+    /// @param minTokensOut Least the buyer accepts, in token-wei. Another buy
+    ///        landing first moves the price up the curve, so without a floor a
+    ///        buy can fill at a price the buyer never saw quoted.
+    function buy(address token, uint256 minTokensOut) external payable nonReentrant returns (uint256 tokensOut) {
         Curve storage c = _curves[token];
         if (c.basePriceWei == 0) revert InvalidParams();
         if (c.finalized || c.aborted) revert CurveClosed();
@@ -608,6 +611,7 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         c.raisedWei += spend;
         spentWei[token][msg.sender] += spend;
         tokensOut = q * 1e18;
+        if (tokensOut < minTokensOut) revert SlippageExceeded();
         boughtTokens[token][msg.sender] += tokensOut;
 
         IERC20(token).safeTransfer(msg.sender, tokensOut);

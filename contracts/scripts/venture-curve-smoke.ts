@@ -65,7 +65,7 @@ async function main() {
 
   // --- buy: the entry fee is taken before the curve is quoted ---------------
   const feesBefore = await factory.feesAccrued(treasury);
-  await (await factory.buy(coin, { value: buyWei })).wait();
+  await (await factory.buy(coin, 0, { value: buyWei })).wait();
   const spent = await factory.spentWei(coin, signer.address);
   const feeTaken = (await factory.feesAccrued(treasury)) - feesBefore;
   const expectFee = (buyWei * BigInt(buyBps)) / 10_000n;
@@ -128,7 +128,7 @@ async function main() {
 
   // Buy enough to sit above the floor, then confirm the weight is the tiered
   // one rather than the plain balance.
-  await (await factory.buy(divCoin, { value: buyWei })).wait();
+  await (await factory.buy(divCoin, 0, { value: buyWei })).wait();
   const bal = await dt.balanceOf(signer.address);
   const weight = await dt.dividendWeight(signer.address);
   const mult = bal >= floor * 1000n ? 20_000n : bal >= floor * 100n ? 15_000n

@@ -22,7 +22,7 @@ async function main() {
     // Gross up so the entry fee still leaves `gap` reaching escrow.
     const value = (gap * 10_000n) / (10_000n - buyBps) + 2n;
     try {
-      await (await factory.buy(coin, { value })).wait();
+      await (await factory.buy(coin, 0, { value })).wait();
     } catch (e: any) {
       console.log("  top-up buy rejected:", e.shortMessage ?? e.message);
       break;
