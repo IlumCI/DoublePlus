@@ -3,7 +3,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useBalance, useWalletClient } from "wagmi";
 import { formatEther, isAddress, parseEther, toEventSelector, type Address } from "viem";
 
-import {
+import { confirmTx,
   CURVE_SUPPLY, ercAbi, NotListed, factoryAbi, hookAbi, loadFills, loadUpdates, loadVenture, quoteSellWei, quoteTokens,
   routerAbi, SOCIAL_FIELDS, TOTAL_SUPPLY, VENTURE, venturePc, vestingAbi,
   type Fill, type PoolTrade, type Venture as VentureT,
@@ -429,7 +429,7 @@ function ReferralBanner() {
     setBusy(true);
     try {
       const hash = await wc.writeContract({ address: VENTURE.hook, abi: hookAbi, functionName: "setReferrer", args: [ref], chain: wc.chain, account: wc.account });
-      await venturePc.waitForTransactionReceipt({ hash });
+      await confirmTx(hash);
       pushToast({ kind: "success", title: "Linked. Your fees are 10% lower now.", txHash: hash });
     } catch (e) {
       pushToast({ kind: "error", title: "Linking failed", body: errorText(e) });
@@ -534,7 +534,7 @@ function RaisePanel({ v }: { v: VentureT }) {
         chain: wc.chain, account: wc.account, ...(mayFill ? { gas: GRADUATING_BUY_GAS } : {}),
       });
       pushToast({ kind: "info", title: "Buy sent", txHash: hash });
-      const rc = await venturePc.waitForTransactionReceipt({ hash });
+      const rc = await confirmTx(hash);
       const graduated = rc.logs.some((l) => l.topics[0] === GRADUATED_TOPIC);
       pushToast({ kind: "success", title: graduated ? "Bought. That filled the curve, so it trades on Uniswap now." : "Bought", txHash: hash });
       setAmt("");
@@ -552,12 +552,12 @@ function RaisePanel({ v }: { v: VentureT }) {
       const allowance = (await venturePc.readContract({ address: v.address, abi: ercAbi, functionName: "allowance", args: [wc.account!.address, VENTURE.factory] })) as bigint;
       if (allowance < need) {
         const a = await wc.writeContract({ address: v.address, abi: ercAbi, functionName: "approve", args: [VENTURE.factory, 2n ** 256n - 1n], chain: wc.chain, account: wc.account });
-        await venturePc.waitForTransactionReceipt({ hash: a });
+        await confirmTx(a);
       }
       const minOut = (sellQuote.out * BigInt(10_000 - slipBps)) / 10_000n;
       const hash = await wc.writeContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "sell", args: [v.address, sellWhole, minOut], chain: wc.chain, account: wc.account });
       pushToast({ kind: "info", title: "Sell sent", txHash: hash });
-      await venturePc.waitForTransactionReceipt({ hash });
+      await confirmTx(hash);
       pushToast({ kind: "success", title: "Sold back to the curve", txHash: hash });
       setSellQ("");
     } catch (e) {
@@ -758,7 +758,7 @@ function GraduatePanel({ v }: { v: VentureT }) {
     try {
       const hash = await wc.writeContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "finalize", args: [v.address], chain: wc.chain, account: wc.account });
       pushToast({ kind: "info", title: "Graduating…", txHash: hash });
-      await venturePc.waitForTransactionReceipt({ hash });
+      await confirmTx(hash);
       pushToast({ kind: "success", title: "Graduated. Trading is open.", txHash: hash });
     } catch (e) {
       pushToast({ kind: "error", title: "Graduation failed", body: errorText(e) });
@@ -808,12 +808,12 @@ function FailPanel({ v }: { v: VentureT }) {
         const allowance = (await venturePc.readContract({ address: v.address, abi: ercAbi, functionName: "allowance", args: [wc.account!.address, VENTURE.factory] })) as bigint;
         if (allowance < bought) {
           const a = await wc.writeContract({ address: v.address, abi: ercAbi, functionName: "approve", args: [VENTURE.factory, 2n ** 256n - 1n], chain: wc.chain, account: wc.account });
-          await venturePc.waitForTransactionReceipt({ hash: a });
+          await confirmTx(a);
         }
       }
       const hash = await wc.writeContract({ address: VENTURE.factory, abi: factoryAbi, functionName: fn, args: [v.address], chain: wc.chain, account: wc.account });
       pushToast({ kind: "info", title: fn === "abort" ? "Closing the round…" : "Refunding…", txHash: hash });
-      await venturePc.waitForTransactionReceipt({ hash });
+      await confirmTx(hash);
       pushToast({ kind: "success", title: fn === "abort" ? "Round closed. Refunds are open." : "Refunded in full.", txHash: hash });
     } catch (e) {
       pushToast({ kind: "error", title: `${fn === "abort" ? "Close" : "Refund"} failed`, body: errorText(e) });
@@ -908,12 +908,12 @@ function TradePanel({ v }: { v: VentureT }) {
         const allowance = (await venturePc.readContract({ address: v.address, abi: ercAbi, functionName: "allowance", args: [wc.account!.address, VENTURE.router] })) as bigint;
         if (allowance < parsed) {
           const a = await wc.writeContract({ address: v.address, abi: ercAbi, functionName: "approve", args: [VENTURE.router, 2n ** 256n - 1n], chain: wc.chain, account: wc.account });
-          await venturePc.waitForTransactionReceipt({ hash: a });
+          await confirmTx(a);
         }
         hash = await wc.writeContract({ address: VENTURE.router, abi: routerAbi, functionName: "sell", args: [v.address, parsed, "0x", minOut], chain: wc.chain, account: wc.account });
       }
       pushToast({ kind: "info", title: `${side === "buy" ? "Buy" : "Sell"} submitted`, txHash: hash });
-      await venturePc.waitForTransactionReceipt({ hash });
+      await confirmTx(hash);
       pushToast({ kind: "success", title: `${side === "buy" ? "Buy" : "Sell"} confirmed`, txHash: hash });
       setAmt("");
     } catch (e) {
@@ -926,7 +926,7 @@ function TradePanel({ v }: { v: VentureT }) {
     setBusy(true);
     try {
       const hash = await wc.writeContract({ address: v.address, abi: ercAbi, functionName: "claim", args: [], chain: wc.chain, account: wc.account });
-      await venturePc.waitForTransactionReceipt({ hash });
+      await confirmTx(hash);
       pushToast({ kind: "success", title: "ETH drip claimed", txHash: hash });
       setPending(0n);
     } catch (e) {
@@ -1037,7 +1037,7 @@ function VestingCard({ v }: { v: VentureT }) {
     setBusy(true);
     try {
       const hash = await wc.writeContract({ address: v.vesting, abi: vestingAbi, functionName: "claim", args: [], chain: wc.chain, account: wc.account });
-      await venturePc.waitForTransactionReceipt({ hash });
+      await confirmTx(hash);
       pushToast({ kind: "success", title: "Vested tokens claimed", txHash: hash });
     } catch (e) {
       pushToast({ kind: "error", title: "Claim failed", body: errorText(e) });

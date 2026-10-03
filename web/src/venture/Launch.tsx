@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useWalletClient } from "wagmi";
 import { concatHex, encodeAbiParameters, getContractAddress, keccak256, parseEther } from "viem";
 
-import { factoryAbi, VENTURE, venturePc } from "./client";
+import { confirmTx, factoryAbi, VENTURE, venturePc } from "./client";
 import { minGrossTargetEth, raiseFields, requiresTarget, targetIssue } from "./raiseMode";
 import { fmtEth, fmtUsdV } from "./ui";
 import { Donut, Legend, SPLIT_COLORS, type Slice } from "./charts";
@@ -278,7 +278,7 @@ export function LaunchVenture() {
         account: wc.account,
       });
       pushToast({ kind: "info", title: "Launching…", txHash: hash });
-      await venturePc.waitForTransactionReceipt({ hash });
+      await confirmTx(hash);
       pushToast({ kind: "success", title: `$${form.symbol.toUpperCase()} is live`, body: "Share the link: people can buy it now." });
       navigate("/");
     } catch (err) {

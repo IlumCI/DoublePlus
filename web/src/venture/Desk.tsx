@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useWalletClient } from "wagmi";
 
-import {
+import { confirmTx,
   ercAbi, factoryAbi, loadReferralEarnings, updatesAbi, VENTURE, venturePc, vestingAbi,
 } from "./client";
 import { loadPortfolio, type Holding } from "./portfolio";
@@ -68,7 +68,7 @@ export function Desk() {
       for (const r of rows) {
         if (r.pending > 0n) {
           const hash = await wc.writeContract({ address: r.v.address, abi: ercAbi, functionName: "claim", args: [], chain: wc.chain, account: wc.account });
-          await venturePc.waitForTransactionReceipt({ hash });
+          await confirmTx(hash);
         }
       }
       pushToast({ kind: "success", title: "Payouts claimed" });
@@ -82,7 +82,7 @@ export function Desk() {
     setBusy(true);
     try {
       const hash = await wc.writeContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "withdrawFees", args: [], chain: wc.chain, account: wc.account });
-      await venturePc.waitForTransactionReceipt({ hash });
+      await confirmTx(hash);
       pushToast({ kind: "success", title: `${fmtEth(factoryOwed, 6)} ETH withdrawn`, txHash: hash });
     } catch (e) {
       pushToast({ kind: "error", title: "Withdraw failed", body: errorText(e) });
@@ -97,14 +97,14 @@ export function Desk() {
     try {
       const send = async (fn: "abort" | "refund") => {
         const hash = await wc.writeContract({ address: VENTURE.factory, abi: factoryAbi, functionName: fn, args: [r.v.address], chain: wc.chain, account: wc.account });
-        await venturePc.waitForTransactionReceipt({ hash });
+        await confirmTx(hash);
         return hash;
       };
       if (!r.v.aborted) await send("abort");
       const allowance = (await venturePc.readContract({ address: r.v.address, abi: ercAbi, functionName: "allowance", args: [me!, VENTURE.factory] })) as bigint;
       if (allowance < r.bought) {
         const a = await wc.writeContract({ address: r.v.address, abi: ercAbi, functionName: "approve", args: [VENTURE.factory, r.bought], chain: wc.chain, account: wc.account });
-        await venturePc.waitForTransactionReceipt({ hash: a });
+        await confirmTx(a);
       }
       const hash = await send("refund");
       pushToast({ kind: "success", title: `${fmtEth(r.refundable, 5)} ETH refunded`, txHash: hash });
@@ -118,7 +118,7 @@ export function Desk() {
     setBusy(true);
     try {
       const hash = await wc.writeContract({ address: r.v.vesting, abi: vestingAbi, functionName: "claim", args: [], chain: wc.chain, account: wc.account });
-      await venturePc.waitForTransactionReceipt({ hash });
+      await confirmTx(hash);
       pushToast({ kind: "success", title: `Vested $${r.v.symbol} claimed`, txHash: hash });
     } catch (e) {
       pushToast({ kind: "error", title: "Claim failed", body: errorText(e) });
@@ -131,7 +131,7 @@ export function Desk() {
     setBusy(true);
     try {
       const hash = await wc.writeContract({ address: VENTURE.updates, abi: updatesAbi, functionName: "postUpdate", args: [r.v.address, text], chain: wc.chain, account: wc.account });
-      await venturePc.waitForTransactionReceipt({ hash });
+      await confirmTx(hash);
       pushToast({ kind: "success", title: "Update posted on-chain", txHash: hash });
     } catch (e) {
       pushToast({ kind: "error", title: "Post failed", body: errorText(e) });

@@ -3,6 +3,7 @@ import { createPublicClient, fallback, http, parseAbiItem, type Address, type Pu
 import { chain, env } from "../lib/env";
 import { isProtocolSwap } from "./marketStats";
 import { cleanText, parseMeta } from "./safe";
+import { RevertedOnChain } from "../lib/useWallet";
 import type { RaiseMode } from "./raiseMode";
 
 /** VentureFactory deployment. Defaults target the Robinhood Chain testnet
@@ -574,4 +575,13 @@ export async function loadReferralEarnings(referrer: Address): Promise<Map<strin
     sums.set(c, (sums.get(c) ?? 0n) + (l.args.amount as bigint));
   }
   return sums;
+}
+
+/** Wait for a transaction and insist it succeeded. waitForTransactionReceipt
+ *  resolves for reverted transactions too, so without this a trade that was
+ *  mined but failed would be reported as done. */
+export async function confirmTx(hash: `0x${string}`) {
+  const rc = await venturePc.waitForTransactionReceipt({ hash });
+  if (rc.status !== "success") throw new RevertedOnChain();
+  return rc;
 }

@@ -83,7 +83,14 @@ export function openWalletModal(): Promise<void> {
           "--w3m-accent": "#a3e635",
           "--w3m-border-radius-master": "2px",
         },
-        features: { analytics: false, email: false, socials: [] },
+        features: { analytics: false, email: false, socials: [], reownAuthentication: false },
+        // Basic mode: ignore the feature switches Reown serves for this
+        // project id. One of them, Reown Authentication, made every user sign
+        // a second "Sign In" message right after connecting, and cancelling
+        // it disconnected them. We use none of the remote features (email,
+        // socials, swaps, on-ramp, hosted auth). Spread because the typings
+        // the repo root resolves predate the option the bundled 1.8 reads.
+        ...({ basic: true } as Record<string, unknown>),
       }),
     );
   }
