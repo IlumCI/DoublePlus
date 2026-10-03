@@ -159,7 +159,9 @@ the prediction held, and renounces factory ownership at the end.
 | `REF_SHARE_BPS` | 2000 (20% of the fee) | ≤ 5000 |
 | `CURVE_BUY_FEE_BPS` | 50 (0.5%) | ≤ 300 |
 | `CURVE_SELL_FEE_BPS` | 100 (1%) | ≤ 300 |
-| `MIN_TARGET_ETH` | **0.5** | ≤ 1,000,000 |
+| `MIN_TARGET_ETH` | **2** | ≤ 1,000,000 |
+| `GRADUATION_RAISE_ETH` | 4 (setParams) | ≥ `MIN_TARGET_ETH` |
+| `CREATION_FEE_ETH` | 0 (setParams) | — |
 | `ETH_USD_MIN` / `ETH_USD_MAX` | 1,000 / 10,000 on 4663; 1 / 10,000,000 on 46630 | min > 0, min ≤ max |
 | `ADMIN`, `TREASURY` | deployer | — |
 
@@ -173,9 +175,15 @@ The script's own header comment says `PLATFORM_FEE_BPS` defaults to 100; the cod
 says 55. The code is right.
 
 `MIN_TARGET_ETH` is the one to think about. Testnet runs 0.002 so a faucet wallet
-can drive a raise to graduation; **mainnet must ship 0.5**, and it is coupled to
-the contract's `START_MCAP_USD_8` of $750 — changing either without the other
-strands one of them. `venture.lock.test.ts` pins the relationship.
+can drive a raise to graduation; **mainnet ships 2**. It must stay above what the
+whole curve costs at the contract's `START_MCAP_USD_8` of $750 (0.24 ETH at
+$1,865), or small raises become unlaunchable; `venture.lock.test.ts` pins that.
+A raise of T ETH graduates at an FDV of about 3.33·T ETH less the $750 start, so
+the 2 ETH floor opens near 6.3 ETH FDV and the 4 ETH open-curve trigger near
+13 ETH (~$24k at $1,865). At 0.5 ETH it was ~$2.4k, invisible on every tracker.
+
+The deploy script applies `GRADUATION_RAISE_ETH` and `CREATION_FEE_ETH` through
+`setParams` when the deployer is `ADMIN`, and prints the call otherwise.
 
 After deploying, regenerate `web/.env.venture.example` from the new JSON.
 
@@ -251,7 +259,7 @@ callable only by `protocolAdmin`:
 
 **`setParams` state does not survive a redeploy.** All four values are plain
 storage with no constructor initialisation, so a new factory starts at
-`creationFeeWei = 0`, `graduationRaiseWei = 0.5 ether`, `sweepDelaySecs = 365 days`,
+`creationFeeWei = 0`, `graduationRaiseWei = 4 ether` (or the floor, if higher), `sweepDelaySecs = 365 days`,
 `creatorCurveShareBps = 1000`. The testnet creation fee was set to 0.0005 ETH in
 `9f0ffaf`, then the factory was redeployed in `c905d1c` and nothing re-applied it —
 so the live testnet factory is almost certainly charging nothing. **Re-run

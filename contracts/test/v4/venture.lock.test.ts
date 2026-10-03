@@ -147,8 +147,10 @@ describe("VentureFactory: locked liquidity and the raise floor", function () {
     it("applies the floor to open-mode raises too, via the graduation trigger", async () => {
       const { factory } = await deployStack(FLOOR);
       expect(await factory.minTargetWei()).to.equal(FLOOR);
-      // The shipped default trigger is the floor itself.
-      expect(await factory.graduationRaiseWei()).to.equal(FLOOR);
+      // The shipped default trigger is 4 ETH, and never below the floor.
+      expect(await factory.graduationRaiseWei()).to.equal(ethers.parseEther("4"));
+      const { factory: high } = await deployStack(ethers.parseEther("5"));
+      expect(await high.graduationRaiseWei()).to.equal(ethers.parseEther("5"));
     });
 
     it("will not let the admin move the graduation trigger below the floor", async () => {

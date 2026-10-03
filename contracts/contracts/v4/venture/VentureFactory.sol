@@ -159,7 +159,11 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
     /// @notice Open-mode graduation trigger, in raised wei. Frozen per listing
     ///         at launch so a live curve never has its finish line moved. The
     ///         optimum is empirical, hence settable rather than immutable.
-    uint256 public graduationRaiseWei = 0.5 ether;
+    ///         4 ETH graduates at roughly 13 ETH FDV (3.33x the raise less the
+    ///         start FDV), in line with Robinhood Chain's leading launchpad
+    ///         (4.2 ETH); 0.5 ETH graduated at ~1.3 ETH FDV, a coin too small
+    ///         to register on any tracker. Testnets lower it with setParams.
+    uint256 public graduationRaiseWei = 4 ether;
     /// @notice How long an aborted raise's escrow stays claimable.
     uint64 public sweepDelaySecs = 365 days;
     /// @notice Open-mode creator's share of the curve fee, in bps of the fee.
@@ -313,6 +317,8 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         require(protocolAdmin_ != address(0), "admin=0");
         if (minTargetWei_ == 0 || minTargetWei_ > MAX_TARGET_WEI) revert InvalidParams();
         minTargetWei = minTargetWei_;
+        // The trigger is never below the floor, whatever the floor is.
+        if (graduationRaiseWei < minTargetWei_) graduationRaiseWei = minTargetWei_;
         if (minEthUsd8_ == 0 || minEthUsd8_ > maxEthUsd8_) revert InvalidParams();
         minEthUsd8 = minEthUsd8_;
         maxEthUsd8 = maxEthUsd8_;

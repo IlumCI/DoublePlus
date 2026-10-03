@@ -16,6 +16,13 @@ import { join } from "path";
 //   REF_SHARE_BPS    referrer's cut of the protocol fee, 0..5000 (default 2000 = 20%)
 //   ETH_USD_MIN/MAX  accepted band for the launcher-supplied ETH/USD price, whole
 //                    dollars (mainnet default 1000..10000, see ETH_USD_BAND)
+//   MIN_TARGET_ETH   smallest raise the platform finishes, immutable (default 2)
+//   GRADUATION_RAISE_ETH  open-curve graduation trigger (contract default 4)
+//   CREATION_FEE_ETH flat launch fee (default 0)
+//                    The last two are setParams values. They are applied here
+//                    when the deployer is ADMIN; otherwise the call is printed
+//                    for the admin to send. setParams state never survives a
+//                    redeploy, so this is the step that keeps them.
 //
 // The V4 PoolManager sits at the same address on both networks. WETH differs;
 // the testnet has no self-deployed V3 stack, so venture launches there are
@@ -64,9 +71,10 @@ async function main() {
   const curveBuyFeeBps = Number(process.env.CURVE_BUY_FEE_BPS ?? 50);
   const curveSellFeeBps = Number(process.env.CURVE_SELL_FEE_BPS ?? 100);
   // Smallest raise the platform will finish. Immutable on the factory, so it
-  // is a deploy-time decision: mainnet ships 0.5 ETH, testnets override it
-  // down so a raise can actually be driven to graduation.
-  const minTargetWei = ethers.parseEther(process.env.MIN_TARGET_ETH ?? "0.5");
+  // is a deploy-time decision: mainnet ships 2 ETH (a floor-sized raise
+  // graduates near 6 ETH FDV), testnets override it down so a raise can
+  // actually be driven to graduation.
+  const minTargetWei = ethers.parseEther(process.env.MIN_TARGET_ETH ?? "2");
   // The address mark, matched at either end: 0x2add… or 0x…2add. Immutable, so
   // it is a deploy-time decision; 0 would disable it and is for tests only.
   const VANITY = 0x2add;
@@ -136,6 +144,17 @@ async function main() {
   const updates = await (await ethers.getContractFactory("VentureUpdates")).deploy(factoryAddr);
   await updates.waitForDeployment();
   console.log("updates:", await updates.getAddress());
+
+  // setParams: open-curve graduation trigger and launch fee.
+  const gradWei = ethers.parseEther(process.env.GRADUATION_RAISE_ETH ?? "4");
+  const creationFeeWei = ethers.parseEther(process.env.CREATION_FEE_ETH ?? "0");
+  const sweepDelaySecs = 365 * 86_400, creatorCurveShareBps = 1_000;
+  if (admin.toLowerCase() === signer.address.toLowerCase()) {
+    await (await factory.setParams(creationFeeWei, gradWei, sweepDelaySecs, creatorCurveShareBps)).wait();
+  } else {
+    console.log("ADMIN must now send:", `setParams(${creationFeeWei}, ${gradWei}, ${sweepDelaySecs}, ${creatorCurveShareBps})`, "to", predictedFactory);
+  }
+  console.log(`graduationRaiseWei: ${ethers.formatEther(await factory.graduationRaiseWei())} ETH  creationFeeWei: ${ethers.formatEther(await factory.creationFeeWei())} ETH`);
 
   await (await factory.renounceOwnership()).wait();
   console.log("factory ownership renounced (hook has no owner by construction)");
