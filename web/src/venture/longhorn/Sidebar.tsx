@@ -30,9 +30,10 @@ function Tile({ title, children, to }: { title: string; children: React.ReactNod
 }
 
 /**
- * Longhorn's Sidebar, reissued as market gadgets: the slideshow and RSS
- * tiles become the hottest and newest raises, and the sync tile counts down
- * to the next rewards epoch. No clock: the floor has no time of day.
+ * Longhorn's Sidebar, reissued as market gadgets: the market at a glance,
+ * the coins closest to graduating, and the countdown to the weekly payout.
+ * Newest coins are the board's default order, so they are not repeated here.
+ * No clock: the floor has no time of day.
  */
 export function Sidebar({ ventures }: { ventures: Venture[] | null }) {
   const now = useTick();
@@ -45,13 +46,13 @@ export function Sidebar({ ventures }: { ventures: Venture[] | null }) {
     <aside className="lh-sidebar" aria-label="Market sidebar">
       <Tile title="Market">
         <div className="lh-kv"><span>ETH</span><b>{ethUsd > 0 ? `$${ethUsd.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "—"}</b></div>
-        <div className="lh-kv"><span>Live raises</span><b>{ventures ? live.length : "—"}</b></div>
+        <div className="lh-kv"><span>Filling</span><b>{ventures ? live.length : "—"}</b></div>
         <div className="lh-kv"><span>Trading</span><b>{ventures ? ventures.filter((v) => v.phase === "graduated").length : "—"}</b></div>
         <div className="lh-sub"><i className="lh-dot" /> {env.chainName}</div>
       </Tile>
 
-      <Tile title="Hot raises" to="/">
-        {hot.length === 0 && <div className="lh-sub">{ventures ? "No live raises right now." : "Loading…"}</div>}
+      <Tile title="Closest to graduating" to="/?sort=progress">
+        {hot.length === 0 && <div className="lh-sub">{ventures ? "Nothing is filling right now." : "Loading…"}</div>}
         {hot.map((v) => {
           const p = pct(v.raisedWei, v.targetRaiseWei);
           return (
@@ -64,20 +65,10 @@ export function Sidebar({ ventures }: { ventures: Venture[] | null }) {
         })}
       </Tile>
 
-      <Tile title="Just launched" to="/">
-        {fresh.length === 0 && <div className="lh-sub">{ventures ? "Nothing yet. Be first." : "Loading…"}</div>}
-        {fresh.map((v) => (
-          <Link key={v.address} className="lh-row" to={`/venture/${v.address}`} viewTransition>
-            <span className="lh-sym">${v.symbol}</span>
-            <span className="lh-sub">{ago(v.createdAt)} ago</span>
-          </Link>
-        ))}
-      </Tile>
-
       <Tile title="Rewards" to="/rewards">
-        <div className="lh-sub">Next epoch in</div>
+        <div className="lh-sub">Next weekly payout in</div>
         <div className="lh-count">{span(nextEpoch(now) - now)}</div>
-        <div className="lh-sub">Buybacks, rebates, LP rewards</div>
+        <div className="lh-sub">Buybacks, trader rebates and LP rewards</div>
       </Tile>
     </aside>
   );

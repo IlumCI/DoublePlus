@@ -86,7 +86,6 @@ html { -webkit-text-size-adjust: 100%; }
 a { color: var(--up); text-decoration-thickness: 1px; text-underline-offset: 2px; }
 a:hover { color: var(--paper); text-decoration: underline; }
 
-
 h1, h2, h3 { font-family: var(--display); font-weight: 400; letter-spacing: .01em; text-wrap: balance; margin: 0; }
 p { text-wrap: pretty; }
 .dp-mono { font-family: var(--mono); font-size: .93em; }
@@ -134,15 +133,6 @@ p { text-wrap: pretty; }
 .dp-boardhead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 22px; padding: 20px 0 12px; }
 .dp-boardhead h1 { font-size: 21px; color: var(--paper); }
 .dp-boardhead .dp-sub { font-size: 12.5px; color: var(--dim); margin: 0; }
-
-.dp-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 0 14px; }
-.dp-chips button {
-  font-family: var(--mono); font-size: 11.5px; color: var(--dim);
-  background: var(--panel); border: 1px solid var(--line); border-radius: 99px; padding: 5px 12px;
-}
-.dp-chips button:hover { color: var(--text); border-color: var(--line-2); }
-.dp-chips button.dp-on { color: var(--bg); background: var(--paper); border-color: var(--paper); font-weight: 700; }
-.dp-chips .dp-sep { flex: 1; }
 
 /* featured slot — earned by performance, not editorial */
 .dp-king { display: grid; grid-template-columns: auto 1fr auto; gap: 16px; align-items: center;
@@ -466,7 +456,6 @@ main { container-type: inline-size; }
 .dp-blotter td { padding: 3px 6px; border-bottom: 1px solid var(--line); }
 .dp-blotter .dp-b { color: var(--up); } .dp-blotter .dp-s { color: var(--down); }
 
-
 @media (max-width: 700px) {
   body { overflow-x: clip; }
   table.dp-docket { display: block; overflow-x: auto; max-width: 100%; }
@@ -480,7 +469,6 @@ main { container-type: inline-size; }
 }
 
 .dp-stamp.dp-blue { color: var(--paper); border-color: var(--paper); --stamp-angle: -2deg; }
-
 
 /* ============================================================
    ADDED IN THE FIX PASS — shell, focus, motion, mobile, states
@@ -532,11 +520,6 @@ main { container-type: inline-size; }
 .dp-chainbar .dp-shell { display: flex; align-items: center; gap: 12px; padding: 8px 18px; font-size: 12.5px; color: var(--text); }
 
 /* honest headline stats */
-.dp-proof { display: flex; flex-wrap: wrap; gap: 8px 28px; align-items: baseline; margin: 14px 0 20px; }
-.dp-proof .dp-item { display: flex; align-items: baseline; gap: 7px; }
-.dp-proof .dp-n { font-family: var(--mono); font-size: 20px; color: var(--text); }
-.dp-proof .dp-l { font-size: 12px; color: var(--dim); }
-.dp-proof .dp-caveat { font-size: 11.5px; color: var(--faint); }
 
 /* "what protects you" */
 .dp-guard { display: grid; gap: 8px; }
@@ -587,14 +570,6 @@ main { container-type: inline-size; }
 }
 
 /* hero + wedge -------------------------------------------------------- */
-.dp-hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px 40px; align-items: end; padding: 30px 0 4px; }
-.dp-hero h1 { font-size: clamp(26px, 3.4vw, 40px); line-height: 1.08; letter-spacing: -.015em;
-  font-family: var(--body); font-weight: 700; max-width: 22ch; color: var(--text); }
-.dp-hero .dp-sub { max-width: 60ch; margin: 10px 0 0; font-size: 14.5px; color: var(--dim); }
-.dp-hero-cta { display: grid; gap: 8px; justify-items: start; }
-.dp-hero-link { font-size: 12px; color: var(--dim); text-decoration: none; }
-.dp-hero-link:hover { color: var(--paper); text-decoration: underline; }
-@media (max-width: 860px) { .dp-hero { grid-template-columns: 1fr; } }
 
 .dp-edge { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; margin: 22px 0 4px;
   border: 1px solid var(--line); border-radius: 12px; background: var(--panel); overflow: hidden; }
@@ -695,11 +670,6 @@ main { container-type: inline-size; }
   .dp-activity .dp-shell { height: 30px; }
 }
 /* …so the board carries its own, above the filters */
-.dp-board-search { display: none; margin: 0 0 12px; }
-.dp-board-search input { width: 100%; background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
-  color: var(--text); font-family: var(--mono); font-size: 13px; padding: 10px 12px; }
-.dp-board-search input::placeholder { color: var(--faint); }
-@media (max-width: 760px) { .dp-board-search { display: block; } }
 
 /* charts ------------------------------------------------------------- */
 .dp-legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
@@ -824,5 +794,4 @@ main { container-type: inline-size; }
 /* Compact card: one-line name, market cap and a single tag on the right. */
 .dp-tcard h3 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dp-tcard .dp-pitch { min-height: 0; margin: 8px 0 10px; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
-.dp-tcard .dp-cardmc { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; align-self: flex-start; }
-.dp-tcard .dp-cardmc b { font-family: var(--mono); font-size: 13px; font-weight: 400; color: var(--text); white-space: nowrap; }
+

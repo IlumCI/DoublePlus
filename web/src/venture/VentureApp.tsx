@@ -38,7 +38,7 @@ function PageLoading() {
 }
 
 const NAV: [string, string][] = [
-  ["/", "Raises"],
+  ["/", "Coins"],
   ["/desk", "Portfolio"],
   ["/rewards", "Rewards"],
   ["/stats", "Stats"],
@@ -67,11 +67,11 @@ function usePlace(ventures: Venture[] | null): [string, string][] {
   if (pathname.startsWith("/venture/")) {
     const addr = pathname.split("/")[2]?.toLowerCase();
     const v = ventures?.find((x) => x.address.toLowerCase() === addr);
-    return [["Raises", "/"], [v ? `$${v.symbol}` : "Raise", pathname]];
+    return [["Coins", "/"], [v ? `$${v.symbol}` : "Coin", pathname]];
   }
-  if (pathname === "/launch") return [["Create a raise", "/launch"]];
+  if (pathname === "/launch") return [["Launch a coin", "/launch"]];
   const hit = NAV.find(([to]) => to === pathname);
-  return [hit ? [hit[1], hit[0]] : ["Raises", "/"]];
+  return [hit ? [hit[1], hit[0]] : ["Coins", "/"]];
 }
 
 function readPref(key: string): boolean {
@@ -170,7 +170,7 @@ function CloseCap() {
   const onBoard = useLocation().pathname === "/";
   return (
     <button className="lh-cap lh-cap-close" onClick={() => navigate("/", { viewTransition: true })} disabled={onBoard}
-      title={onBoard ? "Close" : "Close page (back to Raises)"} aria-label="Close page">
+      title={onBoard ? "Close" : "Close page (back to Coins)"} aria-label="Close page">
       <i className="lh-ico-close" />
     </button>
   );
@@ -211,7 +211,7 @@ function AddressBar({ place }: { place: [string, string][] }) {
         ))}
       </nav>
       <div className="lh-search">
-        <input value={q} onChange={(e) => search(e.target.value)} placeholder="Search projects" aria-label="Search projects" />
+        <input value={q} onChange={(e) => search(e.target.value)} placeholder="Search coins" aria-label="Search coins" />
       </div>
       <WalletButton className="lh-addr-wallet" />
     </div>
@@ -223,20 +223,20 @@ function TaskPane() {
   return (
     <nav className="lh-pane" aria-label="Primary">
       <section>
-        <h2>Launchpad tasks</h2>
-        <Link className="lh-task lh-task-go" to="/launch" viewTransition>Create a raise</Link>
+        <h2>Coin tasks</h2>
+        <Link className="lh-task lh-task-go" to="/launch" viewTransition>Launch a coin</Link>
         {NAV.slice(0, 2).map(([to, label]) => (
           <NavLink key={to} className="lh-task" to={to} end={to === "/"} viewTransition>{label}</NavLink>
         ))}
       </section>
       <section>
-        <h2>Earn &amp; track</h2>
+        <h2>Other places</h2>
         {NAV.slice(2, 4).map(([to, label]) => (
           <NavLink key={to} className="lh-task" to={to} viewTransition>{label}</NavLink>
         ))}
       </section>
       <section>
-        <h2>Learn</h2>
+        <h2>Help</h2>
         <NavLink className="lh-task" to="/docs" viewTransition>How it works</NavLink>
         <Link className="lh-task" to="/legal" viewTransition>Terms</Link>
         <a className="lh-task" href={BRAND.twitter} target="_blank" rel="noreferrer">@{BRAND.twitterHandle} on X</a>
@@ -244,8 +244,8 @@ function TaskPane() {
       <section className="lh-details">
         <h2>Details</h2>
         <p><b>{env.chainName}</b></p>
-        <p>Protocol fee {(VENTURE.platformFeeBps / 100).toFixed(2)}% per trade</p>
-        <p>{VENTURE.refShareBps / 100}% of it to referrers</p>
+        <p>Platform fee {(VENTURE.platformFeeBps / 100).toFixed(2)}% per trade</p>
+        <p>{VENTURE.refShareBps / 100}% of that goes to referrers</p>
       </section>
     </nav>
   );
@@ -309,7 +309,7 @@ function StartMenu() {
       <div className="lh-sm-cols">
         <div className="lh-sm-main">
           <Link role="menuitem" className="lh-sm-go" to="/launch" viewTransition>
-            <b>Create a raise</b><span>Launch a token with a funding round</span>
+            <b>Launch a coin</b><span>Name it, set your cut, open the curve</span>
           </Link>
           {NAV.map(([to, label]) => (
             <Link key={to} role="menuitem" to={to} viewTransition><b>{label}</b></Link>
@@ -344,16 +344,15 @@ function ChainBar() {
 function StatusBar() {
   return (
     <div className="lh-status">
-      <span>{BRAND.name}{BRAND.tld} — {env.chainName}</span>
+      <span>{env.chainName}</span>
       {/* Read from config, never hardcoded: this line is on every page, so a
           stale number here is the fee statement most users actually see. It
           said 1% for the whole period the hook charged 0.55%. */}
       <span>
-        protocol fee {(VENTURE.platformFeeBps / 100).toFixed(2)}% per trade
-        {" · "}{VENTURE.refShareBps / 100}% of it to referrers
+        Platform fee {(VENTURE.platformFeeBps / 100).toFixed(2)}% per trade, {VENTURE.refShareBps / 100}% of that to referrers
       </span>
-      {env.explorerUrl && <a href={env.explorerUrl} target="_blank" rel="noreferrer">explorer ↗</a>}
-      <Link to="/legal" viewTransition>terms</Link>
+      {env.explorerUrl && <a href={env.explorerUrl} target="_blank" rel="noreferrer">Block explorer</a>}
+      <Link to="/legal" viewTransition>Terms</Link>
     </div>
   );
 }
