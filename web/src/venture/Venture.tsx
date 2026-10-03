@@ -443,6 +443,9 @@ function RaisePanel({ v }: { v: VentureT }) {
   }, [me, v.address, busy]);
 
   const parsed = useMemo(() => { try { return amt ? parseEther(amt) : 0n; } catch { return 0n; } }, [amt]);
+  // How far the curve may move against you between the quote and the block.
+  // 3% by default: in a launch's first minutes several buys can land together.
+  const [slipBps, setSlipBps] = useState(300);
   // The entry fee comes off before the curve is quoted, so the tokens you get
   // are priced on what actually reaches the curve. Both derivations live in
   // curve.ts, where they are tested against the contract's own arithmetic.
@@ -475,7 +478,8 @@ function RaisePanel({ v }: { v: VentureT }) {
       const left = v.targetRaiseWei > v.raisedWei ? v.targetRaiseWei - v.raisedWei : 0n;
       const mayFill = funded >= 50 || parsed * 2n >= left;
       const hash = await wc.writeContract({
-        address: VENTURE.factory, abi: factoryAbi, functionName: "buy", args: [v.address], value: parsed,
+        address: VENTURE.factory, abi: factoryAbi, functionName: "buy",
+        args: [v.address, (tokensOut * 10n ** 18n * BigInt(10_000 - slipBps)) / 10_000n], value: parsed,
         chain: wc.chain, account: wc.account, ...(mayFill ? { gas: GRADUATING_BUY_GAS } : {}),
       });
       pushToast({ kind: "info", title: "Buy sent", txHash: hash });
@@ -499,8 +503,7 @@ function RaisePanel({ v }: { v: VentureT }) {
         const a = await wc.writeContract({ address: v.address, abi: ercAbi, functionName: "approve", args: [VENTURE.factory, 2n ** 256n - 1n], chain: wc.chain, account: wc.account });
         await venturePc.waitForTransactionReceipt({ hash: a });
       }
-      // 1% tolerance: the curve can move between quote and mine.
-      const minOut = (sellQuote.out * 9_900n) / 10_000n;
+      const minOut = (sellQuote.out * BigInt(10_000 - slipBps)) / 10_000n;
       const hash = await wc.writeContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "sell", args: [v.address, sellWhole, minOut], chain: wc.chain, account: wc.account });
       pushToast({ kind: "info", title: "Sell sent", txHash: hash });
       await venturePc.waitForTransactionReceipt({ hash });
@@ -541,7 +544,7 @@ function RaisePanel({ v }: { v: VentureT }) {
                 : !isConnected ? "Connect wallet"
                 : shortOnEth ? "Not enough ETH"
                 : overCap ? "Over your wallet cap"
-                : guaranteed ? `Back ${v.name}` : `Buy $${v.symbol}`}
+                : `Buy $${v.symbol}`}
             </button>
             <div className="dp-tb-slip">
               <span>balance <b style={{ color: "var(--dim)" }}>{eth.data ? fmtEth(eth.data.value, 4) : "—"} ETH</b></span>
@@ -574,6 +577,18 @@ function RaisePanel({ v }: { v: VentureT }) {
             </div>
           </>
         )}
+        <div className="dp-tb-slip">
+          <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            max slippage
+            <select value={slipBps} onChange={(e) => setSlipBps(Number(e.target.value))} className="dp-slip">
+              <option value={100}>1%</option>
+              <option value={300}>3%</option>
+              <option value={500}>5%</option>
+              <option value={1000}>10%</option>
+            </select>
+          </label>
+          <span>{side === "buy" && tokensOut > 0n ? `at least ${fmtTok((tokensOut * BigInt(10_000 - slipBps)) / 10_000n, true)} $${v.symbol}` : ""}</span>
+        </div>
         <div className="dp-tb-slip">
           <span>{guaranteed ? <>closes in <Countdown deadline={v.deadline} /></> : <>no deadline</>}</span>
           <span>{ethUsdInPanel > 0 && parsed > 0n && side === "buy" ? fmtUsdV((Number(parsed) / 1e18) * ethUsdInPanel) : ""}</span>

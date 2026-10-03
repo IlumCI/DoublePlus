@@ -94,7 +94,7 @@ export const factoryAbi = [
   { type: "function", name: "tokensForValue", stateMutability: "view", inputs: [{ type: "address" }, { type: "uint256" }], outputs: [{ type: "uint256" }] },
   { type: "function", name: "spentWei", stateMutability: "view", inputs: [{ type: "address" }, { type: "address" }], outputs: [{ type: "uint256" }] },
   { type: "function", name: "boughtTokens", stateMutability: "view", inputs: [{ type: "address" }, { type: "address" }], outputs: [{ type: "uint256" }] },
-  { type: "function", name: "buy", stateMutability: "payable", inputs: [{ type: "address" }], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "buy", stateMutability: "payable", inputs: [{ type: "address" }, { type: "uint256" }], outputs: [{ type: "uint256" }] },
   { type: "function", name: "sell", stateMutability: "nonpayable", inputs: [{ type: "address" }, { type: "uint256" }, { type: "uint256" }], outputs: [{ type: "uint256" }] },
   { type: "function", name: "curveBuyFeeBps", stateMutability: "view", inputs: [], outputs: [{ type: "uint16" }] },
   { type: "function", name: "curveSellFeeBps", stateMutability: "view", inputs: [], outputs: [{ type: "uint16" }] },
