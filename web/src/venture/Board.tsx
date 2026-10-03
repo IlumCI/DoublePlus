@@ -2,38 +2,29 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { type Venture } from "./client";
-import { useDexProfiles, type DexProfile } from "../lib/dexscreener";
 import { usePageMeta } from "./seo";
-import { ago, CardSkeletons, CurveBar, DexBadge, fmtEth, fmtMcap, fmtUsdV, Monogram, pct, short, StatusBadge, useEthUsd } from "./ui";
+import { ago, CardSkeletons, CurveBar, fmtEth, fmtMcap, fmtUsdV, Monogram, pct, short, StatusBadge, useEthUsd } from "./ui";
 import { useVentures } from "./useVentures";
 import { hotTokens, useLiveFeed, type FeedItem } from "./feed";
 import { useCurveStats, type CurveStats } from "./boardStats";
 
-type Filter = "all" | "research" | "startup" | "raising" | "soon" | "graduated" | "dexpaid" | "failed";
-type Sort = "new" | "trending" | "mcap" | "funded";
+type Filter = "all" | "raising" | "soon" | "graduated";
+type Sort = "new" | "trending" | "mcap";
 
+// Few, plain choices: what stage a coin is at, and how to order them.
+// Refunds are reached from the portfolio, where the button is.
 const FILTERS: [Filter, string][] = [
-  ["all", "All"], ["startup", "Startups"], ["research", "Research"],
-  ["raising", "Raising"], ["soon", "About to graduate"], ["graduated", "Trading"],
-  ["dexpaid", "DEX paid"], ["failed", "Refunding"],
+  ["all", "All"], ["raising", "Filling"], ["soon", "Almost full"], ["graduated", "Trading"],
 ];
-const SORTS: [Sort, string][] = [["new", "Newest"], ["trending", "🔥 Trending"], ["mcap", "Market cap"], ["funded", "% funded"]];
+const SORTS: [Sort, string][] = [["new", "Newest"], ["trending", "🔥 Trending"], ["mcap", "Market cap"]];
 
 /** Fresh lane window: launches younger than this get the lane at the top. */
 const FRESH_SECS = 86_400;
-
-const isResearch = (v: Venture) => /research|science|lab|open.?source|academic/i.test(v.meta.sector ?? "");
 
 /** The board. Filters, sort and search live in the URL so any view is a link. */
 export function Board() {
   const { ventures, error, retry } = useVentures();
   const ethUsd = useEthUsd();
-  // Only graduated ventures have a DEX Screener pair, and the bulk endpoint
-  // takes 30 addresses a call, so the whole board costs one or two requests.
-  const dexTokens = useMemo(
-    () => (ventures ?? []).filter((v) => v.phase === "graduated").map((v) => v.address),
-    [ventures]);
-  const dex = useDexProfiles(dexTokens);
   const [params, setParams] = useSearchParams();
   const feed = useLiveFeed();
   const curve = useCurveStats();
@@ -70,13 +61,9 @@ export function Board() {
 
   const shown = useMemo(() => {
     let list = [...(ventures ?? [])];
-    if (filter === "research") list = list.filter(isResearch);
-    if (filter === "startup") list = list.filter((v) => !isResearch(v));
     if (filter === "raising") list = list.filter((v) => v.phase === "raising");
     if (filter === "soon") list = list.filter((v) => v.phase === "expired" || (v.phase === "raising" && pct(v.raisedWei, v.targetRaiseWei) >= 85));
     if (filter === "graduated") list = list.filter((v) => v.phase === "graduated");
-    if (filter === "dexpaid") list = list.filter((v) => dex.get(v.address.toLowerCase())?.state === "paid");
-    if (filter === "failed") list = list.filter((v) => v.phase === "failed");
     const needle = q.trim().toLowerCase();
     if (needle) {
       list = list.filter((v) =>
@@ -88,10 +75,9 @@ export function Board() {
       const h = (v: Venture) => heat.get(v.address.toLowerCase()) ?? 0n;
       list.sort((a, b) => (h(b) > h(a) ? 1 : h(b) < h(a) ? -1 : b.createdAt - a.createdAt));
     } else if (sort === "mcap") list.sort((a, b) => (b.priceWei > a.priceWei ? 1 : b.priceWei < a.priceWei ? -1 : 0));
-    else if (sort === "funded") list.sort((a, b) => pct(b.raisedWei, b.targetRaiseWei) - pct(a.raisedWei, a.targetRaiseWei));
     else list.sort((a, b) => b.createdAt - a.createdAt);
     return list;
-  }, [ventures, filter, sort, q, dex, heat]);
+  }, [ventures, filter, sort, q, heat]);
 
   return (
     <div className="dp-shell" style={{ paddingBottom: 60 }}>
@@ -151,7 +137,7 @@ export function Board() {
       ) : (
         <div className="dp-grid">
           {filter === "all" && !q && <YourCoinCard />}
-          {shown.map((v) => <TokenCard key={v.address} v={v} ethUsd={ethUsd} dex={dex.get(v.address.toLowerCase())} hot={hot.has(v.address.toLowerCase())} record={records.get(v.creator.toLowerCase())} stats={curve.get(v.address.toLowerCase())} />)}
+          {shown.map((v) => <TokenCard key={v.address} v={v} ethUsd={ethUsd} hot={hot.has(v.address.toLowerCase())} record={records.get(v.creator.toLowerCase())} stats={curve.get(v.address.toLowerCase())} />)}
         </div>
       )}
     </div>
@@ -330,8 +316,8 @@ function GradBurst({ ventures, feed, loaded }: { ventures: Venture[] | null; fee
   );
 }
 
-function TokenCard({ v, ethUsd, dex, hot, record, stats }: {
-  v: Venture; ethUsd: number; dex?: DexProfile; hot: boolean; record?: { launched: number; graduated: number }; stats?: CurveStats;
+function TokenCard({ v, ethUsd, hot, record, stats }: {
+  v: Venture; ethUsd: number; hot: boolean; record?: { launched: number; graduated: number }; stats?: CurveStats;
 }) {
   const funded = pct(v.raisedWei, v.targetRaiseWei);
   const left = v.targetRaiseWei > v.raisedWei ? v.targetRaiseWei - v.raisedWei : 0n;
@@ -340,21 +326,26 @@ function TokenCard({ v, ethUsd, dex, hot, record, stats }: {
   const pitch = v.meta.pitch || v.meta.description || "";
   const flash = useFlashOnChange(v.raisedWei);
 
+  // One tag, the most useful one: what is happening to it right now.
+  const tag = hot ? <span className="dp-badge dp-hot" title="Bought in the last 15 minutes">🔥 hot</span>
+    : Date.now() / 1000 - v.createdAt < 86_400 && v.phase === "raising" ? <span className="dp-badge dp-new">new</span>
+    : <StatusBadge v={v} />;
+  const by = record && record.launched > 1
+    ? `creator: ${record.launched} launches, ${record.graduated} graduated`
+    : record ? "creator's first launch" : "";
+
   return (
     <Link className={`dp-tcard${flash ? " dp-flash" : ""}${close ? " dp-close" : ""}`} to={`/venture/${v.address}`} viewTransition>
       <div className="dp-row1">
         <Monogram v={v} />
-        <div style={{ minWidth: 0 }}>
-          <h3>{v.name}</h3>
-          <span className="dp-tick">${v.symbol}{v.meta.sector ? ` · ${v.meta.sector}` : ""}</span>
-          <Socials v={v} />
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <h3 title={v.name}>{v.name}</h3>
+          <span className="dp-tick" title={by}>${v.symbol} · {ago(v.createdAt)}</span>
         </div>
-        <span style={{ marginLeft: "auto", alignSelf: "flex-start", display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>
-          {hot && <span className="dp-badge dp-hot" title="Bought in the last 15 minutes">🔥 hot</span>}
-          {Date.now() / 1000 - v.createdAt < 86_400 && <span className="dp-badge dp-new">new</span>}
-          {dex && <DexBadge profile={dex} />}
-          <StatusBadge v={v} />
-        </span>
+        <div className="dp-cardmc">
+          {v.phase !== "failed" && <b>{fmtMcap(v, ethUsd)}</b>}
+          {tag}
+        </div>
       </div>
 
       {pitch && <p className="dp-pitch">{pitch}</p>}
@@ -362,24 +353,14 @@ function TokenCard({ v, ethUsd, dex, hot, record, stats }: {
       <CurveBar v={v} />
       <div className="dp-curvelabel">
         {v.phase === "graduated" ? (
-          <><span>trading · mcap <b>{fmtMcap(v, ethUsd)}</b></span><span>{fmtEth(v.raisedWei, 3)} ETH raised</span></>
+          <><span>on Uniswap</span><span>raised {fmtEth(v.raisedWei, 2)} ETH</span></>
         ) : v.phase === "failed" ? (
-          <><span>closed at {funded.toFixed(0)}%</span><span>refunds open</span></>
+          <><span>missed at {funded.toFixed(0)}%</span><span>refunds open</span></>
         ) : (
-          <><span><b>{funded.toFixed(0)}%</b>{close ? " · almost there" : " to graduation"}</span><span><b className="dp-togo">{fmtEth(left, 3)} ETH</b> to go</span></>
+          <><span><b>{funded.toFixed(0)}%</b>{close ? " · almost there" : ""}</span><span><b className="dp-togo">{fmtEth(left, 3)} ETH</b> to go</span></>
         )}
       </div>
-
-      <div className="dp-prov">
-        <span>by <b>{short(v.creator)}</b> · {ago(v.createdAt)} ago</span>
-        <span>founder takes {(v.founderRaiseBps / 100).toFixed(0)}%</span>
-      </div>
-      {stats && <DueDiligence s={stats} />}
-      {record && (
-        <div className="dp-record-line">
-          {record.launched === 1 ? "first launch" : <>{record.launched} launches · <b>{record.graduated} graduated</b></>}
-        </div>
-      )}
+      {stats && v.phase !== "failed" && <DueDiligence s={stats} />}
     </Link>
   );
 }
@@ -399,20 +380,6 @@ function DueDiligence({ s }: { s: CurveStats }) {
       {s.firstMinBuyers > 0 && <span className="dp-dd-ok" title="Buyers in the first 60 seconds">⚡ {s.firstMinBuyers} in 1st min</span>}
       {s.sniped && <span className="dp-dd-bad" title="Someone bought in the launch block">sniped</span>}
     </div>
-  );
-}
-
-/** Which links the project has filled in. Indicators, not links: the whole
- *  card is already a link, and the coin page lists them properly. */
-function Socials({ v }: { v: Venture }) {
-  const m = v.meta;
-  if (!m.twitter && !m.telegram && !m.website) return null;
-  return (
-    <span className="dp-socials" aria-label="Has links">
-      {m.twitter && <i title="X">𝕏</i>}
-      {m.telegram && <i title="Telegram">TG</i>}
-      {m.website && <i title="Website">WEB</i>}
-    </span>
   );
 }
 
