@@ -650,3 +650,10 @@ main { container-type: inline-size; }
 /* Honeypot field in the chat form: off-screen, not display:none, which some
    bots skip. */
 .dp-hp { position: absolute; left: -10000px; width: 1px; height: 1px; opacity: 0; }
+
+/* Creator text is unbounded: names, tickers and pitches never push the
+   layout wider than the screen or taller than a few lines. */
+.dp-coinhead > div { min-width: 0; flex: 1 1 260px; }
+.dp-coinhead h1 { overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.dp-coinhead .dp-oneliner { overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.dp-coinhead .dp-prov, .dp-story, .dp-typescript, .dp-chat-list p { overflow-wrap: anywhere; }

@@ -8,6 +8,7 @@ import { BRAND } from "../lib/brand";
 import { env } from "../lib/env";
 import { useWallet } from "../lib/useWallet";
 import { Board } from "./Board";
+import { Boundary } from "./Boundary";
 import { VENTURE } from "./client";
 import { captureRef } from "./referral";
 import { FilterDefs } from "./ui";
@@ -141,6 +142,7 @@ function Shell() {
           <div className="lh-body">
             <TaskPane />
             <main ref={mainRef} className="lh-client">
+              <Boundary key={pathname}>
               <Suspense fallback={<PageLoading />}>
               <Routes>
                 <Route path="/" element={<Board />} />
@@ -153,6 +155,7 @@ function Shell() {
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
               </Suspense>
+              </Boundary>
             </main>
           </div>
           <StatusBar />

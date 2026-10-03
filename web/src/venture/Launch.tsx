@@ -32,7 +32,11 @@ const TOTAL_SUPPLY = 10n ** 27n;
 const CURVE_SHARE = 0.6; // 60% of supply sells on the curve
 const START_FDV_USD = 750; // mirrors VentureFactory.START_MCAP_USD_8
 const MIN_TARGET_ETH = 2; // mirrors VentureFactory.minTargetWei on mainnet
-const MAX_RAISE_DAYS = 14; // mirrors VentureFactory.MAX_RAISE_SECS
+const MAX_RAISE_DAYS = 14;
+// On-chain metadata budget. A launch transaction is capped at 2^24 gas, and
+// storing ~25 KB of metadata already reaches it; leave room for the rest.
+const LOGO_MAX_CHARS = 12_000;
+const METADATA_MAX_BYTES = 18_000; // mirrors VentureFactory.MAX_RAISE_SECS
 
 /** Market cap (FDV) the coin opens at on Uniswap when a raise of `targetEth`
  *  fills: the linear curve's closing price. Founder cut doesn't move it. */
@@ -94,16 +98,25 @@ export function LaunchVenture() {
   const onLogo = async (file: File) => {
     try {
       const bmp = await createImageBitmap(file);
-      const c = document.createElement("canvas");
-      c.width = 256; c.height = 256;
-      const ctx = c.getContext("2d")!;
       const side = Math.min(bmp.width, bmp.height);
-      ctx.drawImage(bmp, (bmp.width - side) / 2, (bmp.height - side) / 2, side, side, 0, 0, 256, 256);
-      let out = c.toDataURL("image/webp", 0.8);
-      if (out.length > 24_000) out = c.toDataURL("image/webp", 0.6);
+      // The logo is stored on-chain inside the launch transaction, which has
+      // a gas cap: step quality, then size, down until it fits the budget.
+      // (Browsers that can't encode WebP hand back PNG, which this also shrinks.)
+      let out = "";
+      for (const px of [256, 192, 128, 96]) {
+        const c = document.createElement("canvas");
+        c.width = px; c.height = px;
+        c.getContext("2d")!.drawImage(bmp, (bmp.width - side) / 2, (bmp.height - side) / 2, side, side, 0, 0, px, px);
+        for (const q of [0.8, 0.6, 0.45]) {
+          out = c.toDataURL("image/webp", q);
+          if (out.length <= LOGO_MAX_CHARS) break;
+        }
+        if (out.length <= LOGO_MAX_CHARS) break;
+      }
+      if (out.length > LOGO_MAX_CHARS) throw new Error("too detailed");
       setLogoData(out);
     } catch {
-      pushToast({ kind: "error", title: "Could not read that image" });
+      pushToast({ kind: "error", title: "Couldn't use that image", body: "Try a simpler or smaller one." });
     }
   };
 
@@ -184,6 +197,12 @@ export function LaunchVenture() {
         github: form.github.trim(),
         docs: form.docs.trim(),
       });
+      // Everything here is stored on-chain in one transaction with a gas cap;
+      // refuse before the wallet opens rather than fail after signing.
+      if (new TextEncoder().encode(metadataURI).length > METADATA_MAX_BYTES) {
+        setBusy(false); setMining(false);
+        return pushToast({ kind: "error", title: "Too much to store on-chain", body: "Shorten the description or use a simpler logo." });
+      }
       const buyTaxBps = Math.round(buyTaxPct * 100);
       const symbol = form.symbol.trim().toUpperCase();
 
@@ -405,7 +424,7 @@ export function LaunchVenture() {
                 <span className="dp-hint">Shown next to the name in the coin list. Say what it is.</span>
               </div>
               <div className="dp-field"><label htmlFor="v-long">Description <span className="dp-agate">(optional)</span></label>
-                <textarea id="v-long" value={longDesc} onChange={(e) => setLongDesc(e.target.value)} rows={5}
+                <textarea id="v-long" value={longDesc} onChange={(e) => setLongDesc(e.target.value)} rows={5} maxLength={2000}
                   placeholder="What you are building, who it is for, and what the money buys." />
                 <span className="dp-hint">Shown on the coin's page.</span></div>
 

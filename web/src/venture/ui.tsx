@@ -109,12 +109,16 @@ export function Monogram({ v, size = "sm" }: { v: Venture; size?: "sm" | "lg" })
   const tint = tints[Number(BigInt(v.address) % 4n)];
   const cls = `dp-monogram ${tint ? `dp-${tint}` : ""} ${size === "lg" ? "dp-lg" : ""}`.replace(/\s+/g, " ").trim();
   const logo = safeImageUrl(v.meta.logo);
-  if (logo) {
+  const [broken, setBroken] = useState(false);
+  if (logo && !broken) {
     return <span className={cls} style={{ padding: 0, overflow: "hidden", background: "var(--panel-2)" }}>
-      <img src={logo} alt="" referrerPolicy="no-referrer" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+      <img src={logo} alt="" referrerPolicy="no-referrer" onError={() => setBroken(true)} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
     </span>;
   }
-  return <span className={cls}>{v.name.slice(0, 1).toUpperCase()}</span>;
+  // First visible character, whole: slice(0, 1) splits emoji and surrogate
+  // pairs, and a name can be blank or start with invisible marks.
+  const first = [...v.name.replace(/[\u0000-\u001f\u200b-\u200f\u202a-\u202e\u2066-\u2069\s]/g, "")][0] ?? "?";
+  return <span className={cls}>{first.toUpperCase()}</span>;
 }
 
 /** Lifecycle status, in launchpad vocabulary. */

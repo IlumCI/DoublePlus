@@ -2,6 +2,7 @@ import { createPublicClient, fallback, http, parseAbiItem, type Address, type Pu
 
 import { chain, env } from "../lib/env";
 import { isProtocolSwap } from "./marketStats";
+import { cleanText, parseMeta } from "./safe";
 import type { RaiseMode } from "./raiseMode";
 
 /** VentureFactory deployment. Defaults target the Robinhood Chain testnet
@@ -338,12 +339,8 @@ export async function loadVenture(address: Address): Promise<Venture> {
   const c = curve as unknown as [bigint, bigint, bigint, bigint, bigint, bigint, boolean, boolean];
   const t = terms as unknown as [number, bigint, Address, bigint, bigint, number, boolean];
   const pol = policyRaw as unknown as [Address, number, number, number, number, number, number];
-  let meta: VentureMeta = {};
-  try {
-    meta = JSON.parse(String(metaRaw));
-  } catch {
-    /* plain string metadata */
-  }
+  // Hostile or broken metadata must not be able to break the page: see safe.ts.
+  const meta: VentureMeta = parseMeta(metaRaw);
   const base = {
     finalized: c[6],
     aborted: c[7],
@@ -354,8 +351,8 @@ export async function loadVenture(address: Address): Promise<Venture> {
   };
   return {
     address,
-    name: String(name),
-    symbol: String(symbol),
+    name: cleanText(name, 64) || "Unnamed",
+    symbol: cleanText(symbol, 16) || "?",
     creator,
     pair,
     taxBps: Number(taxBps),
@@ -520,7 +517,7 @@ export async function loadUpdates(token: Address): Promise<{ author: Address; te
   });
   return logs.map((l) => ({
     author: l.args.author as Address,
-    text: String(l.args.update),
+    text: cleanText(String(l.args.update), 4000, true),
     blockNumber: Number(l.blockNumber),
     txHash: l.transactionHash,
   }));
