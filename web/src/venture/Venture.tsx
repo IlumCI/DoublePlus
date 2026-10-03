@@ -816,7 +816,7 @@ function FailPanel({ v }: { v: VentureT }) {
       const hash = await wc.writeContract({ address: VENTURE.factory, abi: factoryAbi, functionName: fn, args: [v.address], chain: wc.chain, account: wc.account });
       pushToast({ kind: "info", title: fn === "abort" ? "Closing the round…" : "Refunding…", txHash: hash });
       await confirmTx(hash);
-      pushToast({ kind: "success", title: fn === "abort" ? "Round closed. Refunds are open." : "Refunded in full.", txHash: hash });
+      pushToast({ kind: "success", title: fn === "abort" ? "Round closed. Refunds are open." : "Refunded. Your ETH is back in your wallet.", txHash: hash });
     } catch (e) {
       pushToast({ kind: "error", title: `${fn === "abort" ? "Close" : "Refund"} failed`, body: errorText(e) });
     } finally { setBusy(false); }
