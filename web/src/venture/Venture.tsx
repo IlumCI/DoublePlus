@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useBalance, useWalletClient } from "wagmi";
-import { formatEther, parseEther, toEventSelector, type Address } from "viem";
+import { formatEther, isAddress, parseEther, toEventSelector, type Address } from "viem";
 
 import {
-  CURVE_SUPPLY, ercAbi, factoryAbi, hookAbi, loadFills, loadUpdates, loadVenture, quoteSellWei, quoteTokens,
+  CURVE_SUPPLY, ercAbi, NotListed, factoryAbi, hookAbi, loadFills, loadUpdates, loadVenture, quoteSellWei, quoteTokens,
   routerAbi, SOCIAL_FIELDS, TOTAL_SUPPLY, VENTURE, venturePc, vestingAbi,
   type Fill, type PoolTrade, type Venture as VentureT,
 } from "./client";
@@ -33,23 +33,48 @@ export function VenturePage() {
   const { address } = useParams<{ address: string }>();
   const [v, setV] = useState<VentureT | null>(null);
   const [fills, setFills] = useState<Fill[]>([]);
+  // "missing": not an address, or not a coin from this factory. "down": the
+  // chain didn't answer; polling keeps trying and the button retries now.
+  const [state, setState] = useState<"loading" | "missing" | "down">("loading");
+  const [attempt, setAttempt] = useState(0);
   const ethUsd = useEthUsd();
+  const valid = !!address && isAddress(address);
 
   useEffect(() => {
-    if (!address) return;
+    if (!valid) { setState("missing"); return; }
     let live = true;
     const refresh = () => {
-      loadVenture(address as Address).then((x) => live && setV(x)).catch(() => undefined);
+      loadVenture(address as Address)
+        .then((x) => { if (live) { setV(x); setState("loading"); } })
+        .catch((e) => { if (live) setState(e instanceof NotListed ? "missing" : "down"); });
       loadFills(address as Address).then((f) => live && setFills(f)).catch(() => undefined);
     };
     refresh();
     const id = setInterval(refresh, 10_000);
     return () => { live = false; clearInterval(id); };
-  }, [address]);
+  }, [address, valid, attempt]);
 
   usePageMeta(v ? `${v.name} ($${v.symbol})` : null, v?.meta.pitch);
 
   if (!v) {
+    if (state === "missing") {
+      return (
+        <div className="dp-notice" style={{ margin: "40px 18px", textAlign: "center" }}>
+          <h3>No coin at this address.</h3>
+          <p>It isn't a coin launched on doubleplus. Check the link, or find it in the list.</p>
+          <Link className="dp-action" style={{ display: "inline-block", marginTop: 12 }} to="/" viewTransition>All coins</Link>
+        </div>
+      );
+    }
+    if (state === "down") {
+      return (
+        <div className="dp-notice dp-bad" style={{ margin: "40px 18px", textAlign: "center" }}>
+          <h3>Can't reach Robinhood Chain.</h3>
+          <p>The coin is read straight from the chain, and the RPC isn't answering. Your wallet and funds are unaffected.</p>
+          <button className="dp-action" style={{ marginTop: 12 }} onClick={() => { setState("loading"); setAttempt((n) => n + 1); }}>Try again</button>
+        </div>
+      );
+    }
     return <div className="dp-shell" style={{ padding: "80px 18px", textAlign: "center", color: "var(--faint)" }}>Loading…</div>;
   }
   return <VentureBody v={v} fills={fills} ethUsd={ethUsd} />;

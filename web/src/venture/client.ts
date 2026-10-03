@@ -325,7 +325,26 @@ async function poolPriceWei(coin: Address, pair: Address): Promise<bigint | null
   return BigInt(Math.round(p * 1e18));
 }
 
+/** The address is not a coin launched on this factory. */
+export class NotListed extends Error {
+  constructor(address: string) { super(`${address} is not a doubleplus coin`); }
+}
+
 export async function loadVenture(address: Address): Promise<Venture> {
+  try {
+    return await readVenture(address);
+  } catch (e) {
+    // A non-coin address fails on its first token read, before the listing
+    // check can say so; tell "not a coin" apart from "chain unreachable".
+    if (e instanceof NotListed) throw e;
+    const listing = await venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "listings", args: [address] })
+      .catch(() => null) as unknown as [Address] | null;
+    if (listing && listing[0] === "0x0000000000000000000000000000000000000000") throw new NotListed(address);
+    throw e;
+  }
+}
+
+async function readVenture(address: Address): Promise<Venture> {
   const [listing, curve, terms, policyRaw, name, symbol, metaRaw] = await Promise.all([
     venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "listings", args: [address] }),
     venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "curveState", args: [address] }),
@@ -336,6 +355,7 @@ export async function loadVenture(address: Address): Promise<Venture> {
     venturePc.readContract({ address, abi: ercAbi, functionName: "metadataURI" }).catch(() => ""),
   ]);
   const [creator, pair, taxBps, createdAt, poolId] = listing as unknown as [Address, Address, number, bigint, string];
+  if (creator === "0x0000000000000000000000000000000000000000") throw new NotListed(address);
   const c = curve as unknown as [bigint, bigint, bigint, bigint, bigint, bigint, boolean, boolean];
   const t = terms as unknown as [number, bigint, Address, bigint, bigint, number, boolean];
   const pol = policyRaw as unknown as [Address, number, number, number, number, number, number];
