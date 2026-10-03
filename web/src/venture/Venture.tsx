@@ -497,7 +497,10 @@ function RaisePanel({ v }: { v: VentureT }) {
 
   const ownedWhole = bought / 10n ** 18n;
   const sellWhole = useMemo(() => {
-    const n = BigInt(Math.floor(Number(sellQ) || 0));
+    // Whole tokens, parsed as digits: Number() turns a long paste into
+    // Infinity, which BigInt() throws on.
+    const digits = sellQ.trim().split(".")[0].replace(/[^0-9]/g, "").slice(0, 40);
+    const n = digits ? BigInt(digits) : 0n;
     return n > ownedWhole ? ownedWhole : n < 0n ? 0n : n;
   }, [sellQ, ownedWhole]);
   const sellQuote = useMemo(
