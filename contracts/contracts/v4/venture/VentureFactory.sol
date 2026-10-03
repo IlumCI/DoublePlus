@@ -98,6 +98,14 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
     uint16 public constant MAX_FOUNDER_SUPPLY_BPS = 1_500; // <= 15% of supply
     uint16 public constant MAX_CURVE_FEE_BPS = 300; // ceiling on both curve fees
     uint64 public constant MIN_SWEEP_DELAY = 180 days;
+    /// @notice For this long after launch every wallet, in either mode, may
+    ///         put at most 1/LAUNCH_CAP_DIV of the target into the curve. The
+    ///         cheapest tokens are the first ones, and without a limit a bot in
+    ///         the launch block, or the creator's second wallet, could take most
+    ///         of them before a person sees the coin. It does not stop a bot
+    ///         with many wallets; it makes each one cost a separate funding.
+    uint64 public constant LAUNCH_WINDOW_SECS = 60;
+    uint256 internal constant LAUNCH_CAP_DIV = 100;
     int24 public constant TICK_SPACING = 60;
     uint24 public constant LP_FEE = 0;
     uint16 internal constant BPS = 10_000;
@@ -604,7 +612,10 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
 
         uint256 spend = curveCost(token, q, c.soldWhole) + 1; // round the cost up
         if (spend > netValue) spend = netValue;
-        if (spentWei[token][msg.sender] + spend > c.maxBuyWei) revert CapExceeded();
+        uint256 cap = block.timestamp < listings[token].createdAt + LAUNCH_WINDOW_SECS
+            ? Math.min(c.maxBuyWei, c.targetRaiseWei / LAUNCH_CAP_DIV)
+            : c.maxBuyWei;
+        if (spentWei[token][msg.sender] + spend > cap) revert CapExceeded();
 
         uint128 price = priceNow(token);
         c.soldWhole += q;

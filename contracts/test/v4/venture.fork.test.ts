@@ -90,6 +90,9 @@ async function launch(factory: any, tokenDeployer: any, signer: any, pair: strin
   }
   if (!salt) throw new Error("no vanity");
   await (await factory.connect(signer).launch(params, salt)).wait();
+  // Past the 60-second launch window, whose 1% per-wallet cap would bind.
+  await network.provider.send("evm_increaseTime", [61]);
+  await network.provider.send("evm_mine");
   return factory.allTokens((await factory.totalTokens()) - 1n);
 }
 
@@ -260,6 +263,8 @@ describe("Venture bonding-curve launchpad (fork)", function () {
     await (await rejecter.exec(factoryAddr, factory.interface.encodeFunctionData("launch", [params, ethers.ZeroHash]))).wait();
     const coin = await factory.allTokens((await factory.totalTokens()) - 1n);
     expect((await factory.listings(coin)).creator).to.equal(creator);
+    await network.provider.send("evm_increaseTime", [61]);
+    await network.provider.send("evm_mine");
 
     await (await factory.connect(whale).buy(coin, 0, { value: ethers.parseEther("2.1") })).wait(); // fills and graduates
     expect((await factory.listings(coin)).poolId).to.not.equal(ethers.ZeroHash);
@@ -312,6 +317,8 @@ describe("Venture bonding-curve launchpad (fork)", function () {
       if (isVanity(ethers.getCreate2Address(depAddr, s, hash), TEST_VANITY)) { salt = s; break; }
     }
     await (await factory.connect(founder).launch(params, salt)).wait();
+    await network.provider.send("evm_increaseTime", [61]);
+    await network.provider.send("evm_mine");
     const coin = await factory.allTokens((await factory.totalTokens()) - 1n);
     const erc = await ethers.getContractAt("QuiverToken", coin);
 

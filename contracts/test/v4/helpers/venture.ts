@@ -1,5 +1,5 @@
 import { expect } from "chai";
-import { ethers } from "hardhat";
+import { ethers, network } from "hardhat";
 
 /** The mark every real deployment ships: "2-add", double plus. */
 export const VANITY = 0x2add;
@@ -137,6 +137,7 @@ export async function launch(
     v3Path: "0x",
     ...overrides,
   };
+  delete (params as Record<string, unknown>).inLaunchWindow;
   // Every InvalidParams guard in launch() runs before deployToken(), so a call
   // expected to revert on its terms never reaches the vanity check and does not
   // need a mined salt. Mining one costs ~65k keccaks in JS, which is most of the
@@ -157,5 +158,11 @@ export async function launch(
     params.dividendMode,
   ]);
   await (await factory.connect(creator).launch(params, salt, { value })).wait();
+  // Step past the launch window, whose tighter per-wallet cap would otherwise
+  // bind every buy these suites make. The window has its own test.
+  if (!overrides.inLaunchWindow) {
+    await network.provider.send("evm_increaseTime", [61]);
+    await network.provider.send("evm_mine");
+  }
   return factory.allTokens((await factory.totalTokens()) - 1n);
 }

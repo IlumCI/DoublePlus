@@ -451,7 +451,14 @@ function RaisePanel({ v }: { v: VentureT }) {
   // curve.ts, where they are tested against the contract's own arithmetic.
   const { fee: entryFee, tokensOut } = quoteBuy(v, parsed, fees.buyBps);
   const funded = pct(v.raisedWei, v.targetRaiseWei);
-  const { capLeft, overCap } = capState(v.maxBuyWei, spent, parsed);
+  // Mirrors VentureFactory.LAUNCH_WINDOW_SECS: for the first minute every
+  // wallet may put in at most 1% of the target.
+  const now = Math.floor(useTick() / 1000);
+  const windowLeft = v.createdAt + LAUNCH_WINDOW_SECS - now;
+  const windowCap = v.targetRaiseWei / 100n;
+  const inWindow = windowLeft > 0;
+  const effectiveCap = inWindow && windowCap < v.maxBuyWei ? windowCap : v.maxBuyWei;
+  const { capLeft, overCap } = capState(effectiveCap, spent, parsed);
   const shortOnEth = eth.data !== undefined && parsed > eth.data.value;
   const ethUsdInPanel = useEthUsd();
 
@@ -543,7 +550,7 @@ function RaisePanel({ v }: { v: VentureT }) {
               {busy ? "Confirm in wallet…"
                 : !isConnected ? "Connect wallet"
                 : shortOnEth ? "Not enough ETH"
-                : overCap ? "Over your wallet cap"
+                : overCap ? (inWindow ? `First minute: max ${fmtEth(windowCap, 4)} ETH` : "Over your wallet cap")
                 : `Buy $${v.symbol}`}
             </button>
             <div className="dp-tb-slip">
@@ -589,6 +596,11 @@ function RaisePanel({ v }: { v: VentureT }) {
           </label>
           <span>{side === "buy" && tokensOut > 0n ? `at least ${fmtTok((tokensOut * BigInt(10_000 - slipBps)) / 10_000n, true)} $${v.symbol}` : ""}</span>
         </div>
+        {inWindow && (
+          <p className="dp-tb-note" style={{ marginTop: 0 }}>
+            Just launched: for the next {windowLeft}s each wallet can put in at most {fmtEth(windowCap, 4)} ETH.
+          </p>
+        )}
         <div className="dp-tb-slip">
           <span>{guaranteed ? <>closes in <Countdown deadline={v.deadline} /></> : <>no deadline</>}</span>
           <span>{ethUsdInPanel > 0 && parsed > 0n && side === "buy" ? fmtUsdV((Number(parsed) / 1e18) * ethUsdInPanel) : ""}</span>
@@ -617,6 +629,9 @@ function RaisePanel({ v }: { v: VentureT }) {
     </div>
   );
 }
+
+/** VentureFactory.LAUNCH_WINDOW_SECS. */
+const LAUNCH_WINDOW_SECS = 60;
 
 /** Measured on a mainnet fork: a plain curve buy uses ~119k gas, the filling
  *  buy that graduates ~788k. */

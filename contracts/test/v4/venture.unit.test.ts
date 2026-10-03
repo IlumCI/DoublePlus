@@ -296,6 +296,25 @@ describe("Venture bonding-curve launchpad (unit)", function () {
     expect((await factory.curveState(coin)).raisedWei).to.equal(0n);
   });
 
+  it("caps every wallet at 1% of the target for the first minute, in either mode", async () => {
+    const [, creator, sniper, later] = await ethers.getSigners();
+    const { factory, tokenDeployer, weth } = await deployStack();
+    for (const mode of [0, 1]) {
+      const coin = await launch(factory, tokenDeployer, creator, await weth.getAddress(), {
+        mode, founderRaiseBps: mode === 1 ? 0 : 3000, symbol: `W${mode}`, inLaunchWindow: true,
+      });
+      const target = (await factory.curveState(coin)).targetRaiseWei;
+      // A launch-block grab of 10% of the target is refused...
+      await expect(factory.connect(sniper).buy(coin, 0, { value: target / 10n })).to.be.revertedWithCustomError(factory, "CapExceeded");
+      // ...while a buy inside the 1% window cap goes through.
+      await (await factory.connect(sniper).buy(coin, 0, { value: target / 200n })).wait();
+      // After the window the mode's own cap applies again.
+      await network.provider.send("evm_increaseTime", [61]);
+      await network.provider.send("evm_mine");
+      await (await factory.connect(later).buy(coin, 0, { value: target / 20n })).wait();
+    }
+  });
+
   it("refuses a buy that would fill below the buyer's floor", async () => {
     // Someone else buys first, the price moves up the curve, and the second
     // buyer's quote is stale: the floor makes that a revert, not a worse fill.
