@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { BrowserRouter, Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { BrowserRouter, Link, NavLink, Route, Routes, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import type { Venture } from "./client";
 import { useSwitchChain } from "wagmi";
 
@@ -9,6 +9,7 @@ import { env } from "../lib/env";
 import { useWallet } from "../lib/useWallet";
 import { Board } from "./Board";
 import { Boundary } from "./Boundary";
+import { NotFound } from "./HttpCat";
 import { VENTURE } from "./client";
 import { captureRef } from "./referral";
 import { FilterDefs } from "./ui";
@@ -152,7 +153,7 @@ function Shell() {
                 <Route path="/rewards" element={<Flywheel />} />
                 <Route path="/stats" element={<Stats />} />
                 <Route path="/docs" element={<Docs />} />
-                <Route path="*" element={<Navigate to="/" replace />} />
+                <Route path="*" element={<NotFound />} />
               </Routes>
               </Suspense>
               </Boundary>

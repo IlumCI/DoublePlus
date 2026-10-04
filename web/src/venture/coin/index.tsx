@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { isAddress } from "viem";
 
+import { HttpCat } from "../HttpCat";
 import { NotListed, loadFills, loadVenture, type Fill, type Venture as VentureT } from "../client";
 import { useDexProfile } from "../../lib/dexscreener";
 import { PriceChart, TradeTape, usePoolTrades } from "../Chart";
@@ -49,6 +50,7 @@ export function VenturePage() {
     if (state === "missing") {
       return (
         <div className="dp-notice" style={{ margin: "40px 18px", textAlign: "center" }}>
+          <HttpCat code={404} />
           <h3>No coin at this address.</h3>
           <p>It isn't a coin launched on doubleplus. Check the link, or find it in the list.</p>
           <Link className="dp-action" style={{ display: "inline-block", marginTop: 12 }} to="/" viewTransition>All coins</Link>
@@ -58,6 +60,7 @@ export function VenturePage() {
     if (state === "down") {
       return (
         <div className="dp-notice dp-bad" style={{ margin: "40px 18px", textAlign: "center" }}>
+          <HttpCat code={503} />
           <h3>Can't reach Robinhood Chain.</h3>
           <p>The coin is read straight from the chain, and the RPC isn't answering. Your wallet and funds are unaffected.</p>
           <button className="dp-action" style={{ marginTop: 12 }} onClick={() => { setState("loading"); setAttempt((n) => n + 1); }}>Try again</button>
