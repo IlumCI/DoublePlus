@@ -213,7 +213,11 @@ export function LaunchVenture() {
       );
       const initCodeHash = keccak256(concatHex([QUIVER_TOKEN_BYTECODE, args]));
       let salt: Hex | null = null;
-      for (let i = 0n; i < 3_000_000n; i++) {
+      // Start from a random point: the same coin launched twice (a retry after
+      // a lost confirmation, say) would otherwise mine the same salt, land on
+      // an address already taken, and revert.
+      const start = crypto.getRandomValues(new BigUint64Array(1))[0] << 32n;
+      for (let i = start; i < start + 3_000_000n; i++) {
         const s: Hex = `0x${i.toString(16).padStart(64, "0")}`;
         const addr = getContractAddress({ opcode: "CREATE2", from: VENTURE.tokenDeployer, salt: s, bytecodeHash: initCodeHash });
         // The mark counts at EITHER end — 0x2add… or 0x…2add — which halves
