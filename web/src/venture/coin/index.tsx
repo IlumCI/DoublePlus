@@ -120,7 +120,7 @@ function VentureBody({ v, fills, ethUsd }: { v: VentureT; fills: Fill[]; ethUsd:
         </div>
       </div>
 
-      {v.phase === "graduated" && <StatBar trades={trades} ethUsd={ethUsd} />}
+      {v.phase === "graduated" && <StatBar coin={v.address} trades={trades} ethUsd={ethUsd} />}
 
       <div className="dp-coingrid">
         {/* LEFT: the market, then everything that justifies it */}

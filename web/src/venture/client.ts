@@ -198,6 +198,10 @@ export const hookAbi = [
   { type: "function", name: "setReferrer", stateMutability: "nonpayable", inputs: [{ type: "address" }], outputs: [] },
   { type: "function", name: "referrerOf", stateMutability: "view", inputs: [{ type: "address" }], outputs: [{ type: "address" }] },
   { type: "function", name: "refShareBps", stateMutability: "view", inputs: [], outputs: [{ type: "uint16" }] },
+  {
+    type: "function", name: "pot", stateMutability: "view", inputs: [{ type: "address" }],
+    outputs: [{ type: "uint256", name: "pairAmount" }, { type: "uint256", name: "coinAmount" }, { type: "address", name: "leader" }, { type: "uint64", name: "deadline" }],
+  },
 ] as const;
 
 export const updatesAbi = [

@@ -103,6 +103,8 @@ export function Docs() {
             their own wallet, payouts to people holding the coin, extra liquidity in the pool, and buy and sell
             orders kept near the price. Holder payouts are sent automatically once they're large enough to be worth
             the gas, or can be claimed from the Portfolio page. The platform charges {platform} per trade on top.
+            Part of that builds a pot on each coin. Every buy restarts its clock, and whoever bought last when the
+            clock runs out takes the pot.
           </p>
 
           <H id="referrals">Referrals and weekly payouts</H>
@@ -116,8 +118,9 @@ export function Docs() {
           <H id="misses">If a raise misses</H>
           <p>
             After the deadline, anyone can close the raise, and we do it automatically. The creator's locked tokens
-            are burned. Each buyer returns their tokens and gets back what they paid, less the {buyFee} buy fee,
-            from the <Link to="/desk" viewTransition>Portfolio</Link> page. Refunds stay open for a year.
+            are burned. Each buyer gets back what they paid, less the {buyFee} buy fee, sent to their wallet
+            automatically. Anyone who moved their tokens can return them and claim from
+            the <Link to="/desk" viewTransition>Portfolio</Link> page. Refunds stay open for a year.
           </p>
 
           <H id="risks">Risks</H>

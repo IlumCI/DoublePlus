@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
+import { zeroAddress } from "viem";
 
-import { factoryAbi, SOCIAL_FIELDS, VENTURE, venturePc, type PoolTrade, type Venture as VentureT } from "../client";
+import { factoryAbi, hookAbi, SOCIAL_FIELDS, VENTURE, venturePc, type PoolTrade, type Venture as VentureT } from "../client";
 import { marketStats } from "../marketStats";
 import { profileLinks, type DexProfile } from "../../lib/dexscreener";
 import { loadHolding, type Holding } from "../portfolio";
 import { safeLinkUrl } from "../safe";
 import { useWatched } from "../alerts";
-import { BuySellStrength, Delta, fmtEth, fmtUsdPrice, fmtUsdV, StatCell } from "../ui";
+import { BuySellStrength, Delta, fmtEth, fmtUsdPrice, fmtUsdV, StatCell, useTick } from "../ui";
 import { useWallet } from "../../lib/useWallet";
 import { chainNowSecs } from "../clock";
 
@@ -35,7 +36,7 @@ export function Socials({ meta, dex }: { meta: VentureT["meta"]; dex?: DexProfil
 }
 
 /** Price, size and momentum, read straight off the swap log. */
-export function StatBar({ trades, ethUsd }: { trades: PoolTrade[]; ethUsd: number }) {
+export function StatBar({ coin, trades, ethUsd }: { coin: `0x${string}`; trades: PoolTrade[]; ethUsd: number }) {
   const st = useMemo(() => marketStats(trades, chainNowSecs()), [trades]);
   const priceEth = Number(st.priceWei) / 1e18;
   return (
@@ -48,6 +49,7 @@ export function StatBar({ trades, ethUsd }: { trades: PoolTrade[]; ethUsd: numbe
         <StatCell k="1h"><Delta pct={st.change.h1} sinceInception={st.ageSecs < 3_600} ageSecs={st.ageSecs} /></StatCell>
         <StatCell k="4h"><Delta pct={st.change.h4} sinceInception={st.ageSecs < 14_400} ageSecs={st.ageSecs} /></StatCell>
         <StatCell k="24h"><Delta pct={st.change.h24} sinceInception={st.ageSecs < 86_400} ageSecs={st.ageSecs} /></StatCell>
+        <PotCell coin={coin} priceWei={st.priceWei} ethUsd={ethUsd} tradeCount={trades.length} />
       </div>
       {st.buys24 + st.sells24 > 0 && (
         <div style={{ margin: "-4px 0 14px" }}>
@@ -55,6 +57,39 @@ export function StatBar({ trades, ethUsd }: { trades: PoolTrade[]; ethUsd: numbe
         </div>
       )}
     </>
+  );
+}
+
+type Pot = { pairAmount: bigint; coinAmount: bigint; leader: `0x${string}`; deadline: bigint };
+
+/** The last-buyer pot: its value and the leader's clock. Re-read on every
+ *  new trade, since any trade can move the pot, the lead or pay it out. */
+function PotCell({ coin, priceWei, ethUsd, tradeCount }: { coin: `0x${string}`; priceWei: bigint; ethUsd: number; tradeCount: number }) {
+  const { address: me } = useWallet();
+  const [pot, setPot] = useState<Pot | null>(null);
+  useEffect(() => {
+    let live = true;
+    const read = () => venturePc.readContract({ address: VENTURE.hook, abi: hookAbi, functionName: "pot", args: [coin] })
+      .then(([pairAmount, coinAmount, leader, deadline]) => { if (live) setPot({ pairAmount, coinAmount, leader, deadline }); })
+      .catch(() => {});
+    read();
+    const id = setInterval(read, 30_000);
+    return () => { live = false; clearInterval(id); };
+  }, [coin, tradeCount]);
+  useTick();
+  if (!pot) return null;
+  const wei = pot.pairAmount + (pot.coinAmount * priceWei) / 10n ** 18n;
+  const value = ethUsd > 0 ? fmtUsdV((Number(wei) / 1e18) * ethUsd) : `${fmtEth(wei, 4)} ETH`;
+  const leading = pot.leader !== zeroAddress;
+  const left = Math.max(0, Number(pot.deadline) - chainNowSecs());
+  const clock = `${left >= 3600 ? `${Math.floor(left / 3600)}:` : ""}${String(Math.floor((left % 3600) / 60)).padStart(left >= 3600 ? 2 : 1, "0")}:${String(left % 60).padStart(2, "0")}`;
+  const mine = leading && me !== undefined && pot.leader.toLowerCase() === me.toLowerCase();
+  return (
+    <StatCell k="pot">
+      <span title={leading ? `Last buyer: ${pot.leader}` : undefined}>
+        {value}{leading && <> · {clock}{mine && " · you"}</>}
+      </span>
+    </StatCell>
   );
 }
 
