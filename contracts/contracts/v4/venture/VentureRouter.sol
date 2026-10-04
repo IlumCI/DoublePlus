@@ -14,7 +14,7 @@ import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
 import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
 
-import {VentureFactory} from "./VentureFactory.sol";
+import {IVentureListings} from "./VentureUpdates.sol";
 
 interface IWrappedNative {
     function deposit() external payable;
@@ -62,7 +62,7 @@ contract VentureRouter is IUnlockCallback, ReentrancyGuard {
     uint24 internal constant LP_FEE = 0;
 
     IPoolManager public immutable poolManager;
-    VentureFactory public immutable factory;
+    IVentureListings public immutable factory;
     IHooks public immutable hook;
     address public immutable weth;
     ISwapRouterV3 public immutable v3Router;
@@ -79,10 +79,10 @@ contract VentureRouter is IUnlockCallback, ReentrancyGuard {
 
     event Routed(address indexed trader, address indexed coin, bool isBuy, uint256 ethIn, uint256 ethOut);
 
-    constructor(IPoolManager pm, VentureFactory factory_, address weth_, ISwapRouterV3 v3Router_) {
+    constructor(IPoolManager pm, IVentureListings factory_, address weth_, ISwapRouterV3 v3Router_) {
         poolManager = pm;
         factory = factory_;
-        hook = IHooks(address(factory_.hook()));
+        hook = IHooks(factory_.hook());
         weth = weth_;
         v3Router = v3Router_;
     }

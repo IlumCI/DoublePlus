@@ -6,6 +6,7 @@ interface IVentureListings {
         external
         view
         returns (address creator, address pair, uint16 taxBps, uint64 createdAt, bytes32 poolId);
+    function hook() external view returns (address);
 }
 
 /// @title VentureUpdates
