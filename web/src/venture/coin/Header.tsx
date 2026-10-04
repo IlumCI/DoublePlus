@@ -85,10 +85,8 @@ function PotCell({ coin, priceWei, ethUsd, tradeCount }: { coin: `0x${string}`; 
   const clock = `${left >= 3600 ? `${Math.floor(left / 3600)}:` : ""}${String(Math.floor((left % 3600) / 60)).padStart(left >= 3600 ? 2 : 1, "0")}:${String(left % 60).padStart(2, "0")}`;
   const mine = leading && me !== undefined && pot.leader.toLowerCase() === me.toLowerCase();
   return (
-    <StatCell k="pot">
-      <span title={leading ? `Last buyer: ${pot.leader}` : undefined}>
-        {value}{leading && <> · {clock}{mine && " · you"}</>}
-      </span>
+    <StatCell k={leading ? `pot · ${clock}${mine ? " · you" : ""}` : "pot"}>
+      <span title={leading ? `Last buyer: ${pot.leader}` : undefined}>{value}</span>
     </StatCell>
   );
 }
