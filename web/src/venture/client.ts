@@ -1,28 +1,48 @@
-import { createPublicClient, fallback, http, parseAbiItem, type Address, type PublicClient } from "viem";
+import { createPublicClient, fallback, http, isAddress, parseAbiItem, zeroAddress, type Address, type Hex, type PublicClient } from "viem";
 
 import { chain, env } from "../lib/env";
 import { isProtocolSwap } from "./marketStats";
+import { cleanText, parseMeta } from "./safe";
+import { RevertedOnChain } from "../lib/useWallet";
 import type { RaiseMode } from "./raiseMode";
+import { chainNowSecs } from "./clock";
 
-/** VentureFactory deployment. Defaults target the Robinhood Chain testnet
- *  (46630) deployment; every address is overridable via env so the same build
- *  serves mainnet (4663) with a pure env change. */
+const vite = import.meta.env;
+
+/** A configured address, or `fallback` when the value is missing or malformed.
+ *  A typo in a deploy env must degrade to "not deployed", not a blank page. */
+function envAddress(raw: unknown, fallback: Address = zeroAddress): Address {
+  const v = typeof raw === "string" ? raw.trim() : "";
+  return isAddress(v, { strict: false }) ? v : fallback;
+}
+
+function envBigint(raw: unknown): bigint {
+  return typeof raw === "string" && /^\d+$/.test(raw.trim()) ? BigInt(raw.trim()) : 0n;
+}
+
+function envBps(raw: unknown, fallback: number): number {
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 0 && n <= 10_000 ? n : fallback;
+}
+
+/** VentureFactory deployment, all from env so one build serves testnet
+ *  (46630) and mainnet (4663). Unset contracts read as the zero address. */
 export const VENTURE = {
-  factory: (import.meta.env.VITE_VENTURE_FACTORY ?? "0x0000000000000000000000000000000000000000") as Address,
-  tokenDeployer: (import.meta.env.VITE_VENTURE_TOKEN_DEPLOYER ?? "0x0000000000000000000000000000000000000000") as Address,
-  hook: (import.meta.env.VITE_VENTURE_HOOK ?? "0x0000000000000000000000000000000000000000") as Address,
-  router: (import.meta.env.VITE_VENTURE_ROUTER ?? "0x0000000000000000000000000000000000000000") as Address,
-  weth: (import.meta.env.VITE_WETH_ADDRESS ?? "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73") as Address,
-  startBlock: BigInt(String(import.meta.env.VITE_VENTURE_START_BLOCK ?? "0")),
+  factory: envAddress(vite.VITE_VENTURE_FACTORY),
+  tokenDeployer: envAddress(vite.VITE_VENTURE_TOKEN_DEPLOYER),
+  hook: envAddress(vite.VITE_VENTURE_HOOK),
+  router: envAddress(vite.VITE_VENTURE_ROUTER),
+  weth: envAddress(vite.VITE_WETH_ADDRESS, "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73"),
+  startBlock: envBigint(vite.VITE_VENTURE_START_BLOCK),
   /** ETH/USD 8dp fallback for chains whose explorer can't price ETH (testnet).
-   *  The curve sizes its $3k start FDV from this when live pricing fails. */
-  ethUsd8Fallback: BigInt(String(import.meta.env.VITE_ETH_USD_8_FALLBACK ?? "0")),
+   *  The curve sizes its $750 start FDV from this when live pricing fails. */
+  ethUsd8Fallback: envBigint(vite.VITE_ETH_USD_8_FALLBACK),
   /** Protocol fee charged on every trade, mirrors the hook's immutable value. */
-  platformFeeBps: Number(import.meta.env.VITE_PLATFORM_FEE_BPS ?? 55),
+  platformFeeBps: envBps(vite.VITE_PLATFORM_FEE_BPS, 55),
   /** Referrer's cut of the protocol fee, mirrors the hook's immutable value. */
-  refShareBps: Number(import.meta.env.VITE_REF_SHARE_BPS ?? 2000),
-  updates: (import.meta.env.VITE_VENTURE_UPDATES ?? "0x0000000000000000000000000000000000000000") as Address,
-  poolManager: (import.meta.env.VITE_V4_POOL_MANAGER ?? "0x8366a39cc670b4001a1121b8f6a443a643e40951") as Address,
+  refShareBps: envBps(vite.VITE_REF_SHARE_BPS, 2000),
+  updates: envAddress(vite.VITE_VENTURE_UPDATES),
+  poolManager: envAddress(vite.VITE_V4_POOL_MANAGER, "0x8366a39cc670b4001a1121b8f6a443a643e40951"),
 };
 
 export const TOTAL_SUPPLY = 1_000_000_000;
@@ -94,13 +114,15 @@ export const factoryAbi = [
   { type: "function", name: "tokensForValue", stateMutability: "view", inputs: [{ type: "address" }, { type: "uint256" }], outputs: [{ type: "uint256" }] },
   { type: "function", name: "spentWei", stateMutability: "view", inputs: [{ type: "address" }, { type: "address" }], outputs: [{ type: "uint256" }] },
   { type: "function", name: "boughtTokens", stateMutability: "view", inputs: [{ type: "address" }, { type: "address" }], outputs: [{ type: "uint256" }] },
-  { type: "function", name: "buy", stateMutability: "payable", inputs: [{ type: "address" }], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "buy", stateMutability: "payable", inputs: [{ type: "address" }, { type: "uint256" }], outputs: [{ type: "uint256" }] },
   { type: "function", name: "sell", stateMutability: "nonpayable", inputs: [{ type: "address" }, { type: "uint256" }, { type: "uint256" }], outputs: [{ type: "uint256" }] },
   { type: "function", name: "curveBuyFeeBps", stateMutability: "view", inputs: [], outputs: [{ type: "uint16" }] },
   { type: "function", name: "curveSellFeeBps", stateMutability: "view", inputs: [], outputs: [{ type: "uint16" }] },
   { type: "function", name: "creationFeeWei", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
   { type: "function", name: "graduationRaiseWei", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
   { type: "function", name: "minTargetWei", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "minEthUsd8", stateMutability: "view", inputs: [], outputs: [{ type: "uint64" }] },
+  { type: "function", name: "maxEthUsd8", stateMutability: "view", inputs: [], outputs: [{ type: "uint64" }] },
   { type: "function", name: "feesAccrued", stateMutability: "view", inputs: [{ type: "address" }], outputs: [{ type: "uint256" }] },
   { type: "function", name: "withdrawFees", stateMutability: "nonpayable", inputs: [], outputs: [{ type: "uint256" }] },
   { type: "function", name: "finalize", stateMutability: "nonpayable", inputs: [{ type: "address" }], outputs: [{ type: "bytes32" }] },
@@ -182,16 +204,16 @@ export const updatesAbi = [
   { type: "function", name: "postUpdate", stateMutability: "nonpayable", inputs: [{ type: "address" }, { type: "string" }], outputs: [] },
 ] as const;
 
-export const updatePostedEvent = parseAbiItem(
+const updatePostedEvent = parseAbiItem(
   "event UpdatePosted(address indexed token, address indexed author, string update)",
 );
-export const referralPaidEvent = parseAbiItem(
+const referralPaidEvent = parseAbiItem(
   "event ReferralPaid(address indexed trader, address indexed referrer, address currency, uint256 amount)",
 );
 export const routedEvent = parseAbiItem(
   "event Routed(address indexed trader, address indexed coin, bool isBuy, uint256 ethIn, uint256 ethOut)",
 );
-export const poolSwapEvent = parseAbiItem(
+const poolSwapEvent = parseAbiItem(
   "event Swap(bytes32 indexed id, address indexed sender, int128 amount0, int128 amount1, uint160 sqrtPriceX96, uint128 liquidity, int24 tick, uint24 fee)",
 );
 
@@ -242,7 +264,7 @@ export interface Venture {
   pair: Address;
   taxBps: number;
   createdAt: number;
-  poolId: string;
+  poolId: Hex;
   meta: VentureMeta;
   deadline: number;
   priceWei: bigint;
@@ -272,105 +294,147 @@ export interface Venture {
   phase: Phase;
 }
 
-// Defined in raiseMode.ts, which is the one place that decides what differs
-// between the modes. Re-exported here so `import { GUARANTEED } from
-// "./client"` keeps working, but there is only one declaration.
-export { GUARANTEED, OPEN, type RaiseMode } from "./raiseMode";
-// Curve arithmetic lives in curve.ts so it can be tested without a chain.
-export { curveCostWei, quoteTokens, quoteSellWei, entryFeeWei, quoteBuy, capState, feePct, taxPct } from "./curve";
 
 function phaseOf(v: { finalized: boolean; aborted: boolean; deadline: number; raisedWei: bigint; targetRaiseWei: bigint; remainingWhole: bigint }): Phase {
   if (v.finalized) return "graduated";
   if (v.aborted) return "failed";
-  const now = Math.floor(Date.now() / 1000);
+  const now = chainNowSecs();
   const targetHit = v.raisedWei >= v.targetRaiseWei || v.remainingWhole === 0n;
-  if (targetHit) return "expired"; // fully funded, awaiting the graduation call
+  if (targetHit) return "expired"; // fully funded, awaiting finalize(): only factories from before graduation moved into the filling buy
   // An Open curve carries deadline = uint64 max: it never expires, it only
   // graduates, so this branch is unreachable for it by design.
   if (now >= v.deadline) return "failed"; // past deadline below target (abort pending or done)
   return "raising";
 }
 
+const allTokensCache: Address[] = [];
+
 export async function loadVentures(): Promise<Venture[]> {
   const total = Number(
     await venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "totalTokens" }),
   );
-  const out: Venture[] = [];
-  for (let i = total - 1; i >= 0; i--) {
-    const address = (await venturePc.readContract({
-      address: VENTURE.factory, abi: factoryAbi, functionName: "allTokens", args: [BigInt(i)],
-    })) as Address;
-    try {
-      out.push(await loadVenture(address));
-    } catch {
-      /* skip one that can't be read this pass */
-    }
+  // In parallel: the client batches these into multicalls, where a serial
+  // loop paid one round trip per coin and slowed the board with every launch.
+  // allTokens is append-only: fetch only the launches since the last poll.
+  const known = allTokensCache.length;
+  if (total > known) {
+    const fresh = await Promise.all(
+      Array.from({ length: total - known }, (_, k) => venturePc.readContract({
+        address: VENTURE.factory, abi: factoryAbi, functionName: "allTokens", args: [BigInt(known + k)],
+      }) as Promise<Address>),
+    );
+    allTokensCache.push(...fresh);
   }
-  return out;
+  const addresses = allTokensCache.slice(0, total).reverse();
+  const loaded = await Promise.all(addresses.map((a) => loadVenture(a).catch(() => null))); // skip one that can't be read this pass
+  return loaded.filter((v): v is Venture => v !== null);
+}
+
+const poolTickAbi = [
+  { type: "function", name: "poolTick", stateMutability: "view", inputs: [{ type: "address" }], outputs: [{ type: "int24" }] },
+] as const;
+
+/** A graduated coin's live price from its pool, in pair-wei per whole coin,
+ *  the unit the curve price uses. The curve's own price freezes at
+ *  graduation, so without this a coin's market cap never moved again. */
+async function poolPriceWei(coin: Address, pair: Address): Promise<bigint | null> {
+  const tick = await venturePc.readContract({ address: VENTURE.hook, abi: poolTickAbi, functionName: "poolTick", args: [coin] }).catch(() => null);
+  if (tick === null) return null;
+  const p01 = Math.pow(1.0001, Number(tick));
+  const p = BigInt(coin) < BigInt(pair) ? p01 : 1 / p01;
+  if (!Number.isFinite(p) || p <= 0) return null;
+  return BigInt(Math.round(p * 1e18));
+}
+
+/** The address is not a coin launched on this factory. */
+export class NotListed extends Error {
+  constructor(address: string) { super(`${address} is not a doubleplus coin`); }
 }
 
 export async function loadVenture(address: Address): Promise<Venture> {
-  const [listing, curve, terms, policyRaw, name, symbol, metaRaw] = await Promise.all([
+  try {
+    return await readVenture(address);
+  } catch (e) {
+    // A non-coin address fails on its first token read, before the listing
+    // check can say so; tell "not a coin" apart from "chain unreachable".
+    if (e instanceof NotListed) throw e;
+    const listing = await venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "listings", args: [address] })
+      .catch(() => null);
+    if (listing && listing[0] === zeroAddress) throw new NotListed(address);
+    throw e;
+  }
+}
+
+/** What never changes after launch (or changes once and then never again),
+ *  read once per coin per session. Polling then only reads the live state:
+ *  re-reading names, policies and on-chain metadata (logos included) every
+ *  15 s for every coin cost each visitor megabytes a minute and grew with
+ *  every launch. */
+interface Statics {
+  creator: Address; pair: Address; taxBps: number; createdAt: number; poolId: Hex;
+  name: string; symbol: string; meta: VentureMeta;
+  founderRaiseBps: number; maxBuyWei: bigint; vesting: Address; basePriceWei: bigint; slopeQ: bigint; mode: RaiseMode; swept: boolean;
+  policy: Venture["policy"];
+}
+const statics = new Map<string, Statics>();
+const ZERO_ID = "0x" + "0".repeat(64);
+
+async function readStatics(address: Address): Promise<Statics> {
+  const [listing, terms, policyRaw, name, symbol, metaRaw] = await Promise.all([
     venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "listings", args: [address] }),
-    venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "curveState", args: [address] }),
     venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "terms", args: [address] }),
     venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "feePolicyOf", args: [address] }),
     venturePc.readContract({ address, abi: ercAbi, functionName: "name" }),
     venturePc.readContract({ address, abi: ercAbi, functionName: "symbol" }),
     venturePc.readContract({ address, abi: ercAbi, functionName: "metadataURI" }).catch(() => ""),
   ]);
-  const [creator, pair, taxBps, createdAt, poolId] = listing as unknown as [Address, Address, number, bigint, string];
-  const c = curve as unknown as [bigint, bigint, bigint, bigint, bigint, bigint, boolean, boolean];
-  const t = terms as unknown as [number, bigint, Address, bigint, bigint, number, boolean];
-  const pol = policyRaw as unknown as [Address, number, number, number, number, number, number];
-  let meta: VentureMeta = {};
-  try {
-    meta = JSON.parse(String(metaRaw));
-  } catch {
-    /* plain string metadata */
-  }
-  const base = {
-    finalized: c[6],
-    aborted: c[7],
-    deadline: Number(c[0]),
-    raisedWei: c[4],
-    targetRaiseWei: c[5],
-    remainingWhole: c[3],
+  const [creator, pair, taxBps, createdAt, poolId] = listing;
+  if (creator === zeroAddress) throw new NotListed(address);
+  const t = terms;
+  const pol = policyRaw;
+  return {
+    creator, pair, taxBps: Number(taxBps), createdAt: Number(createdAt), poolId,
+    // Hostile or broken metadata must not be able to break the page: see safe.ts.
+    name: cleanText(name, 64) || "Unnamed", symbol: cleanText(symbol, 16) || "?", meta: parseMeta(metaRaw),
+    founderRaiseBps: Number(t[0]), maxBuyWei: t[1], vesting: t[2], basePriceWei: t[3], slopeQ: t[4],
+    mode: Number(t[5]) as RaiseMode, swept: Boolean(t[6]),
+    policy: {
+      devWallet: pol[0], buyTaxBps: Number(pol[1]), sellTaxBps: Number(pol[2]),
+      devBps: Number(pol[3]), dividendBps: Number(pol[4]), liquidityBps: Number(pol[5]), mmBps: Number(pol[6]),
+    },
   };
+}
+
+async function readVenture(address: Address): Promise<Venture> {
+  const key = address.toLowerCase();
+  let st = statics.get(key);
+  const curve = venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "curveState", args: [address] });
+  if (!st) {
+    st = await readStatics(address);
+    statics.set(key, st);
+  }
+  const c = await curve;
+  // The two fields that change once: the pool id at graduation, and the
+  // swept flag after an aborted raise's claim window. Re-read only while
+  // they still can change.
+  if (c[6] && st.poolId === ZERO_ID) {
+    const l = await venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "listings", args: [address] });
+    st.poolId = l[4];
+  }
+  if (c[7] && !st.swept) {
+    const t = await venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "terms", args: [address] });
+    st.swept = Boolean(t[6]);
+  }
+  const base = { finalized: c[6], aborted: c[7], deadline: Number(c[0]), raisedWei: c[4], targetRaiseWei: c[5], remainingWhole: c[3] };
   return {
     address,
-    name: String(name),
-    symbol: String(symbol),
-    creator,
-    pair,
-    taxBps: Number(taxBps),
-    createdAt: Number(createdAt),
-    poolId: String(poolId),
-    meta,
+    name: st.name, symbol: st.symbol, creator: st.creator, pair: st.pair, taxBps: st.taxBps, createdAt: st.createdAt,
+    poolId: st.poolId, meta: st.meta,
     deadline: base.deadline,
-    priceWei: c[1],
-    soldWhole: c[2],
-    remainingWhole: c[3],
-    raisedWei: c[4],
-    targetRaiseWei: c[5],
-    finalized: c[6],
-    aborted: c[7],
-    founderRaiseBps: Number(t[0]),
-    maxBuyWei: t[1],
-    vesting: t[2],
-    policy: {
-      devWallet: pol[0],
-      buyTaxBps: Number(pol[1]),
-      sellTaxBps: Number(pol[2]),
-      devBps: Number(pol[3]),
-      dividendBps: Number(pol[4]),
-      liquidityBps: Number(pol[5]),
-      mmBps: Number(pol[6]),
-    },
-    basePriceWei: t[3],
-    slopeQ: t[4],
-    mode: Number(t[5]) as RaiseMode,
-    swept: Boolean(t[6]),
+    priceWei: (c[6] ? await poolPriceWei(address, st.pair) : null) ?? c[1],
+    soldWhole: c[2], remainingWhole: c[3], raisedWei: c[4], targetRaiseWei: c[5], finalized: c[6], aborted: c[7],
+    founderRaiseBps: st.founderRaiseBps, maxBuyWei: st.maxBuyWei, vesting: st.vesting, policy: st.policy,
+    basePriceWei: st.basePriceWei, slopeQ: st.slopeQ, mode: st.mode, swept: st.swept,
     phase: phaseOf(base),
   };
 }
@@ -387,30 +451,19 @@ export interface Fill {
 export async function loadFills(token: Address): Promise<Fill[]> {
   const latest = await venturePc.getBlockNumber();
   const logs = await venturePc.getLogs({
-    address: VENTURE.factory, event: boughtEvent, args: { token }, fromBlock: VENTURE.startBlock, toBlock: latest,
+    address: VENTURE.factory, event: boughtEvent, args: { token }, fromBlock: VENTURE.startBlock, toBlock: latest, strict: true,
   });
   return logs
     .map((l) => ({
-      buyer: l.args.buyer as Address,
-      ethIn: l.args.ethIn as bigint,
-      tokensOut: l.args.tokensOut as bigint,
-      priceWei: l.args.priceWei as bigint,
+      buyer: l.args.buyer,
+      ethIn: l.args.ethIn,
+      tokensOut: l.args.tokensOut,
+      priceWei: l.args.priceWei,
       txHash: l.transactionHash,
       blockNumber: Number(l.blockNumber),
     }))
     .reverse();
 }
-
-/** Client-side mirror of the on-chain integral pricing, for instant quotes
- *  between polls. cost(q) = q*p0 + k*(2Sq + q^2)/2e18, all in whole tokens. */
-
-/** Mirror of VentureFactory.curveCost: the exact integral, so the sell quote
- *  the panel shows is the one the contract computes. */
-
-/** What selling `qWhole` back to the curve pays, net of the protocol fee.
- *  Guaranteed mode caps the gross at the seller's pro-rata cost basis — that
- *  cap is what keeps the refund pot solvent, so the quote must respect it. */
-
 
 // ---------------------------------------------------------------------------
 // Post-graduation market data, straight from the pool's V4 swap log.
@@ -426,8 +479,6 @@ export interface PoolTrade {
   txHash: string;
 }
 
-export interface Candle { time: number; open: number; high: number; low: number; close: number }
-
 const Q96 = 2n ** 96n;
 
 function priceFromSqrt(sqrtPriceX96: bigint, coinIsC0: boolean): bigint {
@@ -438,18 +489,19 @@ function priceFromSqrt(sqrtPriceX96: bigint, coinIsC0: boolean): bigint {
 }
 
 export async function loadPoolTrades(v: Venture): Promise<PoolTrade[]> {
-  if (!v.finalized || v.poolId === "0x" + "0".repeat(64)) return [];
+  if (!v.finalized || v.poolId === ZERO_ID) return [];
   const latest = await venturePc.getBlockNumber();
   const logs = await venturePc.getLogs({
     address: VENTURE.poolManager,
     event: poolSwapEvent,
-    args: { id: v.poolId as `0x${string}` },
+    args: { id: v.poolId },
     fromBlock: VENTURE.startBlock,
     toBlock: latest,
+    strict: true,
   });
   // Drop the hook's own fee conversions: they are protocol mechanics riding
   // the same transaction as the trade that caused them, not trader activity.
-  const swaps = logs.filter((l) => !isProtocolSwap(String(l.args.sender), {
+  const swaps = logs.filter((l) => !isProtocolSwap(l.args.sender, {
     hook: VENTURE.hook, factory: VENTURE.factory,
   }));
   if (swaps.length === 0) return [];
@@ -462,14 +514,14 @@ export async function loadPoolTrades(v: Venture): Promise<PoolTrade[]> {
   ]);
   const perBlock = lastB > firstB ? Number(last.timestamp - first.timestamp) / (lastB - firstB) : 1;
   return swaps.map((l) => {
-    const a0 = l.args.amount0 as bigint, a1 = l.args.amount1 as bigint;
+    const a0 = l.args.amount0, a1 = l.args.amount1;
     const coinDelta = coinIsC0 ? a0 : a1;
     const pairDelta = coinIsC0 ? a1 : a0;
     return {
       isBuy: coinDelta > 0n, // positive delta = paid out of the pool to the swapper
       coinAmount: coinDelta < 0n ? -coinDelta : coinDelta,
       pairAmount: pairDelta < 0n ? -pairDelta : pairDelta,
-      priceWei: priceFromSqrt(l.args.sqrtPriceX96 as bigint, coinIsC0),
+      priceWei: priceFromSqrt(l.args.sqrtPriceX96, coinIsC0),
       blockNumber: Number(l.blockNumber),
       ts: Number(first.timestamp) + Math.round((Number(l.blockNumber) - firstB) * perBlock),
       txHash: l.transactionHash,
@@ -477,35 +529,16 @@ export async function loadPoolTrades(v: Venture): Promise<PoolTrade[]> {
   });
 }
 
-/** Bucket trades into candles of `intervalSecs` (price in pair per coin, 1e18-scaled to float). */
-export function toCandles(trades: PoolTrade[], intervalSecs: number): Candle[] {
-  const out: Candle[] = [];
-  let cur: Candle | null = null;
-  for (const t of trades) {
-    const bucket = Math.floor(t.ts / intervalSecs) * intervalSecs;
-    const px = Number(t.priceWei) / 1e18;
-    if (!cur || cur.time !== bucket) {
-      if (cur) out.push(cur);
-      cur = { time: bucket, open: cur ? cur.close : px, high: px, low: px, close: px };
-    }
-    cur.high = Math.max(cur.high, px);
-    cur.low = Math.min(cur.low, px);
-    cur.close = px;
-  }
-  if (cur) out.push(cur);
-  return out;
-}
-
 /** All updates a founder posted for a venture, oldest first. */
 export async function loadUpdates(token: Address): Promise<{ author: Address; text: string; blockNumber: number; txHash: string }[]> {
-  if (VENTURE.updates === "0x0000000000000000000000000000000000000000") return [];
+  if (VENTURE.updates === zeroAddress) return [];
   const latest = await venturePc.getBlockNumber();
   const logs = await venturePc.getLogs({
-    address: VENTURE.updates, event: updatePostedEvent, args: { token }, fromBlock: VENTURE.startBlock, toBlock: latest,
+    address: VENTURE.updates, event: updatePostedEvent, args: { token }, fromBlock: VENTURE.startBlock, toBlock: latest, strict: true,
   });
   return logs.map((l) => ({
-    author: l.args.author as Address,
-    text: String(l.args.update),
+    author: l.args.author,
+    text: cleanText(l.args.update, 4000, true),
     blockNumber: Number(l.blockNumber),
     txHash: l.transactionHash,
   }));
@@ -515,12 +548,21 @@ export async function loadUpdates(token: Address): Promise<{ author: Address; te
 export async function loadReferralEarnings(referrer: Address): Promise<Map<string, bigint>> {
   const latest = await venturePc.getBlockNumber();
   const logs = await venturePc.getLogs({
-    address: VENTURE.hook, event: referralPaidEvent, args: { referrer }, fromBlock: VENTURE.startBlock, toBlock: latest,
+    address: VENTURE.hook, event: referralPaidEvent, args: { referrer }, fromBlock: VENTURE.startBlock, toBlock: latest, strict: true,
   });
   const sums = new Map<string, bigint>();
   for (const l of logs) {
-    const c = String(l.args.currency).toLowerCase();
-    sums.set(c, (sums.get(c) ?? 0n) + (l.args.amount as bigint));
+    const c = l.args.currency.toLowerCase();
+    sums.set(c, (sums.get(c) ?? 0n) + l.args.amount);
   }
   return sums;
+}
+
+/** Wait for a transaction and insist it succeeded. waitForTransactionReceipt
+ *  resolves for reverted transactions too, so without this a trade that was
+ *  mined but failed would be reported as done. */
+export async function confirmTx(hash: `0x${string}`) {
+  const rc = await venturePc.waitForTransactionReceipt({ hash });
+  if (rc.status !== "success") throw new RevertedOnChain();
+  return rc;
 }

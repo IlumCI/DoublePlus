@@ -1,4 +1,4 @@
-/* doubleplus.fund prototype — basic JS only: chrome injection, sample records,
+/* doubleplus.fun prototype — basic JS only: chrome injection, sample records,
    the launch-page templater, pixel charts, popover wiring.
    No framework, no build step. */
 (function () {
@@ -178,7 +178,7 @@
     }
     return filterDefs() +
       '<header class="topbar"><div class="shell">' +
-      '<a class="brand" href="index.html">doubleplus<sub>.fund</sub></a>' +
+      '<a class="brand" href="index.html">doubleplus<sub>.fun</sub></a>' +
       '<nav class="topnav">' + tabs + "</nav>" +
       '<div class="tb-search"><input placeholder="search tokens\u2026" id="tb-q"></div>' +
       '<a class="btn-create" href="launch.html">+ Create</a>' +
@@ -188,7 +188,7 @@
 
   function chromeFoot() {
     return '<footer class="footer"><div class="shell">' +
-      "<span>doubleplus.fund — Robinhood Chain testnet 46630</span>" +
+      "<span>doubleplus.fun — Robinhood Chain testnet 46630</span>" +
       "<span>protocol fee 1% per trade · 20% of it to referrers</span>" +
       '<span><a href="https://explorer.testnet.chain.robinhood.com" target="_blank" rel="noreferrer">explorer ↗</a></span>' +
       '<span><a href="handbook.html">docs</a></span>' +

@@ -1,5 +1,5 @@
 import { expect } from "chai";
-import { ethers } from "hardhat";
+import { ethers, network } from "hardhat";
 
 /** The mark every real deployment ships: "2-add", double plus. */
 export const VANITY = 0x2add;
@@ -34,10 +34,16 @@ export function isVanity(addr: string, mark: number = VANITY): boolean {
 // of deployStack would quietly test a different contract.
 
 export const ETH_USD_8 = 1865n * 10n ** 8n;
+/** The mainnet band the suites deploy with, so tests exercise the real guard. */
+export const ETH_USD_MIN_8 = 1_000n * 10n ** 8n;
+export const ETH_USD_MAX_8 = 10_000n * 10n ** 8n;
 export const TARGET = ethers.parseEther("2");
 export const DAY = 86_400;
 
-export async function deployStack(minTargetWei: bigint = 1n) {
+export async function deployStack(
+  minTargetWei: bigint = 1n,
+  ethUsdBand8: [bigint, bigint] = [ETH_USD_MIN_8, ETH_USD_MAX_8],
+) {
   const [admin] = await ethers.getSigners();
   const weth = await (await ethers.getContractFactory("WETH9")).deploy();
   await weth.waitForDeployment();
@@ -72,10 +78,12 @@ export async function deployStack(minTargetWei: bigint = 1n) {
      50, 100,
     minTargetWei,
     TEST_VANITY, // mark off: the suite mines no salts
+    ethUsdBand8[0],
+    ethUsdBand8[1],
   );
   await factory.waitForDeployment();
   expect(await factory.getAddress()).to.equal(predictedFactory);
-  return { factory, tokenDeployer, weth };
+  return { factory, tokenDeployer, weth, hook };
 }
 
 export async function mineSalt(tokenDeployer: any, args: any[]) {
@@ -129,6 +137,7 @@ export async function launch(
     v3Path: "0x",
     ...overrides,
   };
+  delete (params as Record<string, unknown>).inLaunchWindow;
   // Every InvalidParams guard in launch() runs before deployToken(), so a call
   // expected to revert on its terms never reaches the vanity check and does not
   // need a mined salt. Mining one costs ~65k keccaks in JS, which is most of the
@@ -149,5 +158,11 @@ export async function launch(
     params.dividendMode,
   ]);
   await (await factory.connect(creator).launch(params, salt, { value })).wait();
+  // Step past the launch window, whose tighter per-wallet cap would otherwise
+  // bind every buy these suites make. The window has its own test.
+  if (!overrides.inLaunchWindow) {
+    await network.provider.send("evm_increaseTime", [61]);
+    await network.provider.send("evm_mine");
+  }
   return factory.allTokens((await factory.totalTokens()) - 1n);
 }

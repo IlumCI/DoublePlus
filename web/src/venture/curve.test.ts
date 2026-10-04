@@ -5,6 +5,9 @@ import {
   curveCostWei,
   entryFeeWei,
   feePct,
+  priceImpactPct,
+  curveFeeWei,
+  gradValueWei,
   quoteBuy,
   quoteSellWei,
   quoteTokens,
@@ -287,5 +290,44 @@ describe("fee formatting", () => {
     expect(taxPct(250)).toBe("2.5");
     expect(taxPct(400)).toBe("4.0");
     expect(taxPct(0)).toBe("0.0");
+  });
+});
+
+describe("gradValueWei", () => {
+  it("prices a bag at the curve's closing price, above what it cost early on", () => {
+    const v = curve();
+    const q = 50_000_000n;
+    const cost = curveCostWei(v, q, 0n);
+    const atGrad = gradValueWei(v, q);
+    // The closing price is the top of the curve, so an early bag is worth more there.
+    expect(atGrad).toBeGreaterThan(cost);
+    // And it equals the marginal price at the sold-out point times the bag.
+    const endPrice = curveCostWei(v, 1n, 600_000_000n - 1n);
+    expect(Number(atGrad) / Number(q * endPrice)).toBeCloseTo(1, 3);
+  });
+});
+
+describe("curveFeeWei", () => {
+  it("takes 10% off for a referred wallet, rounding as the contract does", () => {
+    const v = 123_456_789_000_000n;
+    const plain = curveFeeWei(v, 50);
+    expect(plain).toBe((v * 50n) / 10_000n);
+    expect(curveFeeWei(v, 50, true)).toBe(plain - (plain * 1_000n) / 10_000n);
+  });
+});
+
+describe("priceImpactPct", () => {
+  const price = 10n ** 9n; // wei per whole token
+  it("is zero when the trade fills at the current price after fees", () => {
+    const eth = 10n ** 18n;
+    const tokens = ((eth * 9_900n) / 10_000n) * 10n ** 18n / price;
+    expect(priceImpactPct("buy", eth, tokens, price, 100)).toBeCloseTo(0, 6);
+  });
+  it("reports the shortfall against the current price", () => {
+    const eth = 10n ** 18n;
+    const tokens = (eth * 10n ** 18n) / price / 2n; // half of what the price promises
+    expect(priceImpactPct("buy", eth, tokens, price, 0)).toBeCloseTo(50, 6);
+    const coin = 10n ** 27n;
+    expect(priceImpactPct("sell", coin, ((coin * price) / 10n ** 18n) * 3n / 4n, price, 0)).toBeCloseTo(25, 6);
   });
 });

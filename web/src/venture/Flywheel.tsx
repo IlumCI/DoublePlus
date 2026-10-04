@@ -55,20 +55,19 @@ export function Flywheel() {
       <div className="dp-page-head">
         <h1 className="dp-page-title">Weekly rewards</h1>
         <p style={{ maxWidth: "66ch", color: "var(--dim)", fontSize: 13 }}>
-          Every Monday at 12:00 UTC a slice of protocol revenue is returned three ways: <b>40%</b> buys back and
-          burns the highest-volume tokens, <b>30%</b> rebates the most active traders, <b>30%</b> pays outside
-          liquidity providers. Each epoch publishes a manifest listing every transaction, so every line below can
-          be checked on the explorer.
+          Every Monday at 12:00 UTC part of the platform's fee income is paid out. <b>40%</b> buys and burns the
+          most-traded coins, <b>30%</b> goes to the most active traders, and <b>30%</b> to people who add their own
+          liquidity to the pools. Each week's file lists every transaction.
         </p>
       </div>
 
       {epochs === null ? (
-        <p className="dp-agate">Reading the manifests…</p>
+        <p className="dp-agate">Loading…</p>
       ) : epochs.length === 0 ? (
         <div className="dp-panel" style={{ padding: "40px 20px", textAlign: "center" }}>
-          <h3 style={{ fontSize: 18, color: "var(--paper)" }}>No epochs settled yet.</h3>
+          <h3 style={{ fontSize: 18, color: "var(--paper)" }}>Nothing paid out yet.</h3>
           <p className="dp-agate" style={{ marginTop: 6 }}>
-            The keeper publishes a manifest here the first Monday after trading starts.
+            The first payout happens on the Monday after trading starts.
           </p>
         </div>
       ) : epochs.map((e) => {
@@ -78,21 +77,21 @@ export function Flywheel() {
         return (
         <article className="dp-epoch" key={e.epoch}>
           <header>
-            <h3>EPOCH {e.epoch}</h3>
+            <h3>Week {e.epoch}</h3>
             <span className="dp-mono" style={{ fontSize: 11 }}>
               volume <b style={{ color: "var(--text)" }}>{num(e.totalVolumeEth)} ETH</b> · distributed{" "}
               <b style={{ color: "var(--text)" }}>{num(e.budgetEth)} ETH</b>
             </span>
             <span style={{ flex: 1 }} />
-            <a className="dp-mono" style={{ fontSize: 11 }} href={`/rewards/venture/epoch-${e.epoch}.json`} target="_blank" rel="noreferrer">manifest.json ↗</a>
+            <a className="dp-mono" style={{ fontSize: 11 }} href={`/rewards/venture/epoch-${e.epoch}.json`} target="_blank" rel="noreferrer">Transaction list</a>
             {e.dryRun
               ? <span className="dp-badge dp-soon">dry run</span>
               : <span className="dp-badge dp-grad">settled</span>}
           </header>
           <div className="dp-cols">
             <div>
-              <h4>Buybacks &amp; burns — 40%</h4>
-              {burns.length === 0 ? <p className="dp-agate">none this epoch</p> : (
+              <h4>Buybacks and burns, 40%</h4>
+              {burns.length === 0 ? <p className="dp-agate">none this week</p> : (
                 <ul>{burns.map((v) => (
                   <li key={v.coin}>
                     <span>{short(v.coin)}</span>
@@ -105,8 +104,8 @@ export function Flywheel() {
               )}
             </div>
             <div>
-              <h4>Trader rebates — 30%</h4>
-              {rebates.length === 0 ? <p className="dp-agate">none this epoch</p> : (
+              <h4>Trader rebates, 30%</h4>
+              {rebates.length === 0 ? <p className="dp-agate">none this week</p> : (
                 <ul>{rebates.map((r) => (
                   <li key={r.trader}>
                     <span>{short(r.trader)}</span>
@@ -119,11 +118,10 @@ export function Flywheel() {
               )}
             </div>
             <div>
-              <h4>LP rewards — 30%</h4>
+              <h4>Liquidity providers, 30%</h4>
               {makers.length === 0 ? (
                 <p className="dp-agate">
-                  No outside liquidity providers this epoch — their share rolled into the buyback pot, as the
-                  manifest records.
+                  No one added liquidity this week, so this share went to buybacks.
                 </p>
               ) : (
                 <ul>{makers.map((m) => (
@@ -137,8 +135,8 @@ export function Flywheel() {
       })}
 
       <p className="dp-agate" style={{ marginTop: 20 }}>
-        Distribution is run by the protocol treasury and published in full each week; the split itself is policy,
-        not yet contract-enforced. Every transaction above is on the explorer.
+        The platform treasury makes these payouts and publishes them weekly. The split is a policy; no contract
+        enforces it yet.
       </p>
     </div>
   );

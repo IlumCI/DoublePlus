@@ -29,7 +29,7 @@ async function main() {
 
   // One whole token costs more than the gap, so overshoot: the curve caps the
   // spend at what it needs and the buyer keeps the rest as tokens.
-  await (await factory.connect(second).buy(coin, { value: ethers.parseEther("0.0002") })).wait();
+  await (await factory.connect(second).buy(coin, 0, { value: ethers.parseEther("0.0002") })).wait();
   const after = await factory.curveState(coin);
   console.log(`raised ${eth(after.raisedWei)} / ${eth(after.targetRaiseWei)}  (target met: ${after.raisedWei >= after.targetRaiseWei})`);
 

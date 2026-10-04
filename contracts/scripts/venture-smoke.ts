@@ -79,7 +79,7 @@ async function main() {
   console.log("launched:", coin);
 
   // 2) Fill the curve to target in one buy (self-backed).
-  await (await factory.buy(coin, { value: target + target / 10n })).wait();
+  await (await factory.buy(coin, 0, { value: target + target / 10n })).wait();
   const st = await factory.curveState(coin);
   console.log("curve:", { sold: st.soldWhole.toString(), raised: ethers.formatEther(st.raisedWei) });
 

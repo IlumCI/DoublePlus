@@ -152,8 +152,8 @@ describe("termSheetRows", () => {
   it("shows the full sheet for a funded raise", () => {
     expect(keys(GUARANTEED)).toEqual([
       "Funding target",
-      "Founder cut of raise",
-      "Round deadline",
+      "Creator's cut of the raise",
+      "Deadline",
       "Anti-snipe",
     ]);
   });
@@ -162,8 +162,8 @@ describe("termSheetRows", () => {
     // The deadline row is the regression: the factory stores type(uint64).max
     // there, and rendering it as days produced ~2.1e14.
     expect(keys(OPEN)).toEqual(["Graduates at", "Anti-snipe"]);
-    expect(keys(OPEN)).not.toContain("Round deadline");
-    expect(keys(OPEN)).not.toContain("Founder cut of raise");
+    expect(keys(OPEN)).not.toContain("Deadline");
+    expect(keys(OPEN)).not.toContain("Creator's cut of the raise");
   });
 
   it("relabels the target as the graduation threshold in Open mode", () => {
@@ -180,8 +180,8 @@ describe("termSheetRows", () => {
 
   it("pluralises the deadline", () => {
     const one = termSheetRows(GUARANTEED, { ...v, days: 1 });
-    expect(one.find(([k]) => k === "Round deadline")?.[1]).toBe("1 day");
-    expect(termSheetRows(GUARANTEED, v).find(([k]) => k === "Round deadline")?.[1]).toBe("14 days");
+    expect(one.find(([k]) => k === "Deadline")?.[1]).toBe("1 day");
+    expect(termSheetRows(GUARANTEED, v).find(([k]) => k === "Deadline")?.[1]).toBe("14 days");
   });
 });
 
@@ -194,8 +194,8 @@ describe("the modes stay consistent with each other", () => {
       const f = raiseFields(m, { targetWei: 5n * 10n ** 18n, days: 14, capPct: 2, founderCutPct: 20 });
       const shown = termSheetRows(m, { targetEth: "5", founderCutPct: "20.0", days: 14, antiSnipe: "x" })
         .map(([k]) => k);
-      if (f.founderRaiseBps === 0) expect(shown, `mode ${m}`).not.toContain("Founder cut of raise");
-      if (!hasDeadline(m)) expect(shown, `mode ${m}`).not.toContain("Round deadline");
+      if (f.founderRaiseBps === 0) expect(shown, `mode ${m}`).not.toContain("Creator's cut of the raise");
+      if (!hasDeadline(m)) expect(shown, `mode ${m}`).not.toContain("Deadline");
     }
   });
 

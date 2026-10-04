@@ -41,6 +41,7 @@ async function main() {
   const factory = await (await ethers.getContractFactory("VentureFactory")).deploy(
     admin.address, admin.address, placeholder, await hook.getAddress(), placeholder, placeholder,
     await vestingDeployer.getAddress(), await tokenDeployer.getAddress(), 50, 100, 1n, VANITY,
+    1n, 2n ** 63n, // ETH/USD band wide open: local dev passes whatever price it likes
   );
   await factory.waitForDeployment();
   const router = await (await ethers.getContractFactory("VentureRouter")).deploy(
@@ -71,8 +72,8 @@ async function main() {
   await (await factory.connect(creator).launch(params, salt, { value: creationFee })).wait();
   const coin = await factory.allTokens(0n);
 
-  await (await factory.connect(buyer).buy(coin, { value: ethers.parseEther("0.6") })).wait();
-  await (await factory.connect(admin).buy(coin, { value: ethers.parseEther("0.35") })).wait();
+  await (await factory.connect(buyer).buy(coin, 0, { value: ethers.parseEther("0.6") })).wait();
+  await (await factory.connect(admin).buy(coin, 0, { value: ethers.parseEther("0.35") })).wait();
 
   console.log(JSON.stringify({
     factory: await factory.getAddress(),

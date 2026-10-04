@@ -1,31 +1,52 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
-import { VENTURE } from "./client";
+import { factoryAbi, VENTURE, venturePc } from "./client";
 import { usePageMeta } from "./seo";
-import { BRAND } from "../lib/brand";
+import { fmtEth } from "./ui";
 import { env } from "../lib/env";
 
 const SECTIONS: [string, string][] = [
-  ["launch", "1 · Launch"],
-  ["fund", "2 · Fund"],
-  ["graduate", "3 · Graduate"],
-  ["earn", "4 · Earn"],
-  ["compound", "5 · Compound"],
-  ["fails", "If a raise misses"],
-  ["compare", "How this differs"],
+  ["launch", "Launching"],
+  ["curve", "Buying on the curve"],
+  ["kinds", "Two kinds of launch"],
+  ["graduation", "Graduation"],
+  ["fees", "Fees after graduation"],
+  ["referrals", "Referrals and weekly payouts"],
+  ["misses", "If a raise misses"],
   ["risks", "Risks"],
 ];
 
-/** How it works: the mechanism, in the order a founder or backer meets it. */
+/** How it works, in the order someone meets it. Every number on this page is
+ *  either read from the factory or mirrors a contract constant. */
 export function Docs() {
   usePageMeta("How it works");
+  const [p, setP] = useState<{ grad: bigint; floor: bigint; buy: number; sell: number } | null>(null);
+  useEffect(() => {
+    const f = { address: VENTURE.factory, abi: factoryAbi } as const;
+    Promise.all([
+      venturePc.readContract({ ...f, functionName: "graduationRaiseWei" }),
+      venturePc.readContract({ ...f, functionName: "minTargetWei" }),
+      venturePc.readContract({ ...f, functionName: "curveBuyFeeBps" }),
+      venturePc.readContract({ ...f, functionName: "curveSellFeeBps" }),
+    ])
+      .then(([g, f, b, s]) => setP({ grad: g, floor: f, buy: Number(b) / 100, sell: Number(s) / 100 }))
+      .catch(() => undefined);
+  }, []);
+  const grad = p ? `${fmtEth(p.grad, 3)} ETH` : "a set amount of ETH";
+  const floor = p ? `${fmtEth(p.floor, 3)} ETH` : "the platform minimum";
+  const buyFee = p ? `${p.buy}%` : "a small fee";
+  const sellFee = p ? `${p.sell}%` : "a small fee";
+  const platform = `${(VENTURE.platformFeeBps / 100).toFixed(2)}%`;
+  const refShare = `${VENTURE.refShareBps / 100}%`;
+
   return (
     <div className="dp-shell" style={{ paddingBottom: 70 }}>
       <div className="dp-page-head">
         <h1 className="dp-page-title">How it works</h1>
         <p style={{ maxWidth: "70ch", color: "var(--dim)", fontSize: 13.5 }}>
-          {BRAND.name} turns an idea into a funded project with a real market behind it. Five steps, all enforced
-          by contracts rather than by anyone's promises.
+          Every coin starts on a bonding curve and moves to its own Uniswap pool once enough ETH has gone in.
+          The rules below are enforced by the contracts.
         </p>
       </div>
 
@@ -35,86 +56,79 @@ export function Docs() {
         </nav>
 
         <div className="dp-doc-body dp-story">
-          <Figure />
-
-          <H id="launch">1 · Launch</H>
+          <H id="launch">Launching</H>
           <p>
-            One transaction deploys the project's token and opens a funding round on a rising price curve: the
-            earlier a backer commits, the cheaper their entry. The founder sets the terms up front — target,
-            their cut of the raise (up to 30%), their vested stake (up to 15%), the deadline and the per-wallet
-            cap. Those terms are public before anyone buys and locked after deployment. Nobody can amend them,
-            the founder included.
+            Launching takes one transaction. You choose a name, ticker, description and logo, pick one of the two
+            kinds of launch below, and set the trading fee. Every coin has 1 billion tokens: 600 million are sold on
+            the curve, up to 15% can be kept by the creator, and the rest goes into the Uniswap pool at graduation.
+            The creator's tokens are locked until graduation and then released over 90 days to 2 years.
+            Nothing about a coin can be changed after it launches.
           </p>
 
-          <H id="fund">2 · Fund</H>
+          <H id="curve">Buying on the curve</H>
           <p>
-            Backers buy along the curve in plain ETH. Pricing is the exact integral of the curve, so splitting an
-            order or sniping the first block gains nothing, and the per-wallet cap stops a single buyer cornering
-            the round and controlling the market that follows.
+            The first token sells at a price that values the whole coin at $750, and the price rises with every token
+            sold. Buying in one go or in several smaller buys costs exactly the same. Each buy pays a {buyFee} fee,
+            and each sale back to the curve pays {sellFee}. For the first minute after launch, each wallet can put
+            in at most 1% of the target, so the cheapest tokens aren't all taken in the first block. Every buy and
+            sell carries a slippage limit: if someone else's trade moves the price past it first, yours is cancelled
+            instead of filling at a worse price.
           </p>
 
-          <H id="graduate">3 · Graduate</H>
+          <H id="kinds">Two kinds of launch</H>
           <p>
-            When the target is reached, anyone can trigger graduation. The founder's declared cut pays out as
-            funding and everything else — the remaining supply and the remaining ETH — becomes protocol-managed
-            liquidity in a Uniswap V4 pool. Trading opens immediately, the curve closes forever, and the
-            liquidity stays locked.
+            <b>Raise with a target.</b> The creator sets a target (at least {floor}) and a deadline of 1 to 14 days,
+            and can take up to 30% of the raise when it succeeds. One wallet can only put in so much, so a single
+            buyer can't take the whole round. Before graduation you can sell back to the curve, but for no more than
+            you paid. If the target isn't reached by the deadline, everyone gets their ETH back.
+          </p>
+          <p>
+            <b>Open curve.</b> No target and no deadline: the coin graduates once {grad} has gone in. You can sell
+            back at the curve price at any time, which can be more or less than you paid. There are no refunds.
+            The creator doesn't take a cut of the raise; they get 10% of the curve's fees instead.
           </p>
 
-          <H id="earn">4 · Earn</H>
+          <H id="graduation">Graduation</H>
           <p>
-            The fee policy set at launch runs on-chain: separate buy and sell fees of up to 4% each, split in any
-            proportion across four destinations — the founder's wallet; ETH paid to every holder; auto-liquidity
-            locked beside the price; and a market-making engine that quotes both sides of the book and re-centres
-            as the price moves. Trades in the first seconds after graduation pay a decaying premium that funds
-            those walls, so snipers pay for the depth everyone else trades against. The protocol adds{" "}
-            {(VENTURE.platformFeeBps / 100).toFixed(2)}% per trade and pays {VENTURE.refShareBps / 100}% of that
-            to whoever referred the trader.
+            The buy that fills the curve also creates the coin's Uniswap v4 pool, in the same transaction. The pool
+            opens at the curve's last price, so the price doesn't jump. The ETH raised, less the creator's cut, and
+            the unsold tokens go into the pool and stay there: no contract function can take them out. For the first
+            15 seconds, trades pay an extra fee (15% for 5 seconds, then 5%), which goes into a buy wall under the
+            price.
           </p>
 
-          <H id="compound">5 · Compound</H>
+          <H id="fees">Fees after graduation</H>
           <p>
-            Share any page with a <span className="dp-mono">?ref=</span> link and a wallet that trades through it
-            pays you {VENTURE.refShareBps / 100}% of the protocol fee on every trade it ever makes, settled in the
-            same transaction. Weekly, a slice of protocol revenue returns as buyback-burns, trader rebates and LP
-            rewards, each epoch published as a{" "}
-            <Link to="/rewards" viewTransition>manifest you can check</Link>. Holder payouts run every 15 minutes,
-            raises graduate themselves at target, and refunds open themselves at the deadline.
+            Each coin has a buy fee and a sell fee of 0 to 4%, set at launch. The creator chooses how it's split:
+            their own wallet, payouts to people holding the coin, extra liquidity in the pool, and buy and sell
+            orders kept near the price. Holder payouts are sent automatically once they're large enough to be worth
+            the gas, or can be claimed from the Portfolio page. The platform charges {platform} per trade on top.
           </p>
 
-          <H id="fails">If a raise misses</H>
+          <H id="referrals">Referrals and weekly payouts</H>
           <p>
-            It fails safe. The founder's allocation burns and every backer reclaims their full spend by returning
-            their tokens — no vote, no discretion, no waiting on anyone's goodwill. All or nothing is the whole
-            point: a founder who cannot convince the market does not walk away with its money.
+            If someone links up through your link, they pay 10% less in fees, and you get {refShare} of the
+            platform fee on every trade they make, paid in the same transaction. Each Monday, part of the platform's income buys and burns the
+            most-traded coins and goes back to the most active traders. The <Link to="/rewards" viewTransition>Rewards</Link> page
+            lists every payout.
           </p>
 
-          <H id="compare">How this differs from a memecoin launchpad</H>
-          <div className="dp-compare">
-            <div className="dp-row dp-head"><span>Typical launchpad</span><span>{BRAND.name}</span></div>
-            <div className="dp-row"><span>A name, a ticker and a curve</span><span>A term sheet written on-chain before anyone buys</span></div>
-            <div className="dp-row"><span>Raise fails, funds are gone</span><span>Raise misses target, every wei on the curve goes back</span></div>
-            <div className="dp-row"><span>Creator can exit at any time</span><span>Founder stake vests, and burns entirely if the raise fails</span></div>
-            <div className="dp-row"><span>Fees mostly to the platform</span><span>Founder-set split; holders can take the largest share</span></div>
-            <div className="dp-row"><span>Liquidity at the deployer's mercy</span><span>Locked at graduation, market-made on both sides by the protocol</span></div>
-          </div>
+          <H id="misses">If a raise misses</H>
+          <p>
+            After the deadline, anyone can close the raise, and we do it automatically. The creator's locked tokens
+            are burned. Each buyer returns their tokens and gets back what they paid, less the {buyFee} buy fee,
+            from the <Link to="/desk" viewTransition>Portfolio</Link> page. Refunds stay open for a year.
+          </p>
 
           <H id="risks">Risks</H>
           <p>
-            Anyone can launch here and the contracts are unaudited. Prices move, projects fail, and a
-            token can go to zero. The full risk disclosure lives with the{" "}
-            <Link to="/legal" viewTransition>terms</Link>.
+            Anyone can launch a coin here, and the contracts have not been audited. Most coins lose value and many go
+            to zero. Read the <Link to="/legal" viewTransition>terms</Link> before you buy.
           </p>
 
-          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 22 }}>
-            <Link className="dp-action" to="/launch" viewTransition>Launch your idea</Link>
-            <Link className="dp-action dp-ghost" to="/" viewTransition>Browse raises</Link>
-          </div>
-
-          <p className="dp-agate" style={{ marginTop: 20 }}>
-            Running on {env.chainName}
-            {env.explorerUrl && <> · <a href={env.explorerUrl} target="_blank" rel="noreferrer">explorer ↗</a></>}
-            {" "}· factory <span className="dp-mono">{VENTURE.factory}</span>
+          <p className="dp-agate" style={{ marginTop: 24 }}>
+            {env.chainName}
+            {env.explorerUrl && <> · <a href={`${env.explorerUrl}/address/${VENTURE.factory}`} target="_blank" rel="noreferrer">factory contract</a></>}
           </p>
         </div>
       </div>
@@ -124,44 +138,4 @@ export function Docs() {
 
 function H({ id, children }: { id: string; children: React.ReactNode }) {
   return <h2 id={id}>{children}<a className="dp-anchor" href={`#${id}`} aria-label="Link to this section">#</a></h2>;
-}
-
-/** The mechanism in one picture, because the prose version needs six. */
-function Figure() {
-  const stages: [string, string][] = [
-    ["Launch", "terms locked on-chain"],
-    ["Raise", "curve price rises"],
-    ["Graduate", "liquidity locks"],
-    ["Trade", "fees split four ways"],
-  ];
-  return (
-    <figure className="dp-figure">
-      <svg viewBox="0 0 700 168" width="100%" role="img" aria-label="Launch, raise, graduate, trade — with refunds if the target is missed, and fees splitting to founder, holders, liquidity and market making.">
-        {stages.map(([label, sub], i) => {
-          const x = 8 + i * 176;
-          return (
-            <g key={label}>
-              <rect x={x} y={26} width={150} height={52} rx={10} fill="var(--panel-2)" stroke="var(--line-2)" />
-              <text x={x + 75} y={50} textAnchor="middle" fill="var(--text)" fontSize="14" fontFamily="var(--body)" fontWeight="700">{label}</text>
-              <text x={x + 75} y={67} textAnchor="middle" fill="var(--dim)" fontSize="10.5" fontFamily="var(--mono)">{sub}</text>
-              {i < stages.length - 1 && (
-                <path d={`M${x + 152} 52 h18`} stroke="var(--up)" strokeWidth="2" markerEnd="url(#dp-arrow)" />
-              )}
-            </g>
-          );
-        })}
-        <defs>
-          <marker id="dp-arrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
-            <path d="M0 0 L7 3.5 L0 7 z" fill="var(--up)" />
-          </marker>
-        </defs>
-        <path d="M258 78 v22 h-150 v-22" stroke="var(--down)" strokeWidth="1.5" fill="none" strokeDasharray="4 3" />
-        <text x="183" y="116" textAnchor="middle" fill="var(--down)" fontSize="10.5" fontFamily="var(--mono)">misses target → curve spend returned</text>
-        {["founder", "holders", "liquidity", "market-making"].map((d, i) => (
-          <text key={d} x={545} y={100 + i * 16} textAnchor="middle" fill="var(--dim)" fontSize="10.5" fontFamily="var(--mono)">↳ {d}</text>
-        ))}
-      </svg>
-      <figcaption>Every stage is triggered by the contract, not by an operator.</figcaption>
-    </figure>
-  );
 }

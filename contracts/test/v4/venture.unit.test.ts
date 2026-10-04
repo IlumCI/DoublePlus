@@ -35,7 +35,7 @@ describe("Venture bonding-curve launchpad (unit)", function () {
       }
       expect(await factory.curveCost(coin, q + 1n, sold)).to.be.greaterThan(value);
       if (i % 7 === 0 && state.raisedWei < TARGET / 2n) {
-        await (await factory.connect(creator).buy(coin, { value: ethers.parseEther("0.01") })).wait();
+        await (await factory.connect(creator).buy(coin, 0, { value: ethers.parseEther("0.01") })).wait();
       }
     }
   });
@@ -48,9 +48,9 @@ describe("Venture bonding-curve launchpad (unit)", function () {
     const coinB = await launch(factory, tokenDeployer, creatorB, wethAddr, { symbol: "VNT2" });
 
     // Same total spend: 1 x 0.8 ETH on curve A, 8 x 0.1 ETH on curve B.
-    await (await factory.connect(buyer).buy(coinA, { value: ethers.parseEther("0.8") })).wait();
+    await (await factory.connect(buyer).buy(coinA, 0, { value: ethers.parseEther("0.8") })).wait();
     for (let i = 0; i < 8; i++) {
-      await (await factory.connect(buyer).buy(coinB, { value: ethers.parseEther("0.1") })).wait();
+      await (await factory.connect(buyer).buy(coinB, 0, { value: ethers.parseEther("0.1") })).wait();
     }
     const gotA = await (await ethers.getContractAt("QuiverToken", coinA)).balanceOf(buyer.address);
     const gotB = await (await ethers.getContractAt("QuiverToken", coinB)).balanceOf(buyer.address);
@@ -67,8 +67,8 @@ describe("Venture bonding-curve launchpad (unit)", function () {
     const coin = await launch(factory, tokenDeployer, creator, await weth.getAddress(), {
       maxBuyWei: TARGET / 100n,
     });
-    await (await factory.connect(buyer).buy(coin, { value: TARGET / 100n - 10n ** 9n })).wait();
-    await expect(factory.connect(buyer).buy(coin, { value: TARGET / 100n })).to.be.revertedWithCustomError(
+    await (await factory.connect(buyer).buy(coin, 0, { value: TARGET / 100n - 10n ** 9n })).wait();
+    await expect(factory.connect(buyer).buy(coin, 0, { value: TARGET / 100n })).to.be.revertedWithCustomError(
       factory,
       "CapExceeded",
     );
@@ -117,8 +117,8 @@ describe("Venture bonding-curve launchpad (unit)", function () {
     const coin = await launch(factory, tokenDeployer, creator, await weth.getAddress());
     const erc = await ethers.getContractAt("QuiverToken", coin);
 
-    await (await factory.connect(buyer1).buy(coin, { value: ethers.parseEther("0.3") })).wait();
-    await (await factory.connect(buyer2).buy(coin, { value: ethers.parseEther("0.2") })).wait();
+    await (await factory.connect(buyer1).buy(coin, 0, { value: ethers.parseEther("0.3") })).wait();
+    await (await factory.connect(buyer2).buy(coin, 0, { value: ethers.parseEther("0.2") })).wait();
     const spent1 = await factory.spentWei(coin, buyer1.address);
     expect(spent1).to.be.greaterThan(0n);
 
@@ -128,7 +128,7 @@ describe("Venture bonding-curve launchpad (unit)", function () {
 
     await network.provider.send("evm_increaseTime", [3 * DAY]);
     await network.provider.send("evm_mine");
-    await expect(factory.connect(buyer1).buy(coin, { value: 10n ** 15n })).to.be.revertedWithCustomError(
+    await expect(factory.connect(buyer1).buy(coin, 0, { value: 10n ** 15n })).to.be.revertedWithCustomError(
       factory,
       "CurveClosed",
     );
@@ -164,9 +164,9 @@ describe("Venture bonding-curve launchpad (unit)", function () {
     });
     const ercA = await ethers.getContractAt("QuiverToken", coinA);
 
-    await (await factory.connect(buyer1).buy(coinA, { value: ethers.parseEther("0.35") })).wait();
-    await (await factory.connect(buyer2).buy(coinA, { value: ethers.parseEther("0.22") })).wait();
-    await (await factory.connect(buyer3).buy(coinB, { value: ethers.parseEther("0.41") })).wait();
+    await (await factory.connect(buyer1).buy(coinA, 0, { value: ethers.parseEther("0.35") })).wait();
+    await (await factory.connect(buyer2).buy(coinA, 0, { value: ethers.parseEther("0.22") })).wait();
+    await (await factory.connect(buyer3).buy(coinB, 0, { value: ethers.parseEther("0.41") })).wait();
 
     const raisedA = (await factory.curveState(coinA)).raisedWei;
     const raisedB = (await factory.curveState(coinB)).raisedWei;
@@ -223,7 +223,7 @@ describe("Venture bonding-curve launchpad (unit)", function () {
     const coin = await launch(factory, tokenDeployer, creator, await weth.getAddress());
 
     const sent = ethers.parseEther("0.4");
-    await (await factory.connect(buyer1).buy(coin, { value: sent })).wait();
+    await (await factory.connect(buyer1).buy(coin, 0, { value: sent })).wait();
 
     const fee = (sent * 50n) / 10_000n; // curveBuyFeeBps = 50
     expect(await factory.feesAccrued(admin.address)).to.equal(fee);
@@ -249,8 +249,8 @@ describe("Venture bonding-curve launchpad (unit)", function () {
     const erc = await ethers.getContractAt("QuiverToken", coin);
 
     // buyer1 in first and cheapest, buyer2 pushes the curve up behind them.
-    await (await factory.connect(buyer1).buy(coin, { value: ethers.parseEther("0.2") })).wait();
-    await (await factory.connect(buyer2).buy(coin, { value: ethers.parseEther("0.5") })).wait();
+    await (await factory.connect(buyer1).buy(coin, 0, { value: ethers.parseEther("0.2") })).wait();
+    await (await factory.connect(buyer2).buy(coin, 0, { value: ethers.parseEther("0.5") })).wait();
 
     const basis = await factory.spentWei(coin, buyer1.address);
     const held = await erc.balanceOf(buyer1.address);
@@ -296,33 +296,88 @@ describe("Venture bonding-curve launchpad (unit)", function () {
     expect((await factory.curveState(coin)).raisedWei).to.equal(0n);
   });
 
-  it("freezes the curve both ways once the graduation trigger is crossed", async () => {
+  it("charges a referred buyer 10% less curve fee, and still pays the referrer", async () => {
+    const [admin, creator, plain, referred, referrer] = await ethers.getSigners();
+    const { factory, tokenDeployer, weth, hook } = await deployStack();
+    const coin = await launch(factory, tokenDeployer, creator, await weth.getAddress(), { maxBuyWei: ethers.parseEther("10") });
+    await (await hook.connect(referred).setReferrer(referrer.address)).wait();
+    const value = ethers.parseEther("0.1");
+    const treasury = await hook.platformTreasury();
+    const fees = async () => (await factory.feesAccrued(treasury)) + (await factory.feesAccrued(referrer.address));
+    const f0 = await fees();
+    await (await factory.connect(plain).buy(coin, 0, { value })).wait();
+    const f1 = await fees();
+    await (await factory.connect(referred).buy(coin, 0, { value })).wait();
+    const f2 = await fees();
+    expect(f2 - f1).to.equal(((f1 - f0) * 9_000n) / 10_000n);
+    expect(await factory.feesAccrued(referrer.address)).to.be.greaterThan(0n);
+    void admin;
+  });
+
+  it("refuses a pair other than WETH", async () => {
+    const [, creator] = await ethers.getSigners();
+    const { factory, tokenDeployer, weth } = await deployStack();
+    const other = await (await ethers.getContractFactory("WETH9")).deploy();
+    await expect(
+      launch(factory, tokenDeployer, creator, await other.getAddress(), { v3Path: "0x01" }, 0n, true),
+    ).to.be.revertedWithCustomError(factory, "InvalidParams");
+    await launch(factory, tokenDeployer, creator, await weth.getAddress()); // WETH still launches
+  });
+
+  it("caps every wallet at 1% of the target for the first minute, in either mode", async () => {
+    const [, creator, sniper, later] = await ethers.getSigners();
+    const { factory, tokenDeployer, weth } = await deployStack();
+    for (const mode of [0, 1]) {
+      const coin = await launch(factory, tokenDeployer, creator, await weth.getAddress(), {
+        mode, founderRaiseBps: mode === 1 ? 0 : 3000, symbol: `W${mode}`, inLaunchWindow: true,
+      });
+      const target = (await factory.curveState(coin)).targetRaiseWei;
+      // A launch-block grab of 10% of the target is refused...
+      await expect(factory.connect(sniper).buy(coin, 0, { value: target / 10n })).to.be.revertedWithCustomError(factory, "CapExceeded");
+      // ...while a buy inside the 1% window cap goes through.
+      await (await factory.connect(sniper).buy(coin, 0, { value: target / 200n })).wait();
+      // After the window the mode's own cap applies again.
+      await network.provider.send("evm_increaseTime", [61]);
+      await network.provider.send("evm_mine");
+      await (await factory.connect(later).buy(coin, 0, { value: target / 20n })).wait();
+    }
+  });
+
+  it("refuses a buy that would fill below the buyer's floor", async () => {
+    // Someone else buys first, the price moves up the curve, and the second
+    // buyer's quote is stale: the floor makes that a revert, not a worse fill.
+    const [, creator, early, late] = await ethers.getSigners();
+    const { factory, tokenDeployer, weth } = await deployStack();
+    const coin = await launch(factory, tokenDeployer, creator, await weth.getAddress(), { maxBuyWei: ethers.parseEther("10") });
+    const value = ethers.parseEther("0.1");
+    const quoted = await factory.connect(late).buy.staticCall(coin, 0, { value });
+    await (await factory.connect(early).buy(coin, 0, { value: ethers.parseEther("0.5") })).wait();
+    await expect(factory.connect(late).buy(coin, quoted, { value })).to.be.revertedWithCustomError(factory, "SlippageExceeded");
+    const lower = await factory.connect(late).buy.staticCall(coin, 0, { value });
+    expect(lower).to.be.lessThan(quoted);
+    await expect(factory.connect(late).buy(coin, lower, { value })).to.not.be.reverted;
+  });
+
+  it("never leaves a funded curve frozen: the filling buy graduates or reverts whole", async () => {
+    // Graduation runs inside the buy that fills the raise. This suite has no
+    // real PoolManager, so graduation cannot succeed here, and the property
+    // that matters is that the buy then reverts as a unit: no state where the
+    // target is crossed but the pool does not exist. The fork suite covers
+    // the successful path, including the closed curve afterwards.
     const [, creator, buyer1] = await ethers.getSigners();
     const { factory, tokenDeployer, weth } = await deployStack();
     const coin = await launch(factory, tokenDeployer, creator, await weth.getAddress(), {
       maxBuyWei: ethers.parseEther("10"),
     });
-    const erc = await ethers.getContractAt("QuiverToken", coin);
+    await (await factory.connect(buyer1).buy(coin, 0, { value: ethers.parseEther("0.5") })).wait();
+    const before = await factory.curveState(coin);
 
-    await (await factory.connect(buyer1).buy(coin, { value: ethers.parseEther("2.4") })).wait();
-    expect((await factory.curveState(coin)).raisedWei).to.be.greaterThanOrEqual(TARGET);
-
-    // A sell here could drag a funded raise back under target and make it
-    // abortable, so the lock has to close both directions, not just buys.
-    const held = await erc.balanceOf(buyer1.address);
-    await (await erc.connect(buyer1).approve(await factory.getAddress(), held)).wait();
-    await expect(factory.connect(buyer1).sell(coin, 1000n, 0)).to.be.revertedWithCustomError(
-      factory,
-      "CurveClosed",
-    );
-    await expect(
-      factory.connect(buyer1).buy(coin, { value: 10n ** 15n }),
-    ).to.be.revertedWithCustomError(factory, "CurveClosed");
-
-    // Frozen above target, abort can never fire.
-    await network.provider.send("evm_increaseTime", [3 * DAY]);
-    await network.provider.send("evm_mine");
-    await expect(factory.abort(coin)).to.be.revertedWithCustomError(factory, "CurveLive");
+    await expect(factory.connect(buyer1).buy(coin, 0, { value: ethers.parseEther("2.4") })).to.be.reverted;
+    const after = await factory.curveState(coin);
+    expect(after.raisedWei).to.equal(before.raisedWei);
+    expect(after.soldWhole).to.equal(before.soldWhole);
+    expect(after.finalized).to.equal(false);
+    expect(after.raisedWei).to.be.lessThan(TARGET);
   });
 
   it("open mode: no deadline, no founder cut, uncapped sells, creator earns curve fees", async () => {
@@ -346,12 +401,12 @@ describe("Venture bonding-curve launchpad (unit)", function () {
     const erc = await ethers.getContractAt("QuiverToken", coin);
     expect((await factory.curveState(coin)).targetRaiseWei).to.equal(ethers.parseEther("4"));
 
-    await (await factory.connect(buyer1).buy(coin, { value: ethers.parseEther("0.3") })).wait();
+    await (await factory.connect(buyer1).buy(coin, 0, { value: ethers.parseEther("0.3") })).wait();
 
     // No deadline: the curve is still open long past any raise window.
     await network.provider.send("evm_increaseTime", [60 * DAY]);
     await network.provider.send("evm_mine");
-    await (await factory.connect(buyer2).buy(coin, { value: ethers.parseEther("1.2") })).wait();
+    await (await factory.connect(buyer2).buy(coin, 0, { value: ethers.parseEther("1.2") })).wait();
     await expect(factory.abort(coin)).to.be.revertedWithCustomError(factory, "CurveLive");
 
     // buyer1 bought lowest and may leave at a profit — no cost-basis cap here.
@@ -388,7 +443,7 @@ describe("Venture bonding-curve launchpad (unit)", function () {
     const coin = await launch(factory, tokenDeployer, creator, await weth.getAddress(), {}, creationFee);
     expect(await factory.feesAccrued(admin.address)).to.equal(creationFee);
 
-    await (await factory.connect(buyer1).buy(coin, { value: ethers.parseEther("0.2") })).wait();
+    await (await factory.connect(buyer1).buy(coin, 0, { value: ethers.parseEther("0.2") })).wait();
     await network.provider.send("evm_increaseTime", [3 * DAY]);
     await network.provider.send("evm_mine");
     await (await factory.abort(coin)).wait();
@@ -419,7 +474,7 @@ describe("Venture bonding-curve launchpad (unit)", function () {
     // Below the cost of one whole token the quote rounds to zero. The buy must
     // revert rather than credit spentWei against zero tokens, which would
     // strand the ETH: refund() requires both sides to be non-zero.
-    await expect(factory.connect(buyer1).buy(coin, { value: 1n })).to.be.revertedWithCustomError(
+    await expect(factory.connect(buyer1).buy(coin, 0, { value: 1n })).to.be.revertedWithCustomError(
       factory,
       "InvalidParams",
     );

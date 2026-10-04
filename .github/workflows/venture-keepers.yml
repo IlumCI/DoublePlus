@@ -21,6 +21,11 @@ on:
         description: "which keeper to run (ops | flywheel)"
         default: "ops"
 
+# Least privilege: read-only unless a job asks for more (flywheel commits
+# its manifest, so it alone gets contents: write).
+permissions:
+  contents: read
+
 concurrency:
   group: venture-keepers
   cancel-in-progress: false
@@ -31,13 +36,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "20"
       - name: Install keeper deps
         working-directory: keeper
-        run: npm install --no-audit --no-fund
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Graduate, abort, deliver dividends
         working-directory: keeper
         env:
@@ -59,22 +64,28 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "20"
       - name: Install keeper deps
         working-directory: keeper
-        run: npm install --no-audit --no-fund
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Run the weekly jackpot epoch
         working-directory: keeper
         env:
           KEEPER_PRIVATE_KEY: ${{ secrets.VENTURE_KEEPER_PK }}
           RPC_URL: ${{ secrets.VENTURE_RPC_URL || 'https://rpc.testnet.chain.robinhood.com' }}
+          # Same variable as the ops job; the keeper aborts if it disagrees with RPC_URL.
+          CHAIN_ID: ${{ vars.VENTURE_CHAIN_ID || '46630' }}
         run: |
           if [ -z "$KEEPER_PRIVATE_KEY" ]; then echo "VENTURE_KEEPER_PK not set; skipping"; exit 0; fi
           node venture-flywheel.mjs
+      # Runs even when the epoch failed: a half-paid epoch leaves its pending
+      # journal (every tx hash already sent), and the next run must see it to
+      # resume instead of paying the same recipients again.
       - name: Commit the epoch manifest
+        if: ${{ !cancelled() }}
         run: |
           git config user.name "doubleplus-keeper"
           git config user.email "keeper@users.noreply.github.com"

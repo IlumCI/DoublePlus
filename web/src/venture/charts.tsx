@@ -1,9 +1,6 @@
-import {
-  Cell, Legend as RLegend, Pie, PieChart, PolarAngleAxis, RadialBar, RadialBarChart,
-  ResponsiveContainer, Tooltip,
-} from "recharts";
+import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 
-/** Chart kit on Recharts: animated donuts, radial gauges and stacked bars,
+/** Chart kit on Recharts: animated donuts and stacked bars,
  *  so the numbers land as pictures instead of sentences. */
 
 export const SPLIT_COLORS = ["#a5dbb2", "#cba6f7", "#8fb4e3", "#f0c987"];
@@ -77,28 +74,6 @@ export function Legend({ slices, unit = "%" }: { slices: Slice[]; unit?: string 
   );
 }
 
-/** Radial gauge for "% to graduation". */
-export function Ring({ pct, size = 132, label }: { pct: number; size?: number; label?: string }) {
-  const done = Math.max(0, Math.min(100, pct));
-  const data = [{ name: "funded", value: done, fill: "#a5dbb2" }];
-  return (
-    <div style={{ width: size, height: size, position: "relative", flex: `0 0 ${size}px` }}>
-      <ResponsiveContainer width="100%" height="100%">
-        <RadialBarChart innerRadius="72%" outerRadius="100%" data={data}
-          startAngle={90} endAngle={-270} barSize={13}>
-          <PolarAngleAxis type="number" domain={[0, 100]} angleAxisId={0} tick={false} />
-          <RadialBar background={{ fill: "#303044" }} dataKey="value" cornerRadius={7}
-            angleAxisId={0} animationDuration={600} />
-        </RadialBarChart>
-      </ResponsiveContainer>
-      <div style={{ position: "absolute", inset: 0, display: "grid", placeContent: "center", textAlign: "center", pointerEvents: "none" }}>
-        <span style={{ fontFamily: "var(--mono)", fontSize: size / 3.8, color: "var(--text)", lineHeight: 1 }}>{done.toFixed(0)}%</span>
-        {label && <span style={{ fontFamily: "var(--mono)", fontSize: size / 12, color: "var(--faint)", marginTop: 3 }}>{label}</span>}
-      </div>
-    </div>
-  );
-}
-
 /** Stacked bar for supply or raise allocation. */
 export function SplitBar({ slices, height = 16 }: { slices: Slice[]; height?: number }) {
   const total = slices.reduce((a, s) => a + s.value, 0) || 1;
@@ -116,4 +91,3 @@ export function SplitBar({ slices, height = 16 }: { slices: Slice[]; height?: nu
   );
 }
 
-export { RLegend };

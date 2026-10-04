@@ -18,7 +18,7 @@ keep it alive. It does not explain the contracts — read those in
 | --- | --- | --- | --- | --- |
 | `copair` | **hoodheist.fun** — production | Robinhood 4663 | `robinhood-flywheel.json` | Vercel cron `/api/keeper`, 10 min |
 | `base` | basedstonk.fun | Base 8453 | `base-stockfly-v3.json` | GH Actions `base-keeper.yml`, 30 min |
-| `venture` | **doubleplus.fund** — active development | Robinhood **testnet** 46630 | `venture-testnet.json` | GH Actions `venture-keepers.yml`, 15 min + weekly |
+| `venture` | **doubleplus.fun** — active development, mainnet launch pending | Robinhood **testnet** 46630 | `venture-testnet.json` | GH Actions `venture-keepers.yml`, 15 min + weekly |
 | `hammr` | hammr | Robinhood 4663 | `robinhood-hammr.json` | none |
 | `arc` | arcx.fun | Arc 5042 | `arc-v3-launchpad.json` | none (permissionless `harvestFees`) |
 | `steadypads` | steadypads.vercel.app | Stable 988 | `stable-launchpad.json` | none |
@@ -112,7 +112,7 @@ no serverless functions do not need `assemble.sh`.
 ## Deploying contracts
 
 Hardhat only. No Foundry. Solidity 0.8.26, `viaIR`, `runs: 400`, with
-`VentureFactory.sol` overridden to `runs: 1` — it sits at 22,661 of the 24,576
+`VentureFactory.sol` overridden to `runs: 1` — it sits at 23,795 of the 24,576
 byte limit, so **any addition to it must be size-checked before it can ship**.
 
 Network config is env-driven; the single `robinhood` network entry serves both
@@ -159,16 +159,31 @@ the prediction held, and renounces factory ownership at the end.
 | `REF_SHARE_BPS` | 2000 (20% of the fee) | ≤ 5000 |
 | `CURVE_BUY_FEE_BPS` | 50 (0.5%) | ≤ 300 |
 | `CURVE_SELL_FEE_BPS` | 100 (1%) | ≤ 300 |
-| `MIN_TARGET_ETH` | **0.5** | ≤ 1,000,000 |
+| `MIN_TARGET_ETH` | **2** | ≤ 1,000,000 |
+| `GRADUATION_RAISE_ETH` | 4 (setParams) | ≥ `MIN_TARGET_ETH` |
+| `CREATION_FEE_ETH` | 0 (setParams) | — |
+| `ETH_USD_MIN` / `ETH_USD_MAX` | 1,000 / 10,000 on 4663; 1 / 10,000,000 on 46630 | min > 0, min ≤ max |
 | `ADMIN`, `TREASURY` | deployer | — |
+
+`ETH_USD_MIN`/`MAX` bound the ETH/USD price a launcher passes to `launch()`,
+which sizes the curve's start price. Without the band a launcher could pass an
+absurd price, open their own curve near zero and buy the cheap end. If ETH
+trades outside the band, every launch reverts until a redeploy, so pick it with
+the factory's expected lifetime in mind.
 
 The script's own header comment says `PLATFORM_FEE_BPS` defaults to 100; the code
 says 55. The code is right.
 
 `MIN_TARGET_ETH` is the one to think about. Testnet runs 0.002 so a faucet wallet
-can drive a raise to graduation; **mainnet must ship 0.5**, and it is coupled to
-the contract's `START_MCAP_USD_8` of $750 — changing either without the other
-strands one of them. `venture.lock.test.ts` pins the relationship.
+can drive a raise to graduation; **mainnet ships 2**. It must stay above what the
+whole curve costs at the contract's `START_MCAP_USD_8` of $750 (0.24 ETH at
+$1,865), or small raises become unlaunchable; `venture.lock.test.ts` pins that.
+A raise of T ETH graduates at an FDV of about 3.33·T ETH less the $750 start, so
+the 2 ETH floor opens near 6.3 ETH FDV and the 4 ETH open-curve trigger near
+13 ETH (~$24k at $1,865). At 0.5 ETH it was ~$2.4k, invisible on every tracker.
+
+The deploy script applies `GRADUATION_RAISE_ETH` and `CREATION_FEE_ETH` through
+`setParams` when the deployer is `ADMIN`, and prints the call otherwise.
 
 After deploying, regenerate `web/.env.venture.example` from the new JSON.
 
@@ -244,7 +259,7 @@ callable only by `protocolAdmin`:
 
 **`setParams` state does not survive a redeploy.** All four values are plain
 storage with no constructor initialisation, so a new factory starts at
-`creationFeeWei = 0`, `graduationRaiseWei = 0.5 ether`, `sweepDelaySecs = 365 days`,
+`creationFeeWei = 0`, `graduationRaiseWei = 4 ether` (or the floor, if higher), `sweepDelaySecs = 365 days`,
 `creatorCurveShareBps = 1000`. The testnet creation fee was set to 0.0005 ETH in
 `9f0ffaf`, then the factory was redeployed in `c905d1c` and nothing re-applied it —
 so the live testnet factory is almost certainly charging nothing. **Re-run
@@ -367,7 +382,7 @@ if it passes when it should fail, the whole suite is meaningless.
   creation fee. Re-run it as the last step of every deploy.
 - **Two factories are at the bytecode limit.** `HammrFactory` is 24,524 of 24,576
   — 52 bytes spare — and `HoodFactory` has 381. Neither can be modified again,
-  only redeployed. `VentureFactory` is at 22,793 and still growing; check the
+  only redeployed. `VentureFactory` is at 23,795 and still growing; check the
   size before adding to it.
 - **Nine `*.fork.test.ts` files and fourteen scripts mined CREATE2 salts against
   a stale `QuiverToken` ABI** after the constructor gained two dividend

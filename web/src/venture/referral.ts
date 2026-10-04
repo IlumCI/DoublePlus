@@ -1,4 +1,4 @@
-import type { Address } from "viem";
+import { isAddress, type Address } from "viem";
 
 const KEY = "venture.ref";
 
@@ -17,14 +17,10 @@ export function captureRef() {
 export function storedRef(): Address | null {
   try {
     const v = localStorage.getItem(KEY);
-    return v && /^0x[0-9a-fA-F]{40}$/.test(v) ? (v as Address) : null;
+    return v && isAddress(v, { strict: false }) ? v : null;
   } catch {
     return null;
   }
-}
-
-export function clearStoredRef() {
-  try { localStorage.removeItem(KEY); } catch { /* ignore */ }
 }
 
 /** The share link for the current page, crediting `me`. */

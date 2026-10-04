@@ -16,7 +16,8 @@
 //   RPC_URL             (default https://rpc.testnet.chain.robinhood.com)
 //   CHAIN_ID            (default 46630) picks the deployment file: 4663 ->
 //                       venture-robinhood.json, 46630 -> venture-testnet.json.
-//                       Must agree with RPC_URL or the run aborts.
+//                       Must agree with RPC_URL or the run aborts; any other
+//                       chain needs DEPLOYMENT_FILE.
 //   DEPLOYMENT_FILE     explicit override for the above
 //   MIN_DELIVER         (default 1e12 wei of the reward token)
 //   RECENTER_SPACINGS   (default 10) recenter walls whose near edge drifted
@@ -24,33 +25,35 @@
 //   LOG_CHUNK           (default 500000) block span per getLogs page
 //   CONFIRMATIONS       (default 3)
 //   DRY_RUN             set to log intended actions without sending txs
+//   MAX_SPEND_ETH       (default 0.01) gas this run may spend before it stops;
+//                       bounds what a flood of spam coins can cost the treasury
+//   DELIVER_GAS_MULT    (default 4) a payout is only pushed when it is worth at
+//                       least this many times the gas it costs to push
 import { ethers } from "ethers";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
 
-const here = dirname(fileURLToPath(import.meta.url));
-// Pick the deployment by chain rather than defaulting to testnet. The old
-// default meant pointing RPC_URL at mainnet silently kept the testnet
-// addresses, so every call went to a contract that does not exist there.
-const DEPLOYMENTS = {
-  4663: "venture-robinhood.json",
-  46630: "venture-testnet.json",
-};
-const CHAIN_ID = Number(process.env.CHAIN_ID ?? 46630);
-const depPath = process.env.DEPLOYMENT_FILE
-  ?? join(here, "../contracts/deployments", DEPLOYMENTS[CHAIN_ID] ?? "venture-testnet.json");
-const dep = JSON.parse(readFileSync(depPath, "utf8"));
+import { DRY_RUN, envEth, envInt, envWei, KEY, loadDeployment, LOG_CHUNK, RPC } from "./venture-config.mjs";
 
-const RPC = process.env.RPC_URL ?? "https://rpc.testnet.chain.robinhood.com";
-const KEY = process.env.KEEPER_PRIVATE_KEY;
-if (!KEY) { console.error("Set KEEPER_PRIVATE_KEY."); process.exit(1); }
-const MIN_DELIVER = BigInt(process.env.MIN_DELIVER ?? "1000000000000");
-const RECENTER_SPACINGS = Number(process.env.RECENTER_SPACINGS ?? "10");
+const { dep, depPath } = loadDeployment();
+const MIN_DELIVER = envWei("MIN_DELIVER", 1_000_000_000_000n);
+const RECENTER_SPACINGS = envInt("RECENTER_SPACINGS", 10, 1, 10_000);
 const SPACING = 60; // the factory's pools all use tickSpacing 60
-const LOG_CHUNK = Number(process.env.LOG_CHUNK ?? "500000");
-const CONFIRMATIONS = Number(process.env.CONFIRMATIONS ?? "3");
-const DRY_RUN = process.env.DRY_RUN != null;
+const CONFIRMATIONS = envInt("CONFIRMATIONS", 3, 0, 64);
+const MAX_SPEND_WEI = envEth("MAX_SPEND_ETH", "0.01");
+const DELIVER_GAS_MULT = BigInt(envInt("DELIVER_GAS_MULT", 4, 1, 1000));
+// Gas one holder adds to a claimForMany batch, measured on testnet, with room.
+const GAS_PER_DELIVERY = 60_000n;
+
+// Every tx goes through send(): it counts what the run has spent and refuses
+// to go past MAX_SPEND_WEI, so spam can cost a run at most that much.
+const stats = { sent: 0, spentWei: 0n, graduated: 0, aborted: 0, skippedEmptyAborts: 0, delivered: 0, recentered: 0, stoppedAtCap: false, failed: 0 };
+class SpendCap extends Error {}
+async function send(label, fn) {
+  if (DRY_RUN) return;
+  if (stats.spentWei >= MAX_SPEND_WEI) { stats.stoppedAtCap = true; throw new SpendCap(label); }
+  const rc = await (await fn()).wait();
+  stats.sent++;
+  stats.spentWei += (rc?.gasUsed ?? 0n) * (rc?.gasPrice ?? rc?.effectiveGasPrice ?? 0n);
+}
 
 const ZERO = "0x0000000000000000000000000000000000000000";
 const DEAD = "0x000000000000000000000000000000000000dead";
@@ -63,12 +66,16 @@ const FACTORY_ABI = [
   "function vestingOf(address) view returns (address)",
   "function finalize(address) returns (bytes32)",
   "function abort(address)",
+  "function terms(address) view returns (uint16 founderRaiseBps, uint256 maxBuyWei, address vesting, uint128 basePriceWei, uint128 slopeQ, uint8 mode, bool swept)",
+  "event FeeAccrued(address indexed token, address indexed recipient, uint256 amount)",
+  "event FeesWithdrawn(address indexed recipient, uint256 amount)",
 ];
 const TOKEN_ABI = [
   "function pendingRewards(address) view returns (uint256)",
   "function claimForMany(address[])",
 ];
 const HOOK_ABI = [
+  "function lastSwapAt(bytes32) view returns (uint64)",
   "function poolTick(address) view returns (int24)",
   "function recenter(address coin, (int24 lower, int24 upper, uint128 liquidity)[] bands)",
   "event LiquidityAdded(bytes32 indexed id, address currency, uint256 amount, uint128 liquidity, bool wall, int24 tickLower, int24 tickUpper)",
@@ -140,8 +147,14 @@ async function maybeRecenter(coin, poolId, toBlock) {
     return Math.abs(tick - nearEdge) > maxDrift;
   });
   if (!stale) return;
+  // The hook refuses a recenter until the pool has been quiet for a minute
+  // (so nobody can recenter beside a price they just pushed). Don't pay gas
+  // for a tx that would revert; the next run catches it.
+  const last = Number(await hook.lastSwapAt(poolId).catch(() => 0n));
+  if (Math.floor(Date.now() / 1000) < last + 60) { console.log(`recenter ${coin}: price still moving, later`); return; }
   console.log(`recenter ${coin}: ${bands.length} wall band(s), tick ${tick}`);
-  if (!DRY_RUN) await (await hook.recenter(coin, bands)).wait();
+  await send(`recenter ${coin}`, () => hook.recenter(coin, bands));
+  stats.recentered++;
 }
 
 async function holdersOf(coin, toBlock) {
@@ -187,22 +200,89 @@ async function main() {
   const total = Number(await factory.totalTokens());
   console.log(`venture-ops: ${total} ventures, head-${CONFIRMATIONS}=${head}, keeper=${wallet.address}${DRY_RUN ? " [DRY_RUN]" : ""}`);
 
+  // A payout is only worth pushing if it beats the gas to push it, with margin;
+  // otherwise splitting a bag across thousands of wallets would make the
+  // keeper pay more in gas than it delivers.
+  const fee = await provider.getFeeData();
+  const gasPrice = fee.gasPrice ?? fee.maxFeePerGas ?? 0n;
+  const gasFloor = GAS_PER_DELIVERY * gasPrice * DELIVER_GAS_MULT;
+  const minDeliver = gasFloor > MIN_DELIVER ? gasFloor : MIN_DELIVER;
+  const balance = await provider.getBalance(wallet.address);
+  if (balance < MAX_SPEND_WEI) console.log(`WARNING keeper balance ${ethers.formatEther(balance)} ETH is below one run's cap`);
+
   for (let i = 0; i < total; i++) {
     const coin = await factory.allTokens(i);
+    try {
+      await processCoin(coin, now, head, minDeliver);
+    } catch (e) {
+      if (e instanceof SpendCap) { console.log(`spend cap reached at ${e.message}; stopping this run`); break; }
+      // One coin failing must not stop the rest: a single hostile or broken
+      // coin would otherwise block refunds and payouts for every later one.
+      stats.failed++;
+      console.log(`coin ${coin} failed: ${String(e?.shortMessage ?? e?.message ?? e).slice(0, 160)}`);
+    }
+  }
+  const solvency = await checkSolvency(total, head);
+  console.log(JSON.stringify({ keeper: "venture-ops", solvency, chain: Number(dep.chainId), ventures: total, ...stats, spentWei: stats.spentWei.toString(), minDeliver: minDeliver.toString(), balanceWei: balance.toString() }));
+}
+
+/**
+ * The factory must always hold at least what it owes: the ETH escrowed in
+ * every raise that hasn't graduated or been swept, plus every fee credited
+ * and not yet withdrawn (reconstructed from FeeAccrued and FeesWithdrawn).
+ * A shortfall means a bug or an exploit; the run then exits non-zero, which
+ * fails the workflow and notifies the repo owner.
+ */
+async function checkSolvency(total, head) {
+  let escrow = 0n;
+  for (let i = 0; i < total; i++) {
+    const coin = await factory.allTokens(i);
+    const [st, t] = await Promise.all([factory.curveState(coin), factory.terms(coin)]);
+    if (!st.finalized && !t.swept) escrow += st.raisedWei;
+  }
+  let accrued = 0n, withdrawn = 0n;
+  const from = Number(dep.startBlock ?? 0);
+  for (let start = from; start <= head; start += LOG_CHUNK) {
+    const end = Math.min(start + LOG_CHUNK - 1, head);
+    const [a, w] = await Promise.all([
+      factory.queryFilter(factory.filters.FeeAccrued(), start, end),
+      factory.queryFilter(factory.filters.FeesWithdrawn(), start, end),
+    ]);
+    for (const l of a) accrued += BigInt(l.args.amount);
+    for (const l of w) withdrawn += BigInt(l.args.amount);
+  }
+  const owed = escrow + (accrued - withdrawn);
+  const balance = await provider.getBalance(dep.contracts.factory, head);
+  const ok = balance >= owed;
+  if (!ok) {
+    console.error(`CRITICAL factory insolvent: holds ${ethers.formatEther(balance)} ETH, owes ${ethers.formatEther(owed)} (escrow ${ethers.formatEther(escrow)}, fees ${ethers.formatEther(accrued - withdrawn)})`);
+    process.exitCode = 2;
+  }
+  return { ok, balanceWei: balance.toString(), owedWei: owed.toString(), escrowWei: escrow.toString(), feesOwedWei: (accrued - withdrawn).toString() };
+}
+
+async function processCoin(coin, now, head, minDeliver) {
+  {
     const st = await factory.curveState(coin);
 
     if (!st.finalized && !st.aborted) {
       const targetHit = st.raisedWei >= st.targetRaiseWei || st.remainingWhole === 0n;
       if (targetHit) {
         console.log(`graduate ${coin} (raised ${ethers.formatEther(st.raisedWei)} ETH)`);
-        if (!DRY_RUN) await (await factory.finalize(coin)).wait();
+        await send(`finalize ${coin}`, () => factory.finalize(coin));
+        stats.graduated++;
       } else if (now >= Number(st.deadline)) {
+        // Nobody's money is in a raise that raised nothing, so there is no
+        // refund to open. Aborting it would only spend gas, which is exactly
+        // what a flood of dead launches is for.
+        if (st.raisedWei === 0n) { stats.skippedEmptyAborts++; return; }
         console.log(`abort ${coin} (deadline passed at ${ethers.formatEther(st.raisedWei)}/${ethers.formatEther(st.targetRaiseWei)} ETH)`);
-        if (!DRY_RUN) await (await factory.abort(coin)).wait();
+        await send(`abort ${coin}`, () => factory.abort(coin));
+        stats.aborted++;
       }
-      continue; // dividends only exist after graduation
+      return; // dividends only exist after graduation
     }
-    if (!st.finalized) continue;
+    if (!st.finalized) return;
 
     // Keep the quote walls hugging the price.
     try {
@@ -216,15 +296,15 @@ async function main() {
     const holders = await holdersOf(coin, head);
     const due = [];
     for (const h of holders) {
-      try { if ((await token.pendingRewards(h)) >= MIN_DELIVER) due.push(h); } catch { /* skip */ }
+      try { if ((await token.pendingRewards(h)) >= minDeliver) due.push(h); } catch { /* skip */ }
     }
-    if (due.length === 0) continue;
+    if (due.length === 0) return;
     console.log(`deliver dividends on ${coin}: ${due.length} holder(s)`);
     for (let j = 0; j < due.length; j += 100) {
       const batch = due.slice(j, j + 100);
-      if (!DRY_RUN) await (await token.claimForMany(batch)).wait();
+      await send(`claimForMany ${coin}`, () => token.claimForMany(batch));
+      stats.delivered += batch.length;
     }
   }
-  console.log("venture-ops: done");
 }
 main().catch((e) => { console.error(e); process.exit(1); });

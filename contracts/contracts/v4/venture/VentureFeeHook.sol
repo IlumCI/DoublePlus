@@ -58,6 +58,10 @@ contract VentureFeeHook is IHooks, ReentrancyGuard, IUnlockCallback {
     uint16 public constant MAX_SIDE_TAX_BPS = 400; // 4% per side, founder-set
     uint16 public constant MIN_PLATFORM_BPS = 50; // 0.5%
     uint16 public constant MAX_PLATFORM_BPS = 100; // 1%
+    /// @notice A trader with a bound referrer pays this much less of the
+    ///         platform fee (and of the factory's curve fees). Two-sided: the
+    ///         referrer earns, and the person they brought pays less.
+    uint16 public constant REFEREE_DISCOUNT_BPS = 1_000; // 10% of the fee
     uint256 public constant PAYOUT_GAS = 100_000;
     int24 internal constant LP_WIDTH = 10; // auto-liquidity band, in spacings
     int24 internal constant WALL_WIDTH = 2; // quote walls: tight bands beside price
@@ -65,6 +69,10 @@ contract VentureFeeHook is IHooks, ReentrancyGuard, IUnlockCallback {
     uint24 internal constant LP_FEE = 0;
     uint64 internal constant SNIPE_T1 = 5; // seconds
     uint64 internal constant SNIPE_T2 = 15;
+    /// @notice recenter() only runs once a pool has traded nothing for this
+    ///         long. Without it one transaction could push the price, recenter
+    ///         the walls beside the pushed price, and trade back into them.
+    uint64 public constant RECENTER_QUIET_SECS = 60;
     uint16 internal constant SNIPE_BPS_1 = 1_500; // 15%
     uint16 internal constant SNIPE_BPS_2 = 500; // 5%
 
@@ -108,6 +116,10 @@ contract VentureFeeHook is IHooks, ReentrancyGuard, IUnlockCallback {
 
     mapping(PoolId => Config) public configOf;
     mapping(address coin => PoolId) internal _poolOf;
+    /// @notice When each pool last saw an outside swap (the hook's own
+    ///         plumbing swaps don't count).
+    mapping(PoolId => uint64) public lastSwapAt;
+    error PriceMoving();
 
     error NotPoolManager();
     error NotLauncher();
@@ -223,6 +235,7 @@ contract VentureFeeHook is IHooks, ReentrancyGuard, IUnlockCallback {
         PoolId id = key.toId();
         Config memory c = configOf[id];
         if (!c.set) return (IHooks.afterSwap.selector, 0);
+        lastSwapAt[id] = uint64(block.timestamp);
 
         // Direction: a buy takes the coin OUT of the pool.
         bool coinIsOutput = params.zeroForOne != c.coinIsCurrency0;
@@ -236,25 +249,28 @@ contract VentureFeeHook is IHooks, ReentrancyGuard, IUnlockCallback {
         (Currency feeCurrency, uint256 magnitude) = _unspecified(key, params, delta);
         if (magnitude == 0) return (IHooks.afterSwap.selector, 0);
 
+        // Routers pass the end trader as 32-byte hookData; a trader with a
+        // bound referrer gets the referee discount, and the referrer is paid.
+        address trader;
+        address ref;
+        if (hookData.length == 32) {
+            trader = abi.decode(hookData, (address));
+            ref = referrerOf[trader];
+        }
         uint256 platformFee = (magnitude * platformFeeBps) / BPS;
+        if (ref != address(0)) platformFee -= (platformFee * REFEREE_DISCOUNT_BPS) / BPS;
         uint256 founderTax = (magnitude * sideTaxBps) / BPS;
         uint256 sniperFee = (magnitude * snipeBps) / BPS;
         uint256 total = platformFee + founderTax + sniperFee;
         if (total == 0) return (IHooks.afterSwap.selector, 0);
 
         if (platformFee > 0) {
-            // Routers pass the end trader as 32-byte hookData; a bound
-            // referrer earns their cut of the protocol fee on every trade.
             uint256 toReferrer;
-            if (hookData.length == 32) {
-                address trader = abi.decode(hookData, (address));
-                address ref = referrerOf[trader];
-                if (ref != address(0)) {
-                    toReferrer = (platformFee * refShareBps) / BPS;
-                    if (toReferrer > 0) {
-                        _payOut(feeCurrency, ref, toReferrer);
-                        emit ReferralPaid(trader, ref, feeCurrency, toReferrer);
-                    }
+            if (ref != address(0)) {
+                toReferrer = (platformFee * refShareBps) / BPS;
+                if (toReferrer > 0) {
+                    _payOut(feeCurrency, ref, toReferrer);
+                    emit ReferralPaid(trader, ref, feeCurrency, toReferrer);
                 }
             }
             _payOut(feeCurrency, platformTreasury, platformFee - toReferrer);
@@ -479,8 +495,10 @@ contract VentureFeeHook is IHooks, ReentrancyGuard, IUnlockCallback {
     }
 
     function recenter(address coin, Band[] calldata bands) external nonReentrant {
-        Config storage c = configOf[_poolOf[coin]];
+        PoolId id = _poolOf[coin];
+        Config storage c = configOf[id];
         if (!c.set) revert BadPolicy();
+        if (block.timestamp < uint256(lastSwapAt[id]) + RECENTER_QUIET_SECS) revert PriceMoving();
         if (bands.length == 0) revert BadPolicy();
         poolManager.unlock(abi.encode(coin, bands));
     }

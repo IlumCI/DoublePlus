@@ -2,22 +2,15 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useWalletClient } from "wagmi";
 
-import {
-  ercAbi, loadReferralEarnings, loadVentures, updatesAbi, VENTURE, venturePc, vestingAbi, type Venture,
+import { confirmTx,
+  ercAbi, factoryAbi, loadReferralEarnings, updatesAbi, VENTURE, venturePc, vestingAbi,
 } from "./client";
+import { loadPortfolio, type Holding } from "./portfolio";
 import { fmtEth, fmtTok, pct, short } from "./ui";
 import { usePageMeta } from "./seo";
 import { refLink } from "./referral";
 import { errorText, useWallet } from "../lib/useWallet";
 import { useUi } from "../store";
-
-interface Holding {
-  v: Venture;
-  balance: bigint;
-  pending: bigint;
-  spent: bigint;
-  vestingClaimable: bigint;
-}
 
 /** My desk: everything this wallet is owed across the launchpad — backed
  *  raises, holdings and dividends, referral earnings, founder tooling. */
@@ -28,6 +21,10 @@ export function Desk() {
   const pushToast = useUi((s) => s.pushToast);
   const [rows, setRows] = useState<Holding[] | null>(null);
   const [refEarned, setRefEarned] = useState<Map<string, bigint>>(new Map());
+  // ETH credited to this wallet inside the factory: a founder's cut of a
+  // graduated raise, referral shares of curve fees, and an Open-mode creator's
+  // share of curve fees. Nothing pushes it; it waits for withdrawFees().
+  const [factoryOwed, setFactoryOwed] = useState(0n);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -36,23 +33,9 @@ export function Desk() {
     let live = true;
     const refresh = async () => {
       try {
-        const ventures = await loadVentures();
-        const out: Holding[] = [];
-        for (const v of ventures) {
-          const [balance, pending, spent] = await Promise.all([
-            venturePc.readContract({ address: v.address, abi: ercAbi, functionName: "balanceOf", args: [me] }) as Promise<bigint>,
-            venturePc.readContract({ address: v.address, abi: ercAbi, functionName: "pendingRewards", args: [me] }).catch(() => 0n) as Promise<bigint>,
-            venturePc.readContract({ address: VENTURE.factory, abi: [{ type: "function", name: "spentWei", stateMutability: "view", inputs: [{ type: "address" }, { type: "address" }], outputs: [{ type: "uint256" }] }] as const, functionName: "spentWei", args: [v.address, me] }).catch(() => 0n) as Promise<bigint>,
-          ]);
-          let vestingClaimable = 0n;
-          if (v.creator.toLowerCase() === me.toLowerCase() && v.vesting !== "0x0000000000000000000000000000000000000000") {
-            vestingClaimable = (await venturePc.readContract({ address: v.vesting, abi: vestingAbi, functionName: "claimable" }).catch(() => 0n)) as bigint;
-          }
-          if (balance > 0n || pending > 0n || spent > 0n || vestingClaimable > 0n || v.creator.toLowerCase() === me.toLowerCase()) {
-            out.push({ v, balance, pending, spent, vestingClaimable });
-          }
-        }
-        if (live) setRows(out);
+        const sellBps = Number(await venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "curveSellFeeBps" }).catch(() => 100));
+        const p = await loadPortfolio(me, sellBps);
+        if (live) { setRows(p.rows); setFactoryOwed(p.factoryOwed); }
         const earned = await loadReferralEarnings(me);
         if (live) setRefEarned(earned);
       } catch {
@@ -64,25 +47,16 @@ export function Desk() {
     return () => { live = false; clearInterval(id); };
   }, [me, busy]);
 
-  if (!isConnected) {
+  if (!isConnected || !me) {
     return (
       <div className="dp-shell" style={{ paddingBottom: 60 }}>
         <div className="dp-page-head">
-          <h1 className="dp-page-title">Your portfolio</h1>
+          <h1 className="dp-page-title">Portfolio</h1>
           <p style={{ maxWidth: "56ch", color: "var(--dim)", fontSize: 13.5 }}>
-            Connect to see your holdings, the ETH you have earned from every trade, your referral income and any
-            vesting you can claim. Fee income lands automatically — this is where you watch it arrive.
+            Connect a wallet to see your coins, what they're worth, and anything you can collect.
           </p>
           <button className="dp-action" style={{ marginTop: 14 }} onClick={connectFirst}>Connect wallet</button>
         </div>
-        <div className="dp-three-col" style={{ marginTop: 6 }}>
-          <div className="dp-record"><span className="dp-k">Fee income</span><span className="dp-val">— <small style={{ fontSize: 13 }}>ETH</small></span><p className="dp-foot dp-agate">paid to holders every 15 minutes</p></div>
-          <div className="dp-record"><span className="dp-k">Referral earnings</span><span className="dp-val">— <small style={{ fontSize: 13 }}>ETH</small></span><p className="dp-foot dp-agate">20% of the protocol fee on trades your link brings</p></div>
-          <div className="dp-record"><span className="dp-k">Backed on curves</span><span className="dp-val">— <small style={{ fontSize: 13 }}>ETH</small></span><p className="dp-foot dp-agate">your curve spend comes back if a raise misses target</p></div>
-        </div>
-        <p className="dp-agate" style={{ marginTop: 14 }}>
-          Nothing here is custodial: every figure is read from your wallet's position on-chain.
-        </p>
       </div>
     );
   }
@@ -94,12 +68,48 @@ export function Desk() {
       for (const r of rows) {
         if (r.pending > 0n) {
           const hash = await wc.writeContract({ address: r.v.address, abi: ercAbi, functionName: "claim", args: [], chain: wc.chain, account: wc.account });
-          await venturePc.waitForTransactionReceipt({ hash });
+          await confirmTx(hash);
         }
       }
-      pushToast({ kind: "success", title: "All dividends claimed" });
+      pushToast({ kind: "success", title: "Payouts claimed" });
     } catch (e) {
       pushToast({ kind: "error", title: "Claim failed", body: errorText(e) });
+    } finally { setBusy(false); }
+  };
+
+  const withdrawOwed = async () => {
+    if (!wc) return;
+    setBusy(true);
+    try {
+      const hash = await wc.writeContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "withdrawFees", args: [], chain: wc.chain, account: wc.account });
+      await confirmTx(hash);
+      pushToast({ kind: "success", title: `${fmtEth(factoryOwed, 6)} ETH withdrawn`, txHash: hash });
+    } catch (e) {
+      pushToast({ kind: "error", title: "Withdraw failed", body: errorText(e) });
+    } finally { setBusy(false); }
+  };
+
+  /** Get a failed raise's ETH back in one go: close the round if nobody has,
+   *  approve the tokens if needed, refund. */
+  const refund = async (r: Holding) => {
+    if (!wc) return;
+    setBusy(true);
+    try {
+      const send = async (fn: "abort" | "refund") => {
+        const hash = await wc.writeContract({ address: VENTURE.factory, abi: factoryAbi, functionName: fn, args: [r.v.address], chain: wc.chain, account: wc.account });
+        await confirmTx(hash);
+        return hash;
+      };
+      if (!r.v.aborted) await send("abort");
+      const allowance = (await venturePc.readContract({ address: r.v.address, abi: ercAbi, functionName: "allowance", args: [wc.account.address, VENTURE.factory] }));
+      if (allowance < r.bought) {
+        const a = await wc.writeContract({ address: r.v.address, abi: ercAbi, functionName: "approve", args: [VENTURE.factory, r.bought], chain: wc.chain, account: wc.account });
+        await confirmTx(a);
+      }
+      const hash = await send("refund");
+      pushToast({ kind: "success", title: `${fmtEth(r.refundable, 5)} ETH refunded`, txHash: hash });
+    } catch (e) {
+      pushToast({ kind: "error", title: "Refund failed", body: errorText(e) });
     } finally { setBusy(false); }
   };
 
@@ -108,7 +118,7 @@ export function Desk() {
     setBusy(true);
     try {
       const hash = await wc.writeContract({ address: r.v.vesting, abi: vestingAbi, functionName: "claim", args: [], chain: wc.chain, account: wc.account });
-      await venturePc.waitForTransactionReceipt({ hash });
+      await confirmTx(hash);
       pushToast({ kind: "success", title: `Vested $${r.v.symbol} claimed`, txHash: hash });
     } catch (e) {
       pushToast({ kind: "error", title: "Claim failed", body: errorText(e) });
@@ -121,7 +131,7 @@ export function Desk() {
     setBusy(true);
     try {
       const hash = await wc.writeContract({ address: VENTURE.updates, abi: updatesAbi, functionName: "postUpdate", args: [r.v.address, text], chain: wc.chain, account: wc.account });
-      await venturePc.waitForTransactionReceipt({ hash });
+      await confirmTx(hash);
       pushToast({ kind: "success", title: "Update posted on-chain", txHash: hash });
     } catch (e) {
       pushToast({ kind: "error", title: "Post failed", body: errorText(e) });
@@ -131,50 +141,39 @@ export function Desk() {
   const totalPending = (rows ?? []).reduce((a, r) => a + r.pending, 0n);
   const wethEarned = refEarned.get(VENTURE.weth.toLowerCase()) ?? 0n;
   const otherEarned = [...refEarned.entries()].filter(([c]) => c !== VENTURE.weth.toLowerCase());
-  const totalBacked = (rows ?? []).reduce((a, r) => a + r.spent, 0n);
-  const founderRows = (rows ?? []).filter((r) => r.v.creator.toLowerCase() === me!.toLowerCase());
+  const founderRows = (rows ?? []).filter((r) => r.v.creator.toLowerCase() === me.toLowerCase());
 
   return (
     <div className="dp-shell" style={{ paddingBottom: 70 }}>
       <div className="dp-page-head">
-        <p className="dp-form-no">CONNECTED: {short(me!)}</p>
         <h1 className="dp-page-title">Portfolio</h1>
-        <p style={{ maxWidth: "58ch", color: "var(--dim)", fontSize: 13 }}>
-          Everything this wallet is owed across the launchpad. Fee income is pushed to you automatically every 15 minutes —
-          claiming by hand just gets it a few minutes sooner.
+        <p style={{ maxWidth: "62ch", color: "var(--dim)", fontSize: 13 }}>
+          Holder payouts above a small minimum are sent to your wallet automatically, about every 15 minutes.
+          Claim them here if you want them sooner.
         </p>
       </div>
 
-      <div className="dp-three-col">
-        <div className="dp-record">
-          <span className="dp-k">Fee income claimable</span>
-          <span className="dp-val">{fmtEth(totalPending, 6)} <small style={{ fontSize: 13 }}>ETH</small></span>
-          <p className="dp-foot dp-agate">across {(rows ?? []).filter((r) => r.pending > 0n).length} holdings</p>
-        </div>
-        <div className="dp-record">
-          <span className="dp-k">Referral earnings</span>
-          <span className="dp-val">{fmtEth(wethEarned, 6)} <small style={{ fontSize: 13 }}>ETH</small></span>
-          <p className="dp-foot dp-agate">
-            {otherEarned.length > 0 ? `plus ${otherEarned.length} other pair currenc${otherEarned.length === 1 ? "y" : "ies"}` : "paid inline on every referred trade"}
-          </p>
-        </div>
-        <div className="dp-record">
-          <span className="dp-k">Backed on curves</span>
-          <span className="dp-val">{fmtEth(totalBacked, 4)} <small style={{ fontSize: 13 }}>ETH</small></span>
-          <p className="dp-foot dp-agate">{(rows ?? []).filter((r) => r.spent > 0n).length} raises backed</p>
-        </div>
+      <div className="dp-owed">
+        <span>Payouts to claim <b>{fmtEth(totalPending, 6)} ETH</b></span>
+        <span>Referral earnings <b>{fmtEth(wethEarned, 6)} ETH</b></span>
+        {factoryOwed > 0n && (
+          <span title="Your cut of graduated raises and your share of curve fees. Only this wallet can withdraw it.">
+            Ready to withdraw <b>{fmtEth(factoryOwed, 6)} ETH</b>{" "}
+            <button className="dp-action" style={{ padding: "4px 12px", fontSize: 12 }} onClick={withdrawOwed} disabled={busy}>Withdraw</button>
+          </span>
+        )}
       </div>
 
       <div className="dp-two-col" style={{ marginTop: 16, alignItems: "start" }}>
         <div className="dp-form-sheet">
-          <p className="dp-sec">Holdings <span className="dp-agate">as the chain tells it</span></p>
+          <p className="dp-sec">Your coins <span className="dp-agate">in ETH; "worth now" is what selling would get you</span></p>
           {rows === null ? (
-            <p className="dp-agate">Reading your positions…</p>
+            <p className="dp-agate">Loading…</p>
           ) : rows.length === 0 ? (
-            <p className="dp-agate">Nothing yet. Back a raise and it shows up here.</p>
+            <p className="dp-agate">No coins yet.</p>
           ) : (
             <table className="dp-docket">
-              <thead><tr><th>Token</th><th className="dp-num">Balance</th><th className="dp-num">Backed</th><th className="dp-num">Fee income</th><th>Status</th></tr></thead>
+              <thead><tr><th>Coin</th><th className="dp-num">Put in</th><th className="dp-num">Worth now</th><th className="dp-num">P&amp;L</th><th>Status</th></tr></thead>
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.v.address}>
@@ -183,14 +182,25 @@ export function Desk() {
                         <b>{r.v.name}</b> <span className="dp-mono" style={{ fontSize: 10.5 }}>${r.v.symbol}</span>
                       </Link>
                     </td>
-                    <td className="dp-num">{r.balance > 0n ? fmtTok(r.balance) : "—"}</td>
-                    <td className="dp-num">{r.spent > 0n ? `${fmtEth(r.spent, 4)} ETH` : "—"}</td>
-                    <td className="dp-num" style={{ color: r.pending > 0n ? "var(--up)" : undefined }}>
-                      {r.pending > 0n ? fmtEth(r.pending, 6) : "—"}
+                    <td className="dp-num">{r.pos.putIn > 0n ? fmtEth(r.pos.putIn, 4) : "—"}</td>
+                    <td className="dp-num" title={r.pos.basis === "market" ? "At the pool price, after sell fees, before price impact" : r.pos.basis === "curve" ? "What the curve pays if you exit now" : undefined}>
+                      {r.pos.valueNow !== null && (r.pos.valueNow > 0n || r.pos.putIn > 0n) ? fmtEth(r.pos.valueNow, 4) : "—"}
                     </td>
-                    <td><span className={`dp-badge ${r.v.phase === "graduated" ? "dp-grad" : r.v.phase === "failed" ? "dp-dead" : "dp-live"}`}>
-                      {r.v.phase === "graduated" ? "trading" : r.v.phase === "failed" ? "refund" : r.v.phase === "expired" ? "funded" : "live"}
-                    </span></td>
+                    <td className="dp-num" style={{ color: r.pos.pnl === null ? undefined : r.pos.pnl >= 0n ? "var(--up)" : "var(--down)" }}>
+                      {r.pos.pnl === null || r.pos.pnlPct === null ? "—" : `${r.pos.pnl >= 0n ? "+" : ""}${r.pos.pnlPct.toFixed(Math.abs(r.pos.pnlPct) < 10 ? 1 : 0)}%`}
+                    </td>
+                    <td>
+                      {r.refundable > 0n ? (
+                        <button className="dp-action" style={{ padding: "4px 10px", fontSize: 11 }} disabled={busy} onClick={() => refund(r)}>
+                          Get {fmtEth(r.refundable, 4)} ETH back
+                        </button>
+                      ) : (
+                        <span className={`dp-badge ${r.v.phase === "graduated" ? "dp-grad" : r.v.phase === "failed" ? "dp-dead" : "dp-live"}`}>
+                          {r.v.phase === "graduated" ? "trading" : r.v.phase === "failed" ? "failed" : r.v.phase === "expired" ? "funded" : "filling"}
+                        </span>
+                      )}
+                      {r.pending > 0n && <span className="dp-mono" style={{ fontSize: 10.5, color: "var(--up)", marginLeft: 6 }}>+{fmtEth(r.pending, 5)} drip</span>}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -198,22 +208,22 @@ export function Desk() {
           )}
           {totalPending > 0n && (
             <button className="dp-action" style={{ marginTop: 14 }} disabled={busy} onClick={claimAll}>
-              {busy ? "Confirm in wallet…" : `Claim all fee income (${fmtEth(totalPending, 6)} ETH)`}
+              {busy ? "Confirm in wallet…" : `Claim payouts (${fmtEth(totalPending, 6)} ETH)`}
             </button>
           )}
         </div>
 
         <div>
           <div className="dp-form-sheet">
-            <p className="dp-sec">Your referral link <span className="dp-agate">{VENTURE.refShareBps / 100}% of the protocol fee</span></p>
+            <p className="dp-sec">Your referral link</p>
             <p className="dp-agate" style={{ marginBottom: 8 }}>
-              A wallet binds to your link on its first routed trade and stays bound. Your share settles in the
-              same transaction as their trade — nothing to claim.
+              People who link up through this link pay 10% less in fees. You get {VENTURE.refShareBps / 100}% of the
+              platform fee on their trades, paid in the same transaction.
             </p>
             <div className="dp-chit">
               <button className="dp-mono" style={{ background: "none", border: "none", padding: 0, color: "var(--up)", fontSize: 11, textAlign: "left", wordBreak: "break-all" }}
-                onClick={() => navigator.clipboard?.writeText(refLink(me!)).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); })}>
-                {copied ? "copied ✓" : refLink(me!)}
+                onClick={() => navigator.clipboard?.writeText(refLink(me)).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); })}>
+                {copied ? "Copied" : refLink(me)}
               </button>
             </div>
             {otherEarned.length > 0 && (
@@ -228,7 +238,7 @@ export function Desk() {
 
           {founderRows.length > 0 && (
             <div className="dp-form-sheet" style={{ marginTop: 14 }}>
-              <p className="dp-sec">Founder tools <span className="dp-agate">raises you opened</span></p>
+              <p className="dp-sec">Coins you launched</p>
               {founderRows.map((r) => (
                 <div key={r.v.address} style={{ borderTop: "1px solid var(--line)", padding: "10px 0" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10 }}>
@@ -236,7 +246,7 @@ export function Desk() {
                       <b>{r.v.name}</b> <span className="dp-mono" style={{ fontSize: 10.5 }}>${r.v.symbol}</span>
                     </Link>
                     <span className="dp-mono" style={{ fontSize: 11, color: "var(--dim)" }}>
-                      {pct(r.v.raisedWei, r.v.targetRaiseWei).toFixed(0)}% funded
+                      {r.v.phase === "graduated" ? "trading" : `${pct(r.v.raisedWei, r.v.targetRaiseWei).toFixed(0)}% filled`}
                     </span>
                   </div>
                   <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>

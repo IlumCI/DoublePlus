@@ -56,7 +56,7 @@ describe("Venture launchpad (stress)", function () {
         await (await factory.connect(who).sell(coin, q, 0)).wait();
       } else {
         const value = (next() % ethers.parseEther("0.25")) + 10n ** 14n;
-        await (await factory.connect(who).buy(coin, { value })).wait();
+        await (await factory.connect(who).buy(coin, 0, { value })).wait();
       }
       ops++;
 
@@ -112,7 +112,7 @@ describe("Venture launchpad (stress)", function () {
       const beforeTok = await factory.boughtTokens(coin, trader.address);
 
       const b1 = await ethers.provider.getBalance(trader.address);
-      const r1 = await (await factory.connect(trader).buy(coin, { value })).wait();
+      const r1 = await (await factory.connect(trader).buy(coin, 0, { value })).wait();
       const gained = (await factory.boughtTokens(coin, trader.address)) - beforeTok;
       const spentNet = b1 - (await ethers.provider.getBalance(trader.address)) - r1!.gasUsed * r1!.gasPrice;
 
@@ -141,7 +141,7 @@ describe("Venture launchpad (stress)", function () {
     for (let i = 0; i < 25; i++) {
       const value = (next() % ethers.parseEther("0.02")) + 10n ** 14n;
       try {
-        await (await factory.connect(buyer).buy(coin, { value })).wait();
+        await (await factory.connect(buyer).buy(coin, 0, { value })).wait();
       } catch {
         rejected++;
       }
@@ -171,7 +171,7 @@ describe("Venture launchpad (stress)", function () {
       expect(await factory.curveCost(coin, 0n, sold)).to.equal(0n);
 
       const p1 = await factory.priceNow(coin);
-      await (await factory.connect(buyer).buy(coin, { value: ethers.parseEther("0.08") })).wait();
+      await (await factory.connect(buyer).buy(coin, 0, { value: ethers.parseEther("0.08") })).wait();
       expect(await factory.priceNow(coin), "price did not rise after a buy").to.be.greaterThan(p1);
     }
   });
@@ -206,7 +206,7 @@ describe("Venture launchpad (stress)", function () {
         const q = owned / ONE / 2n;
         if (q > 0n) await (await factory.connect(who).sell(coin, q, 0)).wait();
       } else {
-        await (await factory.connect(who).buy(coin, { value: (next() % ethers.parseEther("0.2")) + 10n ** 14n })).wait();
+        await (await factory.connect(who).buy(coin, 0, { value: (next() % ethers.parseEther("0.2")) + 10n ** 14n })).wait();
       }
 
       let totalEscrow = 0n;
@@ -256,7 +256,7 @@ describe("Venture launchpad (stress)", function () {
         const q = owned / ONE / 2n;
         if (q > 0n) await (await factory.connect(who).sell(coin, q, 0)).wait();
       } else {
-        await (await factory.connect(who).buy(coin, { value: (next() % ethers.parseEther("0.3")) + 10n ** 14n })).wait();
+        await (await factory.connect(who).buy(coin, 0, { value: (next() % ethers.parseEther("0.3")) + 10n ** 14n })).wait();
       }
 
       // No refund liability here, so the guarantee is simply that the curve
