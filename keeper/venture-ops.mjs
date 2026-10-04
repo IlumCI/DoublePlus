@@ -3,13 +3,18 @@
 // Every run, for every venture on the factory:
 //   1) finalize() any curve that hit its target (or sold out) — backers never
 //      wait for a human to click Graduate;
-//   2) abort() any raise past its deadline below target — refunds open the
-//      minute they should;
+//   2) abort() any raise past its deadline below target, then push every
+//      backer's refund to their wallet with refundMany() — nobody has to
+//      claim. The contract only pays a backer still holding what they bought;
+//      anyone it skips can still claim on the site;
 //   3) deliver dividends: snapshot holders from the coin's Transfer log and
 //      batch claimForMany() for everyone with pendingRewards above the
 //      threshold — yield lands in wallets with no user action. claimFor can
 //      only ever push a holder's rewards to the holder themselves, so this
-//      keeper cannot divert a wei.
+//      keeper cannot divert a wei;
+//   4) pay out last-buyer pots whose clock ran out on a pool nobody has
+//      traded since (any trade would have paid it already). claimPot only
+//      ever pays the pot's leader.
 //
 // Env:
 //   KEEPER_PRIVATE_KEY  (required) pays gas
@@ -45,7 +50,7 @@ const GAS_PER_DELIVERY = 60_000n;
 
 // Every tx goes through send(): it counts what the run has spent and refuses
 // to go past MAX_SPEND_WEI, so spam can cost a run at most that much.
-const stats = { sent: 0, spentWei: 0n, graduated: 0, aborted: 0, skippedEmptyAborts: 0, delivered: 0, recentered: 0, stoppedAtCap: false, failed: 0 };
+const stats = { sent: 0, spentWei: 0n, graduated: 0, aborted: 0, skippedEmptyAborts: 0, refunded: 0, delivered: 0, recentered: 0, potsPaid: 0, stoppedAtCap: false, failed: 0 };
 class SpendCap extends Error {}
 async function send(label, fn) {
   if (DRY_RUN) return;
@@ -67,10 +72,15 @@ const FACTORY_ABI = [
   "function finalize(address) returns (bytes32)",
   "function abort(address)",
   "function terms(address) view returns (uint16 founderRaiseBps, uint256 maxBuyWei, address vesting, uint128 basePriceWei, uint128 slopeQ, uint8 mode, bool swept)",
+  "function spentWei(address, address) view returns (uint256)",
+  "function boughtTokens(address, address) view returns (uint256)",
+  "function refundMany(address token, address[] backers)",
+  "event CurveBuy(address indexed token, address indexed buyer, uint256 ethIn, uint256 tokensOut, uint128 priceWei)",
   "event FeeAccrued(address indexed token, address indexed recipient, uint256 amount)",
   "event FeesWithdrawn(address indexed recipient, uint256 amount)",
 ];
 const TOKEN_ABI = [
+  "function balanceOf(address) view returns (uint256)",
   "function pendingRewards(address) view returns (uint256)",
   "function claimForMany(address[])",
 ];
@@ -78,6 +88,8 @@ const HOOK_ABI = [
   "function lastSwapAt(bytes32) view returns (uint64)",
   "function poolTick(address) view returns (int24)",
   "function recenter(address coin, (int24 lower, int24 upper, uint128 liquidity)[] bands)",
+  "function pot(address coin) view returns (uint256 pairAmount, uint256 coinAmount, address leader, uint64 deadline)",
+  "function claimPot(address coin)",
   "event LiquidityAdded(bytes32 indexed id, address currency, uint256 amount, uint128 liquidity, bool wall, int24 tickLower, int24 tickUpper)",
   "event WallRemoved(bytes32 indexed id, int24 tickLower, int24 tickUpper, uint128 liquidity)",
 ];
@@ -137,7 +149,7 @@ async function wallBands(poolId, toBlock) {
 }
 
 /** Migrate stale quote walls back beside the price when they have drifted. */
-async function maybeRecenter(coin, poolId, toBlock) {
+async function maybeRecenter(coin, poolId, toBlock, now) {
   const bands = await wallBands(poolId, toBlock);
   if (bands.length === 0) return;
   const tick = Number(await hook.poolTick(coin));
@@ -151,10 +163,44 @@ async function maybeRecenter(coin, poolId, toBlock) {
   // (so nobody can recenter beside a price they just pushed). Don't pay gas
   // for a tx that would revert; the next run catches it.
   const last = Number(await hook.lastSwapAt(poolId).catch(() => 0n));
-  if (Math.floor(Date.now() / 1000) < last + 60) { console.log(`recenter ${coin}: price still moving, later`); return; }
+  if (now < last + 60) { console.log(`recenter ${coin}: price still moving, later`); return; }
   console.log(`recenter ${coin}: ${bands.length} wall band(s), tick ${tick}`);
   await send(`recenter ${coin}`, () => hook.recenter(coin, bands));
   stats.recentered++;
+}
+
+/** Push refunds for an aborted raise to every backer the contract would pay:
+ *  ETH still escrowed for them, everything they bought still in their wallet,
+ *  and worth more than the gas to send it. */
+async function pushRefunds(coin, toBlock, minDeliver) {
+  const backers = new Set();
+  const from = Number(dep.startBlock ?? 0);
+  for (let start = from; start <= toBlock; start += LOG_CHUNK) {
+    const end = Math.min(start + LOG_CHUNK - 1, toBlock);
+    for (const l of await factory.queryFilter(factory.filters.CurveBuy(coin), start, end)) backers.add(l.args.buyer);
+  }
+  const token = new ethers.Contract(coin, TOKEN_ABI, wallet);
+  const due = [];
+  for (const b of backers) {
+    const [spent, bought, held] = await Promise.all([factory.spentWei(coin, b), factory.boughtTokens(coin, b), token.balanceOf(b)]);
+    if (spent >= minDeliver && held >= bought) due.push(b);
+  }
+  if (due.length === 0) return;
+  console.log(`push refunds on ${coin}: ${due.length} backer(s)`);
+  for (let j = 0; j < due.length; j += 100) {
+    const batch = due.slice(j, j + 100);
+    await send(`refundMany ${coin}`, () => factory.refundMany(coin, batch));
+    stats.refunded += batch.length;
+  }
+}
+
+/** Pay a pot whose clock ran out with no trade since to take it. */
+async function maybePayPot(coin, now) {
+  const p = await hook.pot(coin);
+  if (p.leader === ZERO || now < Number(p.deadline)) return;
+  console.log(`pay pot on ${coin} to ${p.leader}`);
+  await send(`claimPot ${coin}`, () => hook.claimPot(coin));
+  stats.potsPaid++;
 }
 
 async function holdersOf(coin, toBlock) {
@@ -196,7 +242,9 @@ async function main() {
     process.exit(1);
   }
   const head = (await provider.getBlockNumber()) - CONFIRMATIONS;
-  const now = Math.floor(Date.now() / 1000);
+  // Chain time, not this machine's clock: deadlines and pot clocks are
+  // judged by block.timestamp, and the two can drift.
+  const now = Number((await provider.getBlock("latest")).timestamp);
   const total = Number(await factory.totalTokens());
   console.log(`venture-ops: ${total} ventures, head-${CONFIRMATIONS}=${head}, keeper=${wallet.address}${DRY_RUN ? " [DRY_RUN]" : ""}`);
 
@@ -279,15 +327,27 @@ async function processCoin(coin, now, head, minDeliver) {
         console.log(`abort ${coin} (deadline passed at ${ethers.formatEther(st.raisedWei)}/${ethers.formatEther(st.targetRaiseWei)} ETH)`);
         await send(`abort ${coin}`, () => factory.abort(coin));
         stats.aborted++;
+        if (!DRY_RUN) await pushRefunds(coin, await provider.getBlockNumber(), minDeliver);
       }
       return; // dividends only exist after graduation
     }
-    if (!st.finalized) return;
+    if (!st.finalized) {
+      // Aborted: refunds go out until the escrow is swept.
+      if (!(await factory.terms(coin)).swept) await pushRefunds(coin, head, minDeliver);
+      return;
+    }
+
+    try {
+      await maybePayPot(coin, now);
+    } catch (e) {
+      if (e instanceof SpendCap) throw e;
+      console.log(`pot check failed for ${coin}: ${String(e?.shortMessage ?? e?.message ?? e).slice(0, 120)}`);
+    }
 
     // Keep the quote walls hugging the price.
     try {
       const listing = await factoryListings.listings(coin);
-      await maybeRecenter(coin, listing.poolId, head);
+      await maybeRecenter(coin, listing.poolId, head, now);
     } catch (e) {
       console.log(`recenter check failed for ${coin}: ${String(e?.message ?? e).slice(0, 120)}`);
     }

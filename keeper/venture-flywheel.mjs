@@ -189,7 +189,9 @@ async function buildPlan(epoch, fromBlock, toBlock) {
   if (totalVolume === 0n) return null;
 
   // 2) Jackpot budget: estimated protocol revenue x JACKPOT_BPS, capped.
-  const revenueEst = (totalVolume * BigInt(dep.platformFeeBps ?? 100)) / 10_000n;
+  // The pot's share of the platform fee never reaches the treasury.
+  const POT_BPS = BigInt(dep.potShareBps ?? 0);
+  const revenueEst = (totalVolume * BigInt(dep.platformFeeBps ?? 100) * (10_000n - POT_BPS)) / 10n ** 8n;
   let budget = (revenueEst * BigInt(JACKPOT_BPS)) / 10_000n;
   if (budget > MAX_JACKPOT_ETH) budget = MAX_JACKPOT_ETH;
   const balance = await provider.getBalance(wallet.address);
@@ -237,10 +239,11 @@ async function buildPlan(epoch, fromBlock, toBlock) {
   const burnBudget = budget - rebateBudget - (byMaker.size > 0 ? makerBudgetPlanned : 0n);
   const ventures = [];
   // The least the treasury kept from `vol` of routed volume: platform fee,
-  // less the 10% referee discount, less the 20% referral share (which an
-  // attacker can route to a second wallet of their own).
+  // less the 10% referee discount, less the referral share and the pot share
+  // (an attacker can route the first to a second wallet and win the second).
   const bps = BigInt(dep.platformFeeBps ?? 100);
-  const netFee = (vol) => (vol * bps * 72n) / 1_000_000n;
+  const kept = 10_000n - BigInt(dep.refShareBps ?? 2000) - POT_BPS;
+  const netFee = (vol) => (vol * bps * 9_000n * kept) / 10n ** 12n;
   const washCap = (vol) => (netFee(vol) * WASH_CAP_BPS) / 10_000n;
   for (let i = 0; i < topCoins.length; i++) {
     const [coin, vol] = topCoins[i];
