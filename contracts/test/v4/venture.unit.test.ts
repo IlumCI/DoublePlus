@@ -480,4 +480,51 @@ describe("Venture bonding-curve launchpad (unit)", function () {
     );
     expect(await factory.spentWei(coin, buyer1.address)).to.equal(0n);
   });
+
+  it("pushes refunds after an abort, skipping anyone who can't be paid", async () => {
+    const [admin, creator, keeper, holder, mover, stranger] = await ethers.getSigners();
+    const { factory, tokenDeployer, weth } = await deployStack();
+    const factoryAddr = await factory.getAddress();
+    const coin = await launch(factory, tokenDeployer, creator, await weth.getAddress());
+    const erc = await ethers.getContractAt("QuiverToken", coin);
+
+    await (await factory.connect(holder).buy(coin, 0, { value: ethers.parseEther("0.3") })).wait();
+    await (await factory.connect(mover).buy(coin, 0, { value: ethers.parseEther("0.2") })).wait();
+    const rejecter = await (await ethers.getContractFactory("GasHungryWallet")).deploy();
+    const rej = await rejecter.getAddress();
+    await (await rejecter.exec(factoryAddr, factory.interface.encodeFunctionData("buy", [coin, 0]), {
+      value: ethers.parseEther("0.1"),
+    })).wait();
+    // Moved half their tokens away: no longer holds what they bought.
+    await (await erc.connect(mover).transfer(stranger.address, (await erc.balanceOf(mover.address)) / 2n)).wait();
+
+    const backers = [holder.address, mover.address, rej, stranger.address, holder.address];
+    await expect(factory.connect(keeper).refundMany(coin, backers)).to.be.revertedWithCustomError(factory, "NotAborted");
+
+    await network.provider.send("evm_increaseTime", [3 * DAY]);
+    await network.provider.send("evm_mine");
+    await (await factory.abort(coin)).wait();
+
+    const holderSpent = await factory.spentWei(coin, holder.address);
+    const moverSpent = await factory.spentWei(coin, mover.address);
+    const raised = (await factory.curveState(coin)).raisedWei;
+    const before = await ethers.provider.getBalance(holder.address);
+    await (await factory.connect(keeper).refundMany(coin, backers)).wait();
+
+    // Only the holder qualified, and only once despite the duplicate.
+    expect((await ethers.provider.getBalance(holder.address)) - before).to.equal(holderSpent);
+    expect(await factory.spentWei(coin, holder.address)).to.equal(0n);
+    expect(await factory.spentWei(coin, mover.address)).to.equal(moverSpent);
+    expect(await factory.spentWei(coin, rej)).to.be.greaterThan(0n);
+    expect((await factory.curveState(coin)).raisedWei).to.equal(raised - holderSpent);
+    expect(await ethers.provider.getBalance(factoryAddr)).to.equal(
+      raised - holderSpent + (await factory.feesAccrued(admin.address)) + (await factory.feesAccrued(creator.address)),
+    );
+
+    // The skipped mover can still claim the normal way once whole again.
+    await (await erc.connect(stranger).transfer(mover.address, await erc.balanceOf(stranger.address))).wait();
+    await (await erc.connect(mover).approve(factoryAddr, ethers.MaxUint256)).wait();
+    await (await factory.connect(mover).refund(coin)).wait();
+    expect(await factory.spentWei(coin, mover.address)).to.equal(0n);
+  });
 });

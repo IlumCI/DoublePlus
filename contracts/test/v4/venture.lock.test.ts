@@ -33,7 +33,7 @@ describe("VentureFactory: locked liquidity and the raise floor", function () {
       const adminish = factory.interface.fragments
         .filter((f: any) => f.type === "function" && f.stateMutability !== "view" && f.stateMutability !== "pure")
         .map((f: any) => f.name)
-        .filter((n: string) => !["launch", "buy", "sell", "refund", "finalize", "abort", "withdrawFees",
+        .filter((n: string) => !["launch", "buy", "sell", "refund", "refundMany", "finalize", "abort", "withdrawFees",
                                  "sweepUnclaimed", "unlockCallback", "renounceOwnership", "transferOwnership",
                                  "claimFees"].includes(n));
       expect(adminish.sort()).to.deep.equal(["pause", "resume", "setParams"]);

@@ -893,6 +893,30 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         emit Refunded(token, msg.sender, ethOut, tokensBack);
     }
 
+    /// @notice Push refunds to backers of an aborted raise so nobody has to
+    ///         claim. Same rule as refund(): a backer qualifies only while
+    ///         still holding everything they bought. Their tokens stay where
+    ///         they are (a closed raise has no market for them). Anyone who
+    ///         doesn't qualify, or whose wallet rejects ETH, is skipped and
+    ///         can still claim with refund().
+    function refundMany(address token, address[] calldata backers) external nonReentrant {
+        Curve storage c = _curves[token];
+        if (!c.aborted || c.swept) revert NotAborted();
+        for (uint256 i; i < backers.length; i++) {
+            address b = backers[i];
+            uint256 tokensBack = boughtTokens[token][b];
+            uint256 ethOut = spentWei[token][b];
+            if (ethOut == 0 || IERC20(token).balanceOf(b) < tokensBack) continue;
+            // Gas-capped so one hostile wallet can't sink the whole batch.
+            (bool ok,) = payable(b).call{value: ethOut, gas: 50_000}("");
+            if (!ok) continue;
+            boughtTokens[token][b] = 0;
+            spentWei[token][b] = 0;
+            c.raisedWei -= ethOut;
+            emit Refunded(token, b, ethOut, 0);
+        }
+    }
+
     /// @notice Sweep escrow left behind long after an aborted raise. A curve
     ///         claim is keyed to the buying address, so a backer who moves
     ///         their tokens away can no longer refund and their ETH would
