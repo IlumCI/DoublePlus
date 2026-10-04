@@ -46,6 +46,12 @@ import {IQuiverToken} from "../interfaces/IQuiverToken.sol";
 ///             stream is a standing spread-tightener; permissionless
 ///             recenter() migrates stale walls back beside the price.
 ///
+///         Last-buyer pot: potShareBps of the protocol fee on every trade
+///         builds a pot on the coin. Each buy of at least potMinBuyWei restarts
+///         a potTimer countdown with that buyer in the lead; when it runs out,
+///         the leader wins the pot, paid inside the next swap (or by anyone
+///         calling claimPot).
+///
 ///         Anti-snipe: for the first seconds after graduation trades pay a
 ///         decaying premium (15% under 5s, 5% under 15s) and the entire
 ///         premium is routed into the bid wall — snipers fund the floor.
@@ -86,6 +92,13 @@ contract VentureFeeHook is IHooks, ReentrancyGuard, IUnlockCallback {
         uint16 mmBps;
     }
 
+    struct Pot {
+        uint128 pair; // pot balances, held as PoolManager claims
+        uint128 coin;
+        address leader;
+        uint64 deadline;
+    }
+
     struct Band {
         int24 lower;
         int24 upper;
@@ -110,6 +123,13 @@ contract VentureFeeHook is IHooks, ReentrancyGuard, IUnlockCallback {
     /// @notice Share of the protocol fee paid to a bound referrer, in bps of
     ///         the protocol fee (not of volume). Fixed for the life of the hook.
     uint16 public immutable refShareBps;
+    /// @notice Share of the protocol fee that feeds the coin's pot, in bps of
+    ///         the protocol fee. Fixed for the life of the hook.
+    uint16 public immutable potShareBps;
+    /// @notice How long a pot leader has to go unbeaten to win.
+    uint64 public immutable potTimer;
+    /// @notice The smallest buy (in the pair token) that takes the lead.
+    uint256 public immutable potMinBuyWei;
 
     /// @notice One-time, self-bound referral registry: who recruited whom.
     mapping(address user => address referrer) public referrerOf;
@@ -119,6 +139,7 @@ contract VentureFeeHook is IHooks, ReentrancyGuard, IUnlockCallback {
     /// @notice When each pool last saw an outside swap (the hook's own
     ///         plumbing swaps don't count).
     mapping(PoolId => uint64) public lastSwapAt;
+    mapping(PoolId => Pot) public potOf;
     error PriceMoving();
 
     error NotPoolManager();
@@ -127,6 +148,7 @@ contract VentureFeeHook is IHooks, ReentrancyGuard, IUnlockCallback {
     error AlreadyConfigured();
     error BadPolicy();
     error HookNotImplemented();
+    error PotNotWon();
 
     event PoolConfigured(PoolId indexed id, address indexed coin, FeePolicy policy);
     event FeeTaken(PoolId indexed id, Currency currency, bool isBuy, uint256 platform, uint256 founderTax, uint256 sniper);
@@ -139,6 +161,8 @@ contract VentureFeeHook is IHooks, ReentrancyGuard, IUnlockCallback {
     event DevWalletChanged(address indexed coin, address indexed from, address indexed to);
     event ReferrerBound(address indexed user, address indexed referrer);
     event ReferralPaid(address indexed trader, address indexed referrer, Currency currency, uint256 amount);
+    event PotLeader(PoolId indexed id, address indexed leader, uint64 deadline);
+    event PotWon(PoolId indexed id, address indexed winner, uint256 pairAmount, uint256 coinAmount);
     event PayoutDeferred(address indexed to, Currency indexed currency, uint256 amount);
 
     modifier onlyPoolManager() {
@@ -151,16 +175,24 @@ contract VentureFeeHook is IHooks, ReentrancyGuard, IUnlockCallback {
         address _platformTreasury,
         address _launcher,
         uint16 _platformFeeBps,
-        uint16 _refShareBps
+        uint16 _refShareBps,
+        uint16 _potShareBps,
+        uint64 _potTimer,
+        uint256 _potMinBuyWei
     ) {
         require(_platformTreasury != address(0) && _launcher != address(0), "zero");
         require(_platformFeeBps >= MIN_PLATFORM_BPS && _platformFeeBps <= MAX_PLATFORM_BPS, "platform bps");
         require(_refShareBps <= 5_000, "ref bps"); // at most half the protocol fee
+        require(_potShareBps <= 5_000, "pot bps");
+        require(_potTimer >= 60 && _potTimer <= 1 days, "pot timer");
         poolManager = _poolManager;
         platformTreasury = _platformTreasury;
         launcher = _launcher;
         platformFeeBps = _platformFeeBps;
         refShareBps = _refShareBps;
+        potShareBps = _potShareBps;
+        potTimer = _potTimer;
+        potMinBuyWei = _potMinBuyWei;
     }
 
     // ---------------------------------------------------------------------
@@ -236,6 +268,8 @@ contract VentureFeeHook is IHooks, ReentrancyGuard, IUnlockCallback {
         Config memory c = configOf[id];
         if (!c.set) return (IHooks.afterSwap.selector, 0);
         lastSwapAt[id] = uint64(block.timestamp);
+        // An expired round pays out before this trade can start the next.
+        _payPot(id, c);
 
         // Direction: a buy takes the coin OUT of the pool.
         bool coinIsOutput = params.zeroForOne != c.coinIsCurrency0;
@@ -273,7 +307,24 @@ contract VentureFeeHook is IHooks, ReentrancyGuard, IUnlockCallback {
                     emit ReferralPaid(trader, ref, feeCurrency, toReferrer);
                 }
             }
-            _payOut(feeCurrency, platformTreasury, platformFee - toReferrer);
+            uint256 toPot = (platformFee * potShareBps) / BPS;
+            if (toPot > 0) {
+                poolManager.mint(address(this), feeCurrency.toId(), toPot);
+                Pot storage pot = potOf[id];
+                if (Currency.unwrap(feeCurrency) == c.coin) pot.coin += toPot.toUint128();
+                else pot.pair += toPot.toUint128();
+            }
+            _payOut(feeCurrency, platformTreasury, platformFee - toReferrer - toPot);
+        }
+        if (coinIsOutput && trader != address(0)) {
+            int128 paid = c.coinIsCurrency0 ? delta.amount1() : delta.amount0();
+            if (paid < 0 && uint256(uint128(-paid)) >= potMinBuyWei) {
+                uint64 deadline = uint64(block.timestamp) + potTimer;
+                Pot storage pot = potOf[id];
+                pot.leader = trader;
+                pot.deadline = deadline;
+                emit PotLeader(id, trader, deadline);
+            }
         }
         if (founderTax > 0) _settleBuckets(key, id, c, feeCurrency, founderTax, sniperFee);
         else if (sniperFee > 0) _placeQuotes(key, id, c, feeCurrency, sniperFee);
@@ -455,6 +506,40 @@ contract VentureFeeHook is IHooks, ReentrancyGuard, IUnlockCallback {
         }
     }
 
+    /// @dev Pay an expired round to its leader. Must run inside an unlock:
+    ///      burning the hook's claims credits it, and _payOut takes that.
+    function _payPot(PoolId id, Config memory c) private {
+        Pot memory p = potOf[id];
+        if (p.leader == address(0) || block.timestamp < p.deadline) return;
+        delete potOf[id];
+        if (p.pair > 0) {
+            Currency pair = Currency.wrap(c.pair);
+            poolManager.burn(address(this), pair.toId(), p.pair);
+            _payOut(pair, p.leader, p.pair);
+        }
+        if (p.coin > 0) {
+            Currency coin = Currency.wrap(c.coin);
+            poolManager.burn(address(this), coin.toId(), p.coin);
+            _payOut(coin, p.leader, p.coin);
+        }
+        emit PotWon(id, p.leader, p.pair, p.coin);
+    }
+
+    /// @notice A coin's pot: balances, who leads, and when they win.
+    function pot(address coin) external view returns (uint256 pairAmount, uint256 coinAmount, address leader, uint64 deadline) {
+        Pot memory p = potOf[_poolOf[coin]];
+        return (p.pair, p.coin, p.leader, p.deadline);
+    }
+
+    /// @notice Pay out a won pot on a pool nobody is trading. Anyone can call;
+    ///         the pot only ever goes to its leader.
+    function claimPot(address coin) external nonReentrant {
+        PoolId id = _poolOf[coin];
+        Pot memory p = potOf[id];
+        if (!configOf[id].set || p.leader == address(0) || block.timestamp < p.deadline) revert PotNotWon();
+        poolManager.unlock(abi.encode(coin, new Band[](0)));
+    }
+
     function _sweep(Currency currency, address to) private {
         // Inlined TransientStateLibrary.currencyDelta (that library's imports
         // need a Cancun compile target; exttload is just an external call).
@@ -506,6 +591,11 @@ contract VentureFeeHook is IHooks, ReentrancyGuard, IUnlockCallback {
     function unlockCallback(bytes calldata data) external onlyPoolManager returns (bytes memory) {
         (address coin, Band[] memory bands) = abi.decode(data, (address, Band[]));
         Config memory c = configOf[_poolOf[coin]];
+        // An empty band list is claimPot; recenter() never sends one.
+        if (bands.length == 0) {
+            _payPot(_poolOf[coin], c);
+            return "";
+        }
 
         bool c0 = c.coinIsCurrency0;
         PoolKey memory key = PoolKey({

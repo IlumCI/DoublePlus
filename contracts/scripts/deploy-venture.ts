@@ -14,6 +14,10 @@ import { join } from "path";
 //   TREASURY         protocol fee treasury baked into the hook (default: ADMIN)
 //   PLATFORM_FEE_BPS protocol fee on every trade, 50..100 (default 55 = 0.55%)
 //   REF_SHARE_BPS    referrer's cut of the protocol fee, 0..5000 (default 2000 = 20%)
+//   POT_SHARE_BPS    share of the protocol fee feeding each coin's last-buyer
+//                    pot, 0..5000 (default 2000 = 20%)
+//   POT_TIMER_SECS   how long a pot leader must go unbeaten, 60..86400 (default 3600)
+//   POT_MIN_BUY_ETH  smallest buy that takes the pot lead (default 0.001)
 //   ETH_USD_MIN/MAX  accepted band for the launcher-supplied ETH/USD price, whole
 //                    dollars (mainnet default 1000..10000, see ETH_USD_BAND)
 //   MIN_TARGET_ETH   smallest raise the platform finishes, immutable (default 2)
@@ -67,6 +71,9 @@ async function main() {
   const treasury = process.env.TREASURY ?? admin;
   const platformFeeBps = Number(process.env.PLATFORM_FEE_BPS ?? 55);
   const refShareBps = Number(process.env.REF_SHARE_BPS ?? 2000);
+  const potShareBps = Number(process.env.POT_SHARE_BPS ?? 2000);
+  const potTimerSecs = Number(process.env.POT_TIMER_SECS ?? 3600);
+  const potMinBuyWei = ethers.parseEther(process.env.POT_MIN_BUY_ETH ?? "0.001");
   // Curve-phase protocol fees. Immutable once deployed, so they are set here.
   const curveBuyFeeBps = Number(process.env.CURVE_BUY_FEE_BPS ?? 50);
   const curveSellFeeBps = Number(process.env.CURVE_SELL_FEE_BPS ?? 100);
@@ -82,7 +89,7 @@ async function main() {
   const minEthUsd8 = BigInt(process.env.ETH_USD_MIN ?? bandMin) * 10n ** 8n;
   const maxEthUsd8 = BigInt(process.env.ETH_USD_MAX ?? bandMax) * 10n ** 8n;
   console.log(`network: ${network.name} (${chainId})  deployer: ${signer.address}`);
-  console.log(`admin: ${admin}  treasury: ${treasury}  platformFeeBps: ${platformFeeBps}  refShareBps: ${refShareBps}`);
+  console.log(`admin: ${admin}  treasury: ${treasury}  platformFeeBps: ${platformFeeBps}  refShareBps: ${refShareBps}  pot: ${potShareBps} bps, ${potTimerSecs}s, min ${ethers.formatEther(potMinBuyWei)} ETH`);
   console.log(`curveBuyFeeBps: ${curveBuyFeeBps}  curveSellFeeBps: ${curveSellFeeBps}`);
   console.log(`minTargetWei: ${ethers.formatEther(minTargetWei)} ETH  vanity: 0x${VANITY.toString(16)}`);
   console.log(`ETH/USD band: $${minEthUsd8 / 10n ** 8n} .. $${maxEthUsd8 / 10n ** 8n}`);
@@ -105,8 +112,8 @@ async function main() {
   // 2) Mine + deploy the hook at a flag-matching address, launcher pre-baked.
   const Hook = await ethers.getContractFactory("VentureFeeHook");
   const hookArgs = ethers.AbiCoder.defaultAbiCoder().encode(
-    ["address", "address", "address", "uint16", "uint16"],
-    [infra.poolManager, treasury, predictedFactory, platformFeeBps, refShareBps],
+    ["address", "address", "address", "uint16", "uint16", "uint16", "uint64", "uint256"],
+    [infra.poolManager, treasury, predictedFactory, platformFeeBps, refShareBps, potShareBps, potTimerSecs, potMinBuyWei],
   );
   const hookInit = ethers.concat([Hook.bytecode, hookArgs]);
   const hookHash = ethers.keccak256(hookInit);
@@ -166,6 +173,9 @@ async function main() {
     treasury,
     platformFeeBps,
     refShareBps,
+    potShareBps,
+    potTimerSecs,
+    potMinBuyWei: potMinBuyWei.toString(),
     curveBuyFeeBps,
     curveSellFeeBps,
     minTargetWei: minTargetWei.toString(),

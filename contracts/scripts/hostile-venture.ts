@@ -24,7 +24,7 @@ async function main() {
   await vestingDeployer.waitForDeployment();
   const nonce = await ethers.provider.getTransactionCount(admin.address);
   const predictedFactory = ethers.getCreateAddress({ from: admin.address, nonce: nonce + 2 });
-  const hook = await (await ethers.getContractFactory("VentureFeeHook")).deploy(placeholder, admin.address, predictedFactory, 55, 2000);
+  const hook = await (await ethers.getContractFactory("VentureFeeHook")).deploy(placeholder, admin.address, predictedFactory, 55, 2000, 2000, 3600, ethers.parseEther("0.001"));
   await hook.waitForDeployment();
   const tokenDeployer = await (await ethers.getContractFactory("VentureTokenDeployer")).deploy(predictedFactory);
   await tokenDeployer.waitForDeployment();

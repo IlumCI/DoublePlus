@@ -31,8 +31,8 @@ async function deployAll(admin: any, treasury: any) {
 
   const Hook = await ethers.getContractFactory("VentureFeeHook");
   const hookArgs = ethers.AbiCoder.defaultAbiCoder().encode(
-    ["address", "address", "address", "uint16", "uint16"],
-    [POOL_MANAGER, treasury.address, predictedFactory, 100, 2000],
+    ["address", "address", "address", "uint16", "uint16", "uint16", "uint64", "uint256"],
+    [POOL_MANAGER, treasury.address, predictedFactory, 100, 2000, 2000, 3600, ethers.parseEther("0.001")],
   );
   const hookInit = ethers.concat([Hook.bytecode, hookArgs]);
   const hookHash = ethers.keccak256(hookInit);
@@ -177,12 +177,15 @@ describe("Venture bonding-curve launchpad (fork)", function () {
     await expect(hook.connect(trader).setReferrer(admin.address)).to.be.revertedWithCustomError(hook, "AlreadyConfigured");
     const scoutCoinBefore = await erc.balanceOf(scout.address);
     const treasuryCoinBefore2 = await erc.balanceOf(treasury.address);
+    const potCoinBefore = (await hook.pot(coin)).coinAmount;
     await (await router.connect(trader).buy(coin, "0x", 0, { value: ethers.parseEther("0.01") })).wait();
     const scoutGot = (await erc.balanceOf(scout.address)) - scoutCoinBefore;
     const treasuryGot = (await erc.balanceOf(treasury.address)) - treasuryCoinBefore2;
+    const potGot = (await hook.pot(coin)).coinAmount - potCoinBefore;
     expect(scoutGot, "referrer earns their cut").to.be.greaterThan(0n);
-    // 20/80 split of the protocol fee, exact up to rounding dust.
-    expect(scoutGot * 4n).to.be.closeTo(treasuryGot, treasuryGot / 100n + 4n);
+    // Protocol fee splits 20% referrer / 20% pot / 60% treasury, up to dust.
+    expect(potGot).to.be.closeTo(scoutGot, 2n);
+    expect(scoutGot * 3n).to.be.closeTo(treasuryGot, treasuryGot / 100n + 4n);
 
     // Routed events feed the jackpot keeper's trader ranking.
     const routedLogs = await router.queryFilter(router.filters.Routed(), -1000);
@@ -442,5 +445,65 @@ describe("Venture bonding-curve launchpad (fork)", function () {
       expect(near, "fresh wall hugs the price").to.be.lessThanOrEqual(60 * 3);
     }
     await (await router.connect(trader).buy(coin, "0x", 0, { value: ethers.parseEther("0.005") })).wait();
+  });
+
+  it("runs a last-buyer pot: buys take the lead, the leader wins when the clock runs out", async () => {
+    const [admin, founder, whale, a, b, c, d, treasury] = await ethers.getSigners();
+    const { hook, factory, tokenDeployer, router } = await deployAll(admin, treasury);
+    const coin = await launch(factory, tokenDeployer, founder, WETH);
+    const erc = await ethers.getContractAt("QuiverToken", coin);
+    const weth = await ethers.getContractAt("WETH9", WETH);
+    await (await factory.connect(whale).buy(coin, 0, { value: ethers.parseEther("2.1") })).wait(); // graduates
+    await network.provider.send("evm_increaseTime", [20]);
+    await network.provider.send("evm_mine");
+    const rAddr = await router.getAddress();
+    const timer = Number(await hook.potTimer());
+
+    // A buy pays its fee in the coin: the pot fills on the coin side and A leads.
+    await (await router.connect(a).buy(coin, "0x", 0, { value: ethers.parseEther("0.01") })).wait();
+    let pot = await hook.pot(coin);
+    expect(pot.leader).to.equal(a.address);
+    expect(pot.coinAmount).to.be.greaterThan(0n);
+
+    // Too small to take the lead, though it still feeds the pot.
+    await (await router.connect(b).buy(coin, "0x", 0, { value: ethers.parseEther("0.0005") })).wait();
+    expect((await hook.pot(coin)).leader).to.equal(a.address);
+
+    // A sell pays in WETH and feeds that side without touching the lead.
+    await (await erc.connect(a).approve(rAddr, ethers.MaxUint256)).wait();
+    await (await router.connect(a).sell(coin, (await erc.balanceOf(a.address)) / 4n, "0x", 0)).wait();
+    pot = await hook.pot(coin);
+    expect(pot.leader).to.equal(a.address);
+    expect(pot.pairAmount).to.be.greaterThan(0n);
+
+    await (await router.connect(b).buy(coin, "0x", 0, { value: ethers.parseEther("0.002") })).wait();
+    pot = await hook.pot(coin);
+    expect(pot.leader).to.equal(b.address);
+    await expect(hook.connect(c).claimPot(coin)).to.be.revertedWithCustomError(hook, "PotNotWon");
+
+    // Nobody trades for the whole timer: anyone can pay B out.
+    await network.provider.send("evm_increaseTime", [timer]);
+    await network.provider.send("evm_mine");
+    const coinBefore = await erc.balanceOf(b.address);
+    const wethBefore = await weth.balanceOf(b.address);
+    await (await hook.connect(c).claimPot(coin)).wait();
+    expect((await erc.balanceOf(b.address)) - coinBefore).to.equal(pot.coinAmount);
+    expect((await weth.balanceOf(b.address)) - wethBefore).to.equal(pot.pairAmount);
+    pot = await hook.pot(coin);
+    expect(pot.leader).to.equal(ethers.ZeroAddress);
+    expect(pot.coinAmount + pot.pairAmount).to.equal(0n);
+    await expect(hook.connect(c).claimPot(coin)).to.be.revertedWithCustomError(hook, "PotNotWon");
+
+    // Next round: C leads, the clock runs out, and D's trade pays C first.
+    await (await router.connect(c).buy(coin, "0x", 0, { value: ethers.parseEther("0.002") })).wait();
+    const won = await hook.pot(coin);
+    await network.provider.send("evm_increaseTime", [timer]);
+    await network.provider.send("evm_mine");
+    const cBefore = await erc.balanceOf(c.address);
+    await (await router.connect(d).buy(coin, "0x", 0, { value: ethers.parseEther("0.002") })).wait();
+    expect((await erc.balanceOf(c.address)) - cBefore).to.equal(won.coinAmount);
+    pot = await hook.pot(coin);
+    expect(pot.leader, "D's buy starts the next round").to.equal(d.address);
+    expect(pot.coinAmount, "and seeds it").to.be.greaterThan(0n);
   });
 });
