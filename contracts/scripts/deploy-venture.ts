@@ -69,19 +69,18 @@ async function main() {
   const [signer] = await ethers.getSigners();
   const admin = process.env.ADMIN ?? signer.address;
   const treasury = process.env.TREASURY ?? admin;
-  const platformFeeBps = Number(process.env.PLATFORM_FEE_BPS ?? 55);
+  const platformFeeBps = Number(process.env.PLATFORM_FEE_BPS ?? 75);
   const refShareBps = Number(process.env.REF_SHARE_BPS ?? 2000);
   const potShareBps = Number(process.env.POT_SHARE_BPS ?? 2000);
   const potTimerSecs = Number(process.env.POT_TIMER_SECS ?? 3600);
-  const potMinBuyWei = ethers.parseEther(process.env.POT_MIN_BUY_ETH ?? "0.001");
+  const potMinBuyWei = ethers.parseEther(process.env.POT_MIN_BUY_ETH ?? "0.005");
   // Curve-phase protocol fees. Immutable once deployed, so they are set here.
-  const curveBuyFeeBps = Number(process.env.CURVE_BUY_FEE_BPS ?? 50);
+  const curveBuyFeeBps = Number(process.env.CURVE_BUY_FEE_BPS ?? 100);
   const curveSellFeeBps = Number(process.env.CURVE_SELL_FEE_BPS ?? 100);
   // Smallest raise the platform will finish. Immutable on the factory, so it
-  // is a deploy-time decision: mainnet ships 2 ETH (a floor-sized raise
-  // graduates near 6 ETH FDV), testnets override it down so a raise can
+  // is a deploy-time decision: mainnet ships 1 ETH, testnets override it down so a raise can
   // actually be driven to graduation.
-  const minTargetWei = ethers.parseEther(process.env.MIN_TARGET_ETH ?? "2");
+  const minTargetWei = ethers.parseEther(process.env.MIN_TARGET_ETH ?? "1");
   // The address mark, matched at either end: 0x2add… or 0x…2add. Immutable, so
   // it is a deploy-time decision; 0 would disable it and is for tests only.
   const VANITY = 0x2add;
@@ -154,8 +153,8 @@ async function main() {
 
   // setParams: open-curve graduation trigger and launch fee.
   const gradWei = ethers.parseEther(process.env.GRADUATION_RAISE_ETH ?? "4");
-  const creationFeeWei = ethers.parseEther(process.env.CREATION_FEE_ETH ?? "0");
-  const sweepDelaySecs = 365 * 86_400, creatorCurveShareBps = 1_000;
+  const creationFeeWei = ethers.parseEther(process.env.CREATION_FEE_ETH ?? "0.0003");
+  const sweepDelaySecs = 365 * 86_400, creatorCurveShareBps = 2_000;
   if (admin.toLowerCase() === signer.address.toLowerCase()) {
     await (await factory.setParams(creationFeeWei, gradWei, sweepDelaySecs, creatorCurveShareBps)).wait();
   } else {
