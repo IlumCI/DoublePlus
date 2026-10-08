@@ -9,6 +9,7 @@ import { useVentures } from "./useVentures";
 import { useLiveFeed, type FeedItem } from "./feed";
 import { useCurveStats, type CurveStats } from "./boardStats";
 import { chainNowSecs } from "./clock";
+import { useBoosts, type LiveBoost } from "./boosts";
 
 type Filter = "all" | "raising" | "soon" | "graduated";
 type Col = "age" | "mcap" | "progress" | "bought" | "buyers";
@@ -26,6 +27,7 @@ export function Board() {
   const [params, setParams] = useSearchParams();
   const feed = useLiveFeed();
   const curve = useCurveStats();
+  const boosts = useBoosts();
   // ETH bought per coin over the last hour: what "trending" actually means.
   const bought1h = useMemo(() => {
     const cutoff = chainNowSecs() - 3600;
@@ -68,8 +70,15 @@ export function Board() {
       return v.createdAt;
     };
     list.sort((a, b) => (asc ? key(a) - key(b) : key(b) - key(a)) || b.createdAt - a.createdAt);
+    // The default view pins live boosts on top, biggest run first. A sort the
+    // viewer picked is left alone.
+    if (col === "age" && !asc && !needle) {
+      const paid = (v: Venture) => boosts.get(v.address.toLowerCase())?.paid ?? 0n;
+      const pinned = list.filter((v) => paid(v) > 0n).sort((a, b) => (paid(b) > paid(a) ? 1 : paid(b) < paid(a) ? -1 : 0));
+      list = [...pinned, ...list.filter((v) => paid(v) === 0n)];
+    }
     return list;
-  }, [ventures, filter, col, asc, q, bought1h, curve]);
+  }, [ventures, filter, col, asc, q, bought1h, curve, boosts]);
 
   const Th = ({ c, children, num }: { c?: Col; children: React.ReactNode; num?: boolean }) => (
     <span role="columnheader" className={`${num ? "n" : ""}${c === col ? " on" : ""}`}
@@ -122,7 +131,7 @@ export function Board() {
             <Th c="age" num>Age</Th>
           </div>
           {shown.map((v) => (
-            <Row key={v.address} v={v} ethUsd={ethUsd} bought={bought1h.get(v.address.toLowerCase()) ?? 0n} stats={curve.get(v.address.toLowerCase())} />
+            <Row key={v.address} v={v} ethUsd={ethUsd} bought={bought1h.get(v.address.toLowerCase()) ?? 0n} stats={curve.get(v.address.toLowerCase())} boost={boosts.get(v.address.toLowerCase())} />
           ))}
         </div>
       )}
@@ -182,7 +191,7 @@ function useGraduationToasts(ventures: Venture[] | null, feed: FeedItem[], loade
 }
 
 /** One coin, one row. */
-function Row({ v, ethUsd, bought, stats: curveStats }: { v: Venture; ethUsd: number; bought: bigint; stats?: CurveStats }) {
+function Row({ v, ethUsd, bought, stats: curveStats, boost }: { v: Venture; ethUsd: number; bought: bigint; stats?: CurveStats; boost?: LiveBoost }) {
   const funded = pct(v.raisedWei, v.targetRaiseWei);
   const left = v.targetRaiseWei > v.raisedWei ? v.targetRaiseWei - v.raisedWei : 0n;
   const flash = useFlashOnChange(v.raisedWei);
@@ -196,7 +205,7 @@ function Row({ v, ethUsd, bought, stats: curveStats }: { v: Venture; ethUsd: num
       <span role="cell" className="lh-dname">
         <Monogram v={v} />
         <span>
-          <b>{v.name}</b>
+          <b>{v.name}{boost && <span className="lh-boost">boosted</span>}</b>
           <small>${v.symbol}{v.meta.pitch ? ` · ${v.meta.pitch}` : ""}</small>
         </span>
       </span>

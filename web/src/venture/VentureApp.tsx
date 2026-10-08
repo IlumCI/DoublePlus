@@ -31,6 +31,7 @@ const LaunchVenture = lazy(() => import("./Launch").then((m) => ({ default: m.La
 const Desk = lazy(() => import("./Desk").then((m) => ({ default: m.Desk })));
 const Flywheel = lazy(() => import("./Flywheel").then((m) => ({ default: m.Flywheel })));
 const Stats = lazy(() => import("./Stats").then((m) => ({ default: m.Stats })));
+const Stocks = lazy(() => import("./Stocks").then((m) => ({ default: m.Stocks })));
 const Docs = lazy(() => import("./Docs").then((m) => ({ default: m.Docs })));
 const Legal = lazy(() => import("./Legal"));
 
@@ -44,6 +45,7 @@ const NAV: [string, string][] = [
   ["/desk", "Portfolio"],
   ["/rewards", "Rewards"],
   ["/stats", "Stats"],
+  ["/stocks", "Stocks"],
   ["/docs", "How it works"],
 ];
 
@@ -152,6 +154,7 @@ function Shell() {
                 <Route path="/desk" element={<Desk />} />
                 <Route path="/rewards" element={<Flywheel />} />
                 <Route path="/stats" element={<Stats />} />
+                <Route path="/stocks" element={<Stocks />} />
                 <Route path="/docs" element={<Docs />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
@@ -235,7 +238,7 @@ function TaskPane() {
       </section>
       <section>
         <h2>Other places</h2>
-        {NAV.slice(2, 4).map(([to, label]) => (
+        {NAV.slice(2, 5).map(([to, label]) => (
           <NavLink key={to} className="lh-task" to={to} viewTransition>{label}</NavLink>
         ))}
       </section>

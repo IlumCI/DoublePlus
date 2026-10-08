@@ -220,6 +220,9 @@ a:hover > .dp-badge.dp-dexpend, a:hover > .dp-badge.dp-dexunpaid { color: var(--
 .dp-orders button { background: transparent; border: 0; color: var(--faint); cursor: pointer; font: inherit; text-decoration: underline; }
 .dp-payout { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; font-family: var(--body); color: var(--faint); }
 .dp-payout select { font-family: var(--mono); font-size: 10.5px; }
+.lh-boost { display: inline-block; margin-left: 6px; padding: 0 5px; border-radius: 3px; font: 10px var(--mono); color: var(--bg); background: var(--paper); vertical-align: 1px; }
+.dp-boostctl { display: inline-flex; gap: 4px; align-items: center; }
+.dp-boostctl select { font: 10.5px var(--mono); }
 .dp-mods { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0 18px; }
 .dp-tiers { margin-top: 12px; font-family: var(--mono); font-size: 10.5px; color: var(--dim); }
 .dp-tiers-head, .dp-tier { display: grid; grid-template-columns: 1fr 52px 64px; gap: 8px; align-items: center; }

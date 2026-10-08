@@ -51,6 +51,7 @@ const values = {
   VITE_VENTURE_UPDATES: d.contracts.updates,
   VITE_VENTURE_LIMIT_ORDERS: d.contracts.limitOrders ?? "",
   VITE_VENTURE_PAYOUTS: d.contracts.payouts ?? "",
+  VITE_VENTURE_BOOSTS: d.contracts.boosts ?? "",
   VITE_VENTURE_START_BLOCK: String(d.startBlock),
   VITE_WETH_ADDRESS: d.contracts.weth,
   VITE_PLATFORM_FEE_BPS: String(d.platformFeeBps),

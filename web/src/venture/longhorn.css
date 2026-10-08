@@ -632,3 +632,16 @@ input[type="range"]::-moz-range-thumb { background: var(--gel-blue); border: 1px
 
 /* Row icons at file-icon size, as in a Details view. */
 .lh-dname .dp-monogram { width: 28px; height: 28px; font-size: 13px; border-radius: 5px; box-shadow: none; }
+
+/* Stock premiums: its own six columns, which the board's narrow-window
+   column hiding must not touch. */
+.lh-list.dp-stocks { --cols: minmax(150px, 2fr) 88px 88px 84px 84px 84px; }
+.lh-list.dp-stocks [role="row"] > * { display: block; }
+.lh-list.dp-stocks [role="row"] > .lh-dname { display: flex; }
+.dp-board .lh-cmdlabel.dp-mstate { display: inline; }
+@media (max-width: 760px) {
+  .lh-list.dp-stocks { --cols: minmax(0, 1.4fr) 76px 70px; }
+  .lh-list.dp-stocks [role="row"] > :nth-child(3),
+  .lh-list.dp-stocks [role="row"] > :nth-child(5),
+  .lh-list.dp-stocks [role="row"] > :nth-child(6) { display: none; }
+}

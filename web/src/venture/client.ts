@@ -44,6 +44,7 @@ export const VENTURE = {
   updates: envAddress(vite.VITE_VENTURE_UPDATES),
   limitOrders: envAddress(vite.VITE_VENTURE_LIMIT_ORDERS),
   payouts: envAddress(vite.VITE_VENTURE_PAYOUTS),
+  boosts: envAddress(vite.VITE_VENTURE_BOOSTS),
   poolManager: envAddress(vite.VITE_V4_POOL_MANAGER, "0x8366a39cc670b4001a1121b8f6a443a643e40951"),
 };
 
@@ -253,6 +254,16 @@ export const limitAbi = [
 
 export const placedEvent = parseAbiItem(
   "event Placed(uint256 indexed id, address indexed owner, address indexed coin, bool isBuy, uint256 amountIn, uint256 minOut, uint16 tipBps, uint64 expiry)",
+);
+
+export const boostsAbi = [
+  { type: "function", name: "pricePerHour", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "boost", stateMutability: "payable", inputs: [{ name: "coin", type: "address" }, { name: "hoursBought", type: "uint256" }], outputs: [] },
+  { type: "function", name: "activeBoost", stateMutability: "view", inputs: [{ type: "address" }], outputs: [{ name: "until", type: "uint64" }, { name: "paid", type: "uint256" }] },
+] as const;
+
+export const boostedEvent = parseAbiItem(
+  "event Boosted(address indexed coin, address indexed by, uint256 hoursBought, uint256 paid, uint64 until)",
 );
 
 export const payoutsAbi = [

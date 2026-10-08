@@ -12,7 +12,7 @@ import { usePageMeta } from "../seo";
 import { ago, safeImageUrl, DexBadge, fmtMcap, Monogram, short, StatusBadge, useEthUsd } from "../ui";
 import { FailPanel, GraduatePanel } from "./ClosedPanels";
 import { CurvePanel } from "./CurvePanel";
-import { AlertToggle, Socials, StatBar, YourBag } from "./Header";
+import { AlertToggle, BoostButton, Socials, StatBar, YourBag } from "./Header";
 import { RaisePanel } from "./RaisePanel";
 import { TradePanel } from "./TradePanel";
 import { BackersPane, ContractCard, ProjectPane, TermsPane, UpdatesPane, VestingCard, WhoEarns } from "./panes";
@@ -107,7 +107,7 @@ function VentureBody({ v, fills, ethUsd }: { v: VentureT; fills: Fill[]; ethUsd:
           {(v.meta.pitch || v.meta.description) && <p className="dp-oneliner">{v.meta.pitch || v.meta.description}</p>}
           <p className="dp-prov" style={{ margin: "4px 0 0" }}>
             created by <b>{short(v.creator)}</b> · {ago(v.createdAt)} ago
-            {v.meta.sector ? <> · {v.meta.sector}</> : null} · <StatusBadge v={v} /> <DexBadge profile={dex} /> <AlertToggle v={v} />
+            {v.meta.sector ? <> · {v.meta.sector}</> : null} · <StatusBadge v={v} /> <DexBadge profile={dex} /> <AlertToggle v={v} /> <BoostButton v={v} />
           </p>
           <Socials meta={v.meta} dex={dex} />
         </div>

@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { zeroAddress } from "viem";
+import { useWalletClient } from "wagmi";
 
-import { factoryAbi, hookAbi, modulesAbi, SOCIAL_FIELDS, VENTURE, venturePc, type Modules, type PoolTrade, type Venture as VentureT } from "../client";
+import { boostsAbi, confirmTx, factoryAbi, hookAbi, modulesAbi, SOCIAL_FIELDS, VENTURE, venturePc, type Modules, type PoolTrade, type Venture as VentureT } from "../client";
 import { marketStats } from "../marketStats";
 import { profileLinks, type DexProfile } from "../../lib/dexscreener";
 import { loadHolding, type Holding } from "../portfolio";
 import { safeLinkUrl } from "../safe";
 import { useWatched } from "../alerts";
 import { BuySellStrength, Delta, fmtEth, fmtUsdPrice, fmtUsdV, StatCell, useTick } from "../ui";
-import { useWallet } from "../../lib/useWallet";
+import { errorText, useWallet } from "../../lib/useWallet";
+import { useUi } from "../../store";
 import { chainNowSecs } from "../clock";
 
 
@@ -126,6 +128,58 @@ export function useModules(coin: `0x${string}`): Modules | null {
     return () => { live = false; };
   }, [coin]);
   return m;
+}
+
+/** Buy board placement for a coin, or show how long its boost has left. */
+export function BoostButton({ v }: { v: VentureT }) {
+  const { isConnected, connectFirst } = useWallet();
+  const { data: wc } = useWalletClient();
+  const pushToast = useUi((st) => st.pushToast);
+  const [open, setOpen] = useState(false);
+  const [hours, setHours] = useState(6);
+  const [price, setPrice] = useState<bigint | null>(null);
+  const [until, setUntil] = useState(0);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (VENTURE.boosts === zeroAddress) return;
+    let live = true;
+    Promise.all([
+      venturePc.readContract({ address: VENTURE.boosts, abi: boostsAbi, functionName: "pricePerHour" }),
+      venturePc.readContract({ address: VENTURE.boosts, abi: boostsAbi, functionName: "activeBoost", args: [v.address] }),
+    ]).then(([p, [u]]) => { if (live) { setPrice(p); setUntil(Number(u)); } }).catch(() => undefined);
+    return () => { live = false; };
+  }, [v.address, busy]);
+  useTick();
+  if (VENTURE.boosts === zeroAddress || price === null || v.phase === "failed") return null;
+  const left = until - chainNowSecs();
+  const go = async () => {
+    if (!isConnected) return connectFirst();
+    if (!wc) return;
+    setBusy(true);
+    try {
+      const hash = await wc.writeContract({ address: VENTURE.boosts, abi: boostsAbi, functionName: "boost", args: [v.address, BigInt(hours)], value: price * BigInt(hours), chain: wc.chain, account: wc.account });
+      await confirmTx(hash);
+      pushToast({ kind: "success", title: `$${v.symbol} boosted for ${hours}h`, txHash: hash });
+      setOpen(false);
+    } catch (e) {
+      pushToast({ kind: "error", title: "Boost failed", body: errorText(e) });
+    } finally { setBusy(false); }
+  };
+  return (
+    <span className="dp-boostctl">
+      {left > 0 && <span className="lh-boost">boosted · {left >= 3600 ? `${Math.floor(left / 3600)}h` : `${Math.ceil(left / 60)}m`} left</span>}
+      {open ? (
+        <>
+          <select value={hours} onChange={(e) => setHours(Number(e.target.value))} disabled={busy}>
+            {[1, 6, 24, 72].map((h) => <option key={h} value={h}>{h}h · {fmtEth(price * BigInt(h), 4)} ETH</option>)}
+          </select>
+          <button className="dp-bell" disabled={busy} onClick={go}>{busy ? "Confirm…" : "Boost"}</button>
+        </>
+      ) : (
+        <button className="dp-bell" onClick={() => setOpen(true)}>{left > 0 ? "Extend" : "Boost"}</button>
+      )}
+    </span>
+  );
 }
 
 /** Watch a coin: an alert when it is nearly full, graduates, or opens
