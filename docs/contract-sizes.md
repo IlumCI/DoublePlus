@@ -14,9 +14,11 @@ share helpers overlap, so rows add up to a little more than the whole.
 |---|---|---|
 | VentureFactory | 24,395 | **181** |
 | VentureFeeHook | 20,295 | 4,281 |
-| VentureTokenDeployer (embeds QuiverToken's initcode) | 9,706 | 14,870 |
-| QuiverToken (one per coin) | 5,634 | 18,942 |
-| VentureRouter | 5,112 | 19,464 |
+| VentureTokenDeployer (embeds QuiverToken's initcode) | 10,322 | 14,254 |
+| QuiverToken (one per coin) | 6,251 | 18,325 |
+| VentureRouter (with buyFor/sellFor) | 5,382 | 19,194 |
+| VenturePayouts | 4,581 | 19,995 |
+| VentureLimitOrders | 3,654 | 20,922 |
 | VestingDeployer (embeds FounderVesting) | 2,706 | 21,870 |
 | FounderVesting (one per coin) | 1,996 | 22,580 |
 | VentureUpdates | 675 | 23,901 |
