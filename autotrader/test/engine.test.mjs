@@ -101,8 +101,8 @@ test("a bundle that dumps after we buy costs one bounded loss, not the bag", () 
 test("holds through jeets' micro-sells, and is out by the time the dev dumps", () => {
   const rand = lcg(3);
   const c = new SynthCoin("0xd", 1000, { deployer: "0xdev" });
-  c.buy(1000.1, "0xdev", 0.1);
-  const t1 = organic(c, 1020, 90, rand, { jeets: 0.3, end: 0.3 });
+  c.buy(1000.1, "0xdev", 0.01); // a small creator bag: a large one keeps the trader out
+  const t1 = organic(c, 1020, 150, rand, { jeets: 0.3, end: 0.3 });
   c.sellAll(t1 + 3, "0xdev");
   organic(c, t1 + 10, 60, rand, { start: 0.2, end: 0.2 });
   const { accts, eng } = run(stream(c));
@@ -148,4 +148,21 @@ test("books balance: cash and bags only move by fills, fees, taxes and gas", () 
   const bigMax = Math.max(0, ...big.closed.map((x) => x.cost));
   assert.ok(bigMax < 0.1 * big.start, "impact cap binds long before equity does");
   assert.ok(mid.closed.length > 0);
+});
+
+test("stays out of a coin whose creator sits on a big bag", () => {
+  const rand = lcg(6);
+  const c = new SynthCoin("0xg", 1000, { deployer: "0xdev" });
+  c.buy(1000.1, "0xdev", 0.15);
+  organic(c, 1020, 200, rand);
+  const { eng } = run(stream(c));
+  assert.equal(eng.signals.length, 0);
+});
+
+test("stays out of an expensive coin: taxes eat the round trip", () => {
+  const rand = lcg(7);
+  const c = new SynthCoin("0xh", 1000, { tax: 0.04 });
+  organic(c, 1020, 200, rand);
+  const { eng } = run(stream(c));
+  assert.equal(eng.signals.length, 0);
 });

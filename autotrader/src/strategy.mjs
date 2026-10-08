@@ -7,7 +7,7 @@
 export const CONFIG = {
   // --- entry: a buy cascade forming (calibrated on the first 3 h of
   //     2026-10-08; see src/calibrate.mjs) ---
-  minAge: 10, // s: past the snipe-tax seconds
+  minAge: 60, // s: past the snipe-tax seconds and the first sniper churn
   maxAge: 15 * 60, // runs start young; past ~25 min they mostly bleed
   maxProgress: 0.2, // the early curve: 44% ran, 6% dumped below 10%
   minBuys60: 3,
@@ -17,6 +17,9 @@ export const CONFIG = {
   maxRunup: 1.2, // above this, waves came 34% of the time
   minEarlyShare: 0.02, // a launch cohort that has fully left means a dead coin
   minOffHigh: 0.8,
+  maxRoundTrip: 0.06, // fee + both taxes: a round trip has to be cheap enough to win
+  maxDevShare: 0.05, // a creator sitting on more of the float can end it in one sell
+  maxEarlyDumpPress: 0.02, // the launch cohort isn't unloading right now
   entryScore: 1.0,
   // --- exit: sell into the wave before it breaks ---
   topRunup: 1.25, // vertical against the 5-min VWAP...
@@ -26,6 +29,8 @@ export const CONFIG = {
   sellWaveER: 0.5,
   wave1EarlySold60: 0.3, // the launch cohort dumping a third of its bag in a minute
   wave1MinEarlyShare: 0.1,
+  wave1Press: 0.04, // ...and that selling is worth 4% of the curve's ETH
+  grace: 20, // s after a fill before the wave reads can fire (dev dump and wrong read still can)
   devDumpLeft: 0.7, // dev has sold 30%+
   gradWaveProgress: 0.85, // sell into the graduation run
   fadeNBB: 0.2,
@@ -68,6 +73,9 @@ export function entrySignal(f, h, social, cfg = CONFIG) {
   if (f.offHigh < cfg.minOffHigh) return { go: false, why: "off-high" };
   if (f.earlyShare < cfg.minEarlyShare) return { go: false, why: "cohort-gone" };
   if (f.devLeft < cfg.devDumpLeft) return { go: false, why: "dev-sold" };
+  if (f.devShare > cfg.maxDevShare) return { go: false, why: "dev-bag" };
+  if (f.roundTrip > cfg.maxRoundTrip) return { go: false, why: "taxed" };
+  if (f.earlyDumpPress > cfg.maxEarlyDumpPress) return { go: false, why: "cohort-selling" };
   if (!h) return { go: false, why: "no-fit" };
   if (h.nBB < cfg.minNBB) return { go: false, why: "not-self-exciting" };
   // Buys feeding buys, arrivals accelerating, a face on the coin.
@@ -84,10 +92,12 @@ export function entrySignal(f, h, social, cfg = CONFIG) {
 export function exitSignal(f, h, pos, now, cfg = CONFIG) {
   const ret = f.price / pos.entryPrice;
   if (f.devLeft < cfg.devDumpLeft) return "dev-dump";
+  if (ret <= cfg.wrongRead) return "wrong-read";
+  if (now - pos.t < cfg.grace) return null;
   // The top: price gone vertical and the buying now sets off selling.
   if (ret >= cfg.topGain && f.runup >= cfg.topRunup && h && h.alpha[1][0] >= cfg.topASB) return "wave-top";
   // Wave 1: the launch cohort unloading a real bag.
-  if (f.earlySold60 >= cfg.wave1EarlySold60 && f.earlyShare >= cfg.wave1MinEarlyShare) return "wave1";
+  if (f.earlySold60 >= cfg.wave1EarlySold60 && f.earlyShare >= cfg.wave1MinEarlyShare && f.earlyDumpPress >= cfg.wave1Press) return "wave1";
   // Wave 2 into graduation.
   if (f.progress >= cfg.gradWaveProgress) return "grad-wave";
   // A real sell wave, not jeets: heavy sells and sellers in charge.

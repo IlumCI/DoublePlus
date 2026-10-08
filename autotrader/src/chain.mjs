@@ -4,7 +4,21 @@ import { ethers } from "ethers";
 
 export const RPC = process.env.RPC_URL ?? "https://rpc.mainnet.chain.robinhood.com";
 export const CHAIN_ID = 4663;
-export const provider = () => new ethers.JsonRpcProvider(RPC, CHAIN_ID, { staticNetwork: true, batchMaxCount: 50 });
+/** JSON-RPC with retries on the transient failures a long pull always hits. */
+export const provider = () => {
+  const p = new ethers.JsonRpcProvider(RPC, CHAIN_ID, { staticNetwork: true, batchMaxCount: 50 });
+  const send = p.send.bind(p);
+  p.send = async (method, params) => {
+    for (let i = 0; ; i++) {
+      try { return await send(method, params); } catch (e) {
+        const transient = /timeout|rate|limit|429|ECONNRESET|ETIMEDOUT|502|503|504|socket/i.test(String(e?.shortMessage ?? e?.message ?? e));
+        if (!transient || i >= 6) throw e;
+        await new Promise((r) => setTimeout(r, 400 * 2 ** i));
+      }
+    }
+  };
+  return p;
+};
 
 export const POOL_MANAGER = "0x8366a39cc670b4001a1121b8f6a443a643e40951";
 export const WETH = "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73";

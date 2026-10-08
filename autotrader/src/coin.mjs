@@ -193,7 +193,9 @@ export class Coin {
     const top = [...this.holders.entries()].filter(([, v]) => v > 0).map(([, v]) => v).sort((a, b) => b - a);
     const top10 = top.slice(0, 10).reduce((s, x) => s + x, 0) / sold;
     const earlyHeld = this.earlyHeld();
-    const earlySold60 = this.window(now, 60).filter((x) => !x.buy && this.early.has(x.who)).reduce((s, x) => s + x.tokens, 0);
+    const earlySells60 = this.window(now, 60).filter((x) => !x.buy && this.early.has(x.who));
+    const earlySold60 = earlySells60.reduce((s, x) => s + x.tokens, 0);
+    const earlySoldEth60 = earlySells60.reduce((s, x) => s + x.eth, 0);
     const largestSell60 = sells60.reduce((m, x) => Math.max(m, x.eth), 0);
     const vwap300 = (() => {
       const w = this.window(now, 300);
@@ -219,6 +221,9 @@ export class Coin {
       earlyShare: earlyHeld / sold, // what the launch cohort still holds
       earlyLeft: this.earlyPeak > 0 ? earlyHeld / this.earlyPeak : 0,
       earlySold60: earlyHeld + earlySold60 > 0 ? earlySold60 / (earlyHeld + earlySold60) : 0,
+      earlyDumpPress: Q > 0 ? earlySoldEth60 / Q : 0, // the cohort's selling, against the curve's depth
+      devShare: this.devTokens / sold,
+      roundTrip: 2 * FEE + this.buyTax + this.sellTax,
       devLeft: this.devPeak > 0 ? this.devTokens / this.devPeak : 1,
       devSold: this.devSold,
       largestSell60: Q > 0 ? largestSell60 / Q : 0,
