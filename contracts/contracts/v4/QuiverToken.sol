@@ -59,17 +59,25 @@ contract QuiverToken is ERC20 {
     /// @notice Lifetime rewards distributed to holders, in reward units.
     uint256 public totalRewardsDistributed;
 
+    /// @notice Tier a holder needs before an agent may collect for them: 5x.
+    uint256 public constant AGENT_TIER_BPS = 50_000;
+    /// @notice A contract the holder has chosen to collect their rewards and
+    ///         convert them (to ETH, this coin, a stablecoin, a stock…).
+    mapping(address holder => address) public payoutAgent;
+
     string private _metadataURI;
 
     event HookSet(address indexed hook);
     event ExcludedSet(address indexed account, bool excluded);
     event RewardsDistributed(uint256 amount);
     event RewardsClaimed(address indexed holder, uint256 amount);
+    event PayoutAgentSet(address indexed holder, address indexed agent);
 
     error OnlyFactory();
     error OnlyHook();
     error HookAlreadySet();
     error WrongRewardCurrency();
+    error NotAgent();
 
     address private immutable _factory;
 
@@ -217,17 +225,41 @@ contract QuiverToken is ERC20 {
         }
     }
 
-    function _claimTo(address holder) private returns (uint256 amount) {
+    /// @notice Choose (or clear, with 0) the agent that collects your rewards.
+    function setPayoutAgent(address agent) external {
+        payoutAgent[msg.sender] = agent;
+        emit PayoutAgentSet(msg.sender, agent);
+    }
+
+    /// @notice The holder's chosen agent collects their rewards to itself, to
+    ///         convert and forward. Only while the holder sits at 5x or above.
+    function claimForAgent(address holder) external returns (uint256) {
+        address agent = payoutAgent[holder];
+        if (agent == address(0) || msg.sender != agent || !atAgentTier(holder)) revert NotAgent();
+        return _pay(holder, agent);
+    }
+
+    function atAgentTier(address holder) public view returns (bool) {
+        uint256 floor_ = minHoldForDividends;
+        if (dividendMode == 0 || floor_ == 0) return false;
+        return tierMultiplierBps(balanceOf(holder) / floor_) >= AGENT_TIER_BPS;
+    }
+
+    function _claimTo(address holder) private returns (uint256) {
+        return _pay(holder, holder);
+    }
+
+    function _pay(address holder, address to) private returns (uint256 amount) {
         _settle(holder);
         amount = claimable[holder];
         if (amount == 0) return 0;
         claimable[holder] = 0;
         emit RewardsClaimed(holder, amount);
         if (rewardToken == address(0)) {
-            (bool ok, ) = payable(holder).call{value: amount}("");
+            (bool ok, ) = payable(to).call{value: amount}("");
             require(ok, "native xfer");
         } else {
-            IERC20(rewardToken).safeTransfer(holder, amount);
+            IERC20(rewardToken).safeTransfer(to, amount);
         }
     }
 

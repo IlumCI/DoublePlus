@@ -155,6 +155,14 @@ async function main() {
   await limitOrders.waitForDeployment();
   console.log("limitOrders:", await limitOrders.getAddress());
 
+  // Converts 5x holders' dividends; the keeper triggers conversions for them.
+  const payoutKeeper = process.env.PAYOUT_KEEPER ?? admin;
+  const payouts = await (await ethers.getContractFactory("VenturePayouts")).deploy(
+    routerAddr, infra.v3Router, infra.weth, payoutKeeper,
+  );
+  await payouts.waitForDeployment();
+  console.log("payouts:", await payouts.getAddress(), "keeper:", payoutKeeper);
+
   // setParams: open-curve graduation trigger and launch fee.
   const gradWei = ethers.parseEther(process.env.GRADUATION_RAISE_ETH ?? "4");
   const creationFeeWei = ethers.parseEther(process.env.CREATION_FEE_ETH ?? "0.0003");
@@ -192,6 +200,7 @@ async function main() {
       router: routerAddr,
       updates: await updates.getAddress(),
       limitOrders: await limitOrders.getAddress(),
+      payouts: await payouts.getAddress(),
       tokenDeployer: await tokenDeployer.getAddress(),
       vestingDeployer: await vestingDeployer.getAddress(),
       poolManager: infra.poolManager,

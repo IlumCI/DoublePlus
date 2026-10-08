@@ -67,7 +67,7 @@ async function deployAll(admin: any, treasury: any) {
   return { hook, factory, tokenDeployer, router, updates };
 }
 
-async function launch(factory: any, tokenDeployer: any, signer: any, pair: string) {
+async function launch(factory: any, tokenDeployer: any, signer: any, pair: string, over: Record<string, any> = {}) {
   const Token = await ethers.getContractFactory("QuiverToken");
   const params = {
     name: "Venture", symbol: "VNT", metadataURI: "", pair,
@@ -76,10 +76,12 @@ async function launch(factory: any, tokenDeployer: any, signer: any, pair: strin
     ethUsdPrice8: ETH_USD_8, targetRaiseWei: TARGET, raiseDurationSecs: 3 * DAY,
     maxBuyWei: TARGET, founderRaiseBps: 3000, founderSupplyBps: 1000,
     vestingSecs: 180 * DAY, mode: 0, minHoldForDividends: 0, dividendMode: 0, v3Path: "0x",
+    ...over,
   };
   const args = ethers.AbiCoder.defaultAbiCoder().encode(
     ["string", "string", "string", "uint256", "address", "address", "uint16", "address", "uint256", "uint8"],
-    ["Venture", "VNT", "", 10n ** 27n, signer.address, await factory.getAddress(), 200, pair, 0n, 0],
+    ["Venture", "VNT", "", 10n ** 27n, signer.address, await factory.getAddress(), params.buyTaxBps, pair,
+      BigInt(params.minHoldForDividends) * 10n ** 18n, params.dividendMode],
   );
   const hash = ethers.keccak256(ethers.concat([Token.bytecode, args]));
   const depAddr = await tokenDeployer.getAddress();
@@ -640,5 +642,56 @@ describe("Venture bonding-curve launchpad (fork)", function () {
     const aEth = await ethers.provider.getBalance(a.address);
     await (await lo.connect(keeper).fill(3n)).wait();
     expect((await ethers.provider.getBalance(a.address)) - aEth).to.be.greaterThanOrEqual((ethQuote * 95n) / 100n);
+  });
+  it("pays a 5x holder's dividends in what they pick, through their chosen agent", async () => {
+    const [admin, founder, whale, a, b, keeper, treasury] = await ethers.getSigners();
+    const { factory, tokenDeployer, router } = await deployAll(admin, treasury);
+    const coin = await launch(factory, tokenDeployer, founder, WETH, { minHoldForDividends: 1_000_000, dividendMode: 1 });
+    const erc = await ethers.getContractAt("QuiverToken", coin);
+    await (await factory.connect(whale).buy(coin, 0, { value: ethers.parseEther("2.1") })).wait();
+    await network.provider.send("evm_increaseTime", [20]);
+    await network.provider.send("evm_mine");
+    const payouts = await (await ethers.getContractFactory("VenturePayouts")).deploy(
+      await router.getAddress(), V3_ROUTER, WETH, keeper.address,
+    );
+    const pAddr = await payouts.getAddress();
+    expect(await erc.atAgentTier(whale.address)).to.equal(true);
+
+    // A 2x-the-floor holder can name an agent, but it can't collect below 5x.
+    await (await erc.connect(whale).transfer(a.address, 2_000_000n * 10n ** 18n)).wait();
+    await (await erc.connect(a).setPayoutAgent(pAddr)).wait();
+    expect(await erc.atAgentTier(a.address)).to.equal(false);
+
+    await (await erc.connect(whale).setPayoutAgent(pAddr)).wait();
+    await (await payouts.connect(whale).setPref(1, "0x")).wait(); // Coin: compound
+    await expect(payouts.connect(whale).setPref(2, "0x1234")).to.be.revertedWithCustomError(payouts, "BadRoute");
+
+    // Trading pays dividends.
+    for (let i = 0; i < 3; i++) {
+      await (await router.connect(b).buy(coin, "0x", 0, { value: ethers.parseEther("0.2") })).wait();
+    }
+    const pending = await erc.pendingRewards(whale.address);
+    expect(pending).to.be.greaterThan(0n);
+
+    // Only the holder or the keeper may trigger a conversion.
+    await expect(payouts.connect(b).collect(coin, whale.address, 0)).to.be.revertedWithCustomError(payouts, "NotAllowed");
+    await expect(erc.connect(b).claimForAgent(whale.address)).to.be.revertedWithCustomError(erc, "NotAgent");
+    const before = await erc.balanceOf(whale.address);
+    await (await payouts.connect(keeper).collect(coin, whale.address, 1)).wait();
+    expect(await erc.balanceOf(whale.address), "paid in the coin").to.be.greaterThan(before);
+    // The compounding buy pays tax too, so a sliver of new dividend is already due.
+    expect(await erc.pendingRewards(whale.address)).to.be.lessThan(pending / 10n);
+
+    // Switch to ETH; the batch skips A (below the tier) without failing.
+    await (await payouts.connect(whale).setPref(0, "0x")).wait();
+    await (await router.connect(b).buy(coin, "0x", 0, { value: ethers.parseEther("0.2") })).wait();
+    const due = await erc.pendingRewards(whale.address);
+    const eth = await ethers.provider.getBalance(whale.address);
+    await (await payouts.connect(keeper).collectMany(coin, [a.address, whale.address], [0, 0])).wait();
+    expect((await ethers.provider.getBalance(whale.address)) - eth).to.be.greaterThanOrEqual(due);
+    expect(await erc.pendingRewards(a.address)).to.be.greaterThan(0n);
+    // A plain claimFor still pays the WETH straight to the holder.
+    await (await erc.connect(b).claimFor(a.address)).wait();
+    expect(await erc.pendingRewards(a.address)).to.equal(0n);
   });
 });
