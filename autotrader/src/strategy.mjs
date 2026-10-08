@@ -18,6 +18,7 @@ export const CONFIG = {
   minEarlyShare: 0.02, // a launch cohort that has fully left means a dead coin
   minOffHigh: 0.8,
   maxRoundTrip: 0.06, // fee + both taxes: a round trip has to be cheap enough to win
+  maxFromLaunch: 3, // never chase a coin already 3x off its launch price (small-coin reversal, MAX effect)
   maxDevShare: 0.05, // a creator sitting on more of the float can end it in one sell
   maxEarlyDumpPress: 0.02, // the launch cohort isn't unloading right now
   entryScore: 1.0,
@@ -75,6 +76,7 @@ export function entrySignal(f, h, social, cfg = CONFIG) {
   if (f.devLeft < cfg.devDumpLeft) return { go: false, why: "dev-sold" };
   if (f.devShare > cfg.maxDevShare) return { go: false, why: "dev-bag" };
   if (f.roundTrip > cfg.maxRoundTrip) return { go: false, why: "taxed" };
+  if (cfg.maxFromLaunch && f.fromLaunch > cfg.maxFromLaunch) return { go: false, why: "already-ran" };
   if (f.earlyDumpPress > cfg.maxEarlyDumpPress) return { go: false, why: "cohort-selling" };
   if (!h) return { go: false, why: "no-fit" };
   if (h.nBB < cfg.minNBB) return { go: false, why: "not-self-exciting" };

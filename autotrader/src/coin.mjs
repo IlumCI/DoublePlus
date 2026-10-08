@@ -224,6 +224,7 @@ export class Coin {
       earlyDumpPress: Q > 0 ? earlySoldEth60 / Q : 0, // the cohort's selling, against the curve's depth
       devShare: this.devTokens / sold,
       roundTrip: 2 * FEE + this.buyTax + this.sellTax,
+      fromLaunch: this.price() / (this.Q0 / this.T0), // how far it has run since launch
       devLeft: this.devPeak > 0 ? this.devTokens / this.devPeak : 1,
       devSold: this.devSold,
       largestSell60: Q > 0 ? largestSell60 / Q : 0,
