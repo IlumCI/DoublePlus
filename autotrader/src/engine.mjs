@@ -73,6 +73,7 @@ export class Engine {
     const c = this.coins.get(e.token);
     if (!c) return; // launched before the window: not in the universe
     c.apply(e);
+    if (e.k === "buy" || e.k === "swap") this._rungs(c, e.t);
     if ((e.k === "buy" || e.k === "sell" || e.k === "swap") && c.native) this._evaluate(c, e.t, false);
   }
 
@@ -109,6 +110,25 @@ export class Engine {
       const equity = this.equity(a);
       const eth = sizeFor(equity, a.cash - GAS_ETH, sig.score, f.Q, this.cfg);
       if (eth > 0) this._order(a, c.token, "buy", now, { eth, score: sig.score });
+    }
+  }
+
+  /** Resting asks: a buy that lifts the price through a rung sells that slice
+   *  into it. On Pons there is no on-chain limit order, so a keeper fires the
+   *  sell and it lands after the account's latency, at whatever price then. */
+  _rungs(c, now) {
+    if (!this.cfg.ladder) return;
+    const price = c.price();
+    for (const a of this.accounts) {
+      const pos = a.positions.get(c.token);
+      if (!pos || a.pending.has(c.token)) continue;
+      const i = pos.rungsDone ?? 0;
+      const rung = this.cfg.ladder[i];
+      if (!rung || price < pos.entryPrice * rung[0]) continue;
+      pos.rungsDone = i + 1;
+      // Fraction of what is left now that sells the rung's share of the original bag.
+      const soldSoFar = this.cfg.ladder.slice(0, i).reduce((s, r) => s + r[1], 0);
+      this._order(a, c.token, "sell", now, { reason: `ask-${rung[0]}x`, frac: Math.min(1, rung[1] / (1 - soldSoFar)) });
     }
   }
 
@@ -156,12 +176,24 @@ export class Engine {
       if (!pos) return;
       // Our own earlier buy is still sitting in the curve as far as our exit
       // is concerned: the real market never saw it, so add it back.
-      const out = sellOut(Q + pos.offQ, Math.max(1, T - pos.offT), pos.tokens, c.sellTax);
+      const frac = o.frac ?? 1;
+      const tokens = pos.tokens * frac;
+      const rQ = Q + pos.offQ, rT = Math.max(1, T - pos.offT);
+      const out = sellOut(rQ, rT, tokens, c.sellTax);
+      const gross = (rQ * tokens) / (rT + tokens);
+      const cost = pos.cost * frac;
       a.cash += out - GAS_ETH;
       a.gas += GAS_ETH;
-      a.positions.delete(o.token);
-      a.lastExit.set(o.token, o.due);
-      a.closed.push({ token: o.token, cost: pos.cost, out, ret: out / pos.cost - 1, held: o.due - pos.t, at: o.due, reason: o.reason });
+      a.closed.push({ token: o.token, cost, out, ret: out / cost - 1, held: o.due - pos.t, at: o.due, reason: o.reason, part: frac < 1 });
+      if (frac >= 1 - 1e-12) {
+        a.positions.delete(o.token);
+        a.lastExit.set(o.token, o.due);
+      } else {
+        pos.tokens -= tokens;
+        pos.cost -= cost;
+        pos.offQ -= gross;
+        pos.offT -= tokens;
+      }
     }
   }
 

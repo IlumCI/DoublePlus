@@ -88,11 +88,24 @@ export function entrySignal(f, h, social, cfg = CONFIG) {
   return { go: score >= cfg.entryScore, score, why: score >= cfg.entryScore ? "cascade" : "weak" };
 }
 
+/** The first-minute flip: the one seat our tapes show positive on average.
+ *  Buy a coin 10-60 s old that a crowd is forming on, cheap to trade, no big
+ *  creator bag; the exits (with flipHold) sell into the next buyers. */
+export function flipSignal(f, h, social, cfg = CONFIG) {
+  if (f.age < 10 || f.age > 60) return { go: false, why: "not-first-minute" };
+  if (f.buys60 < cfg.flipMinBuys ?? 4) return { go: false, why: "quiet" };
+  if (f.roundTrip > cfg.maxRoundTrip) return { go: false, why: "taxed" };
+  if (f.devShare > cfg.maxDevShare) return { go: false, why: "dev-bag" };
+  if (f.er60 < 0.6) return { go: false, why: "sellers-lead" };
+  return { go: true, score: cfg.entryScore + 0.5, why: "flip" };
+}
+
 /** Exit read for a held position. Returns null to hold, or the wave it saw. */
 export function exitSignal(f, h, pos, now, cfg = CONFIG) {
   const ret = f.price / pos.entryPrice;
   if (f.devLeft < cfg.devDumpLeft) return "dev-dump";
   if (ret <= cfg.wrongRead) return "wrong-read";
+  if (cfg.flipHold && now - pos.t >= cfg.flipHold) return "flip-out";
   if (now - pos.t < cfg.grace) return null;
   // The top: price gone vertical and the buying now sets off selling.
   if (ret >= cfg.topGain && f.runup >= cfg.topRunup && h && h.alpha[1][0] >= cfg.topASB) return "wave-top";

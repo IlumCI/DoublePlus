@@ -4,13 +4,14 @@
 import { readdirSync, readFileSync } from "node:fs";
 
 import { Account, Engine } from "./engine.mjs";
-import { CONFIG } from "./strategy.mjs";
+import { CONFIG, entrySignal, flipSignal } from "./strategy.mjs";
 
 const cfg = { ...CONFIG };
-for (const kv of process.argv.slice(2)) { const [k, v] = kv.split("="); cfg[k] = Number(v); }
+const entry = process.argv.includes("--flip") ? flipSignal : entrySignal;
+for (const kv of process.argv.slice(2).filter((a) => a.includes("="))) { const [k, v] = kv.split("="); cfg[k] = v.startsWith("[") ? JSON.parse(v) : Number(v); }
 const balances = [0.02, 0.1, 0.5, 2, 10];
 const dir = new URL("../data/", import.meta.url);
-const files = readdirSync(dir).filter((f) => f.endsWith(".jsonl")).sort();
+const files = readdirSync(dir).filter((f) => f.endsWith(".jsonl") && (f.startsWith("pons-") || f.startsWith("live-"))).sort();
 let agg = 0, n = 0;
 for (const f of files) {
   const ev = readFileSync(new URL(f, dir), "utf8").trim().split("\n").map(JSON.parse);
@@ -18,10 +19,10 @@ for (const f of files) {
   // Live tapes start with a 15-min warm-up the live run didn't trade in.
   const windows = f.startsWith("live") ? [[900 / span, 1]] : span > 4 * 3600 ? [[0, 0.5], [0.5, 1]] : [[0, 1]];
   for (const [a, b] of windows) {
-    const eng = new Engine(balances.map((x, i) => new Account(i, x)), cfg, { entryAfter: t0 + a * span, entryBefore: t0 + b * span });
+    const eng = new Engine(balances.map((x, i) => new Account(i, x)), cfg, { entryAfter: t0 + a * span, entryBefore: t0 + b * span, entry });
     for (const e of ev) { if (e.t > t0 + b * span + 1800) break; eng.feed(e); }
     eng.finish();
-    const trades = eng.accounts[1].closed;
+    const trades = eng.accounts[1].closed.filter((x) => !x.part);
     const wins = trades.filter((x) => x.out > x.cost).length;
     const r = eng.accounts.map((x) => x.cash / x.start - 1);
     agg += r[1]; n++;
