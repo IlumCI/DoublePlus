@@ -2,15 +2,18 @@ import { useEffect, useMemo, useState } from "react";
 import { useBalance, useWalletClient } from "wagmi";
 import { formatEther, parseEther } from "viem";
 
-import { confirmTx, ercAbi, routerAbi, VENTURE, venturePc, type Venture as VentureT } from "../client";
+import { confirmTx, ercAbi, routerAbi, VENTURE, venturePc, type PoolTrade, type Venture as VentureT } from "../client";
 import { feePct, priceImpactPct, taxPct } from "../curve";
-import { fmtEth, fmtTok } from "../ui";
+import { marketStats } from "../marketStats";
+import { chainNowSecs } from "../clock";
+import { dailyDividendsWei, tierIndex, tierRows } from "../tiers";
+import { fmtEth, fmtTok, fmtUsdV } from "../ui";
 import { useWallet, errorText } from "../../lib/useWallet";
 import { useUi } from "../../store";
 import { Impact, ReferralBanner } from "./shared";
 
 /** Post-graduation: ETH buy/sell through the router + dividend claim. */
-export function TradePanel({ v }: { v: VentureT }) {
+export function TradePanel({ v, trades, ethUsd }: { v: VentureT; trades: PoolTrade[]; ethUsd: number }) {
   const { address: me, isConnected, connectFirst } = useWallet();
   const { data: wc } = useWalletClient();
   const pushToast = useUi((s) => s.pushToast);
@@ -161,7 +164,45 @@ export function TradePanel({ v }: { v: VentureT }) {
             <button className="dp-action" style={{ padding: "8px 14px", fontSize: 11 }} disabled={busy} onClick={claim}>Claim</button>
           </div>
         )}
+        <TierPyramid v={v} trades={trades} ethUsd={ethUsd} bal={isConnected ? bal : 0n} />
       </div>
+    </div>
+  );
+}
+
+/** Tiered-dividend coins: the seven steps, what each takes to hold and what it
+ *  would earn a day at the last 24h of volume. Moves with the volume. */
+function TierPyramid({ v, trades, ethUsd, bal }: { v: VentureT; trades: PoolTrade[]; ethUsd: number; bal: bigint }) {
+  const [tok, setTok] = useState<{ floor: bigint; eligible: bigint } | null>(null);
+  useEffect(() => {
+    if (v.policy.dividendBps === 0) return;
+    let live = true;
+    const read = (functionName: "minHoldForDividends" | "dividendMode" | "eligibleSupply") =>
+      venturePc.readContract({ address: v.address, abi: ercAbi, functionName }) as Promise<bigint | number>;
+    const refresh = () =>
+      Promise.all([read("minHoldForDividends"), read("dividendMode"), read("eligibleSupply")])
+        .then(([floor, mode, eligible]) => live && setTok(Number(mode) === 1 ? { floor: BigInt(floor), eligible: BigInt(eligible) } : null))
+        .catch(() => undefined);
+    refresh();
+    const id = setInterval(refresh, 30_000);
+    return () => { live = false; clearInterval(id); };
+  }, [v.address, v.policy.dividendBps]);
+
+  const st = useMemo(() => marketStats(trades, chainNowSecs()), [trades]);
+  if (!tok || tok.floor === 0n) return null;
+  const rows = tierRows(tok.floor, tok.eligible, dailyDividendsWei(st.buyVol24Wei, st.sellVol24Wei, v.policy));
+  const mine = tierIndex(bal, tok.floor);
+  const money = (wei: bigint) => ethUsd > 0 ? fmtUsdV((Number(wei) / 1e18) * ethUsd) : `${fmtEth(wei, 5)} ETH`;
+  return (
+    <div className="dp-tiers">
+      <div className="dp-tiers-head"><span>tiers</span><span>hold</span><span>/ day</span></div>
+      {rows.map((r, i) => (
+        <div key={r.mult} className={`dp-tier${rows.length - 1 - i === mine ? " on" : ""}`}>
+          <span className="dp-tier-bar"><i style={{ width: `${34 + i * 11}%` }}>{r.mult}x</i></span>
+          <span>{fmtTok(r.holdWei)}</span>
+          <b>{money(r.dailyWei)}</b>
+        </div>
+      ))}
     </div>
   );
 }

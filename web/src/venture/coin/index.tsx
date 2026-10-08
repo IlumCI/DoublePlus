@@ -149,7 +149,7 @@ function VentureBody({ v, fills, ethUsd }: { v: VentureT; fills: Fill[]; ethUsd:
           {v.phase === "raising" && <RaisePanel v={v} />}
           {v.phase === "expired" && <GraduatePanel v={v} />}
           {v.phase === "failed" && <FailPanel v={v} />}
-          {v.phase === "graduated" && <TradePanel v={v} />}
+          {v.phase === "graduated" && <TradePanel v={v} trades={trades} ethUsd={ethUsd} />}
 
           <ShareBar v={v} />
         </div>

@@ -638,7 +638,7 @@ export function LaunchVenture() {
                         {minHold === 0
                           ? "Needs a minimum to be a multiple of. Set one first."
                           : divMode === 1
-                          ? `10x the minimum earns 1.25x per token, 100x earns 1.5x, and 1000x earns 2x, the most. Splitting a balance across wallets lowers the multiplier.`
+                          ? `3x the minimum earns 1.5x per token, 10x earns 2x, 30x earns 3x, 100x earns 5x, 300x earns 7.5x and 1000x earns 10x. Splitting a balance across wallets lowers the multiplier.`
                           : "Turn on to pay a larger stake more per token, up to 2x."}
                       </span>
                     </div>
@@ -666,7 +666,7 @@ export function LaunchVenture() {
                   <dt>ETH drip</dt><dd>{paysDividends
                     ? `${alloc.dividends}% of the fee, paid in ETH${minHold > 0
                         ? `, to wallets holding ${minHold.toLocaleString("en-US")}+ $${(form.symbol || "TICK").toUpperCase()}`
-                        : ", to every holder"}${divMode === 1 ? ", tiered up to 2x for larger stakes" : ""}`
+                        : ", to every holder"}${divMode === 1 ? ", tiered up to 10x for larger stakes" : ""}`
                     : "none"}</dd>
                   <dt>Description</dt><dd>{form.pitch.trim() || "none"}{longDesc.trim() ? ", plus a longer description" : ""}</dd>
                   <dt>Links</dt><dd>{[

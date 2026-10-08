@@ -192,6 +192,9 @@ export const ercAbi = [
   { type: "function", name: "pendingRewards", stateMutability: "view", inputs: [{ type: "address" }], outputs: [{ type: "uint256" }] },
   { type: "function", name: "totalRewardsDistributed", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
   { type: "function", name: "claim", stateMutability: "nonpayable", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "minHoldForDividends", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "dividendMode", stateMutability: "view", inputs: [], outputs: [{ type: "uint8" }] },
+  { type: "function", name: "eligibleSupply", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
 ] as const;
 
 export const hookAbi = [
