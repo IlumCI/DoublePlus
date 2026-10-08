@@ -151,6 +151,10 @@ async function main() {
   await updates.waitForDeployment();
   console.log("updates:", await updates.getAddress());
 
+  const limitOrders = await (await ethers.getContractFactory("VentureLimitOrders")).deploy(routerAddr);
+  await limitOrders.waitForDeployment();
+  console.log("limitOrders:", await limitOrders.getAddress());
+
   // setParams: open-curve graduation trigger and launch fee.
   const gradWei = ethers.parseEther(process.env.GRADUATION_RAISE_ETH ?? "4");
   const creationFeeWei = ethers.parseEther(process.env.CREATION_FEE_ETH ?? "0.0003");
@@ -187,6 +191,7 @@ async function main() {
       factory: factoryAddr,
       router: routerAddr,
       updates: await updates.getAddress(),
+      limitOrders: await limitOrders.getAddress(),
       tokenDeployer: await tokenDeployer.getAddress(),
       vestingDeployer: await vestingDeployer.getAddress(),
       poolManager: infra.poolManager,

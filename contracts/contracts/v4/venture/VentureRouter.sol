@@ -103,6 +103,25 @@ contract VentureRouter is IUnlockCallback, ReentrancyGuard {
         nonReentrant
         returns (uint256 coinOut)
     {
+        return _buy(coin, v3Path, minCoinOut, msg.sender);
+    }
+
+    /// @notice buy() on someone's behalf (limit orders, payouts, vaults): the
+    ///         coin comes back to the caller, but the hook credits `trader`
+    ///         (pot lead, jackpot, referral) and Routed names them.
+    function buyFor(address coin, bytes calldata v3Path, uint256 minCoinOut, address trader)
+        external
+        payable
+        nonReentrant
+        returns (uint256 coinOut)
+    {
+        return _buy(coin, v3Path, minCoinOut, trader);
+    }
+
+    function _buy(address coin, bytes calldata v3Path, uint256 minCoinOut, address trader)
+        internal
+        returns (uint256 coinOut)
+    {
         address pair = _pairOf(coin);
         require(msg.value > 0, "no ETH");
 
@@ -121,10 +140,10 @@ contract VentureRouter is IUnlockCallback, ReentrancyGuard {
         }
 
         // 3. pair -> coin via the coin's own V4 pool.
-        coinOut = _v4Swap(coin, pair, pair, pairAmount);
+        coinOut = _v4Swap(coin, pair, pair, pairAmount, trader);
         if (coinOut < minCoinOut) revert Slippage();
         IERC20(coin).safeTransfer(msg.sender, coinOut);
-        emit Routed(msg.sender, coin, true, msg.value, 0);
+        emit Routed(trader, coin, true, msg.value, 0);
     }
 
     // ---------------------------------------------------------------------
@@ -138,11 +157,27 @@ contract VentureRouter is IUnlockCallback, ReentrancyGuard {
         nonReentrant
         returns (uint256 ethOut)
     {
+        return _sell(coin, amountIn, v3PathReverse, minEthOut, msg.sender);
+    }
+
+    /// @notice sell() on someone's behalf; see buyFor.
+    function sellFor(address coin, uint256 amountIn, bytes calldata v3PathReverse, uint256 minEthOut, address trader)
+        external
+        nonReentrant
+        returns (uint256 ethOut)
+    {
+        return _sell(coin, amountIn, v3PathReverse, minEthOut, trader);
+    }
+
+    function _sell(address coin, uint256 amountIn, bytes calldata v3PathReverse, uint256 minEthOut, address trader)
+        internal
+        returns (uint256 ethOut)
+    {
         address pair = _pairOf(coin);
         IERC20(coin).safeTransferFrom(msg.sender, address(this), amountIn);
 
         // 1. coin -> pair via the coin's own V4 pool.
-        uint256 pairAmount = _v4Swap(coin, pair, coin, amountIn);
+        uint256 pairAmount = _v4Swap(coin, pair, coin, amountIn, trader);
 
         // 2. pair -> WETH via V3 (skip when the pair is WETH itself).
         uint256 wethAmount;
@@ -161,7 +196,7 @@ contract VentureRouter is IUnlockCallback, ReentrancyGuard {
         if (ethOut < minEthOut) revert Slippage();
         (bool ok, ) = msg.sender.call{value: ethOut}("");
         require(ok, "eth xfer");
-        emit Routed(msg.sender, coin, false, 0, ethOut);
+        emit Routed(trader, coin, false, 0, ethOut);
     }
 
     // ---------------------------------------------------------------------
@@ -186,14 +221,14 @@ contract VentureRouter is IUnlockCallback, ReentrancyGuard {
 
     /// @dev Swap `amountIn` of `currencyIn` for the other side of the coin/pair
     ///      pool. `currencyIn` is either the coin (sell) or the pair (buy).
-    function _v4Swap(address coin, address pair, address currencyIn, uint256 amountIn)
+    function _v4Swap(address coin, address pair, address currencyIn, uint256 amountIn, address trader)
         internal
         returns (uint256 amountOut)
     {
         if (amountIn == 0) return 0;
         PoolKey memory key = _poolKey(coin, pair);
         bool zeroForOne = currencyIn == Currency.unwrap(key.currency0);
-        bytes memory res = poolManager.unlock(abi.encode(V4Swap(key, zeroForOne, amountIn, msg.sender)));
+        bytes memory res = poolManager.unlock(abi.encode(V4Swap(key, zeroForOne, amountIn, trader)));
         amountOut = abi.decode(res, (uint256));
     }
 

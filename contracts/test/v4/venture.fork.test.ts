@@ -581,4 +581,64 @@ describe("Venture bonding-curve launchpad (fork)", function () {
     // A second later the sell goes through.
     await (await router.connect(a).sell(coin, (await erc.balanceOf(a.address)) / 2n, "0x", 0)).wait();
   });
+  it("fills limit orders only at the owner's price, pays the filler's tip, and refunds on cancel or expiry", async () => {
+    const [admin, founder, whale, a, keeper, treasury] = await ethers.getSigners();
+    const { hook, factory, tokenDeployer, router } = await deployAll(admin, treasury);
+    const coin = await launch(factory, tokenDeployer, founder, WETH);
+    const erc = await ethers.getContractAt("QuiverToken", coin);
+    await (await factory.connect(whale).buy(coin, 0, { value: ethers.parseEther("2.1") })).wait();
+    await network.provider.send("evm_increaseTime", [20]);
+    await network.provider.send("evm_mine");
+    const lo = await (await ethers.getContractFactory("VentureLimitOrders")).deploy(await router.getAddress());
+    const loAddr = await lo.getAddress();
+    const rAddr = await router.getAddress();
+
+    // What 0.01 ETH buys right now, from a simulation.
+    const spend = ethers.parseEther("0.01");
+    const quote = await router.connect(a).buy.staticCall(coin, "0x", 0, { value: spend });
+
+    // A buy asking for 10% more than the pool gives can't be filled yet.
+    await (await lo.connect(a).place(coin, true, 0, (quote * 110n) / 100n, 50, 0, { value: spend })).wait();
+    await expect(lo.connect(keeper).fill(0n)).to.be.reverted;
+    // One asking 5% less fills; A gets their floor or better, the keeper its tip.
+    await (await lo.connect(a).place(coin, true, 0, (quote * 95n) / 100n, 50, 0, { value: spend })).wait();
+    const aBefore = await erc.balanceOf(a.address);
+    const rc = await (await lo.connect(keeper).fill(1n)).wait();
+    const filled = rc!.logs.map((l: any) => { try { return lo.interface.parseLog(l); } catch { return null; } })
+      .find((e: any) => e?.name === "Filled")!;
+    expect((await erc.balanceOf(a.address)) - aBefore).to.equal(filled.args.out - filled.args.tip);
+    expect((await erc.balanceOf(a.address)) - aBefore).to.be.greaterThanOrEqual((quote * 95n) / 100n);
+    expect(await erc.balanceOf(keeper.address)).to.equal(filled.args.tip);
+    // The hook credited A, not the order book: A leads the pot.
+    expect((await hook.pot(coin)).leader).to.equal(a.address);
+    await expect(lo.connect(keeper).fill(1n)).to.be.revertedWithCustomError(lo, "Closed");
+
+    // Cancel returns the escrow; only the owner may.
+    await expect(lo.connect(keeper).cancel(0n)).to.be.revertedWithCustomError(lo, "NotOwner");
+    const ethBefore = await ethers.provider.getBalance(loAddr);
+    await (await lo.connect(a).cancel(0n)).wait();
+    expect(ethBefore - (await ethers.provider.getBalance(loAddr))).to.equal(spend);
+
+    // A sell with an expiry: past it, a fill just hands the coins back.
+    const bag = (await erc.balanceOf(a.address)) / 2n;
+    await (await erc.connect(a).approve(loAddr, bag)).wait();
+    const now = (await ethers.provider.getBlock("latest"))!.timestamp;
+    await (await lo.connect(a).place(coin, false, bag, ethers.parseEther("100"), 50, now + 60)).wait();
+    await network.provider.send("evm_increaseTime", [120]);
+    await network.provider.send("evm_mine");
+    const back = await erc.balanceOf(a.address);
+    await (await lo.connect(keeper).fill(2n)).wait();
+    expect((await erc.balanceOf(a.address)) - back).to.equal(bag);
+
+    // A sell at a fair floor fills and pays ETH.
+    await (await erc.connect(a).approve(loAddr, bag)).wait();
+    const ethQuote = await router.connect(a).sell.staticCall(coin, bag, "0x", 0).catch(async () => {
+      await (await erc.connect(a).approve(rAddr, bag)).wait();
+      return router.connect(a).sell.staticCall(coin, bag, "0x", 0);
+    });
+    await (await lo.connect(a).place(coin, false, bag, (ethQuote * 95n) / 100n, 0, 0)).wait();
+    const aEth = await ethers.provider.getBalance(a.address);
+    await (await lo.connect(keeper).fill(3n)).wait();
+    expect((await ethers.provider.getBalance(a.address)) - aEth).to.be.greaterThanOrEqual((ethQuote * 95n) / 100n);
+  });
 });
