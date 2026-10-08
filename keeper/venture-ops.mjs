@@ -15,6 +15,11 @@
 //   4) pay out last-buyer pots whose clock ran out on a pool nobody has
 //      traded since (any trade would have paid it already). claimPot only
 //      ever pays the pot's leader.
+//   5) holders at 5x who picked a payout (ETH, the coin, USDG, a stock) are
+//      collected through VenturePayouts instead of claimForMany, with a
+//      minimum out 2% under a simulation taken just before sending;
+//   6) fill every limit order the pool can now meet. The order book enforces
+//      the owner's price itself; the keeper earns the owner's tip.
 //
 // Env:
 //   KEEPER_PRIVATE_KEY  (required) pays gas
@@ -50,7 +55,7 @@ const GAS_PER_DELIVERY = 60_000n;
 
 // Every tx goes through send(): it counts what the run has spent and refuses
 // to go past MAX_SPEND_WEI, so spam can cost a run at most that much.
-const stats = { sent: 0, spentWei: 0n, graduated: 0, aborted: 0, skippedEmptyAborts: 0, refunded: 0, delivered: 0, recentered: 0, potsPaid: 0, stoppedAtCap: false, failed: 0 };
+const stats = { payoutsConverted: 0, limitFilled: 0, sent: 0, spentWei: 0n, graduated: 0, aborted: 0, skippedEmptyAborts: 0, refunded: 0, delivered: 0, recentered: 0, potsPaid: 0, stoppedAtCap: false, failed: 0 };
 class SpendCap extends Error {}
 async function send(label, fn) {
   if (DRY_RUN) return;
@@ -83,7 +88,18 @@ const TOKEN_ABI = [
   "function balanceOf(address) view returns (uint256)",
   "function pendingRewards(address) view returns (uint256)",
   "function claimForMany(address[])",
+  "function payoutAgent(address) view returns (address)",
+  "function atAgentTier(address) view returns (bool)",
 ];
+const PAYOUTS_ABI = [
+  "function collect(address coin, address holder, uint256 minOut) returns (uint256)",
+];
+const LIMIT_ABI = [
+  "function totalOrders() view returns (uint256)",
+  "function order(uint256 id) view returns ((address owner, address coin, bool isBuy, uint16 tipBps, uint64 expiry, uint256 amountIn, uint256 minOut))",
+  "function fill(uint256 id) returns (uint256)",
+];
+const PAYOUT_SLIPPAGE_BPS = 200n;
 const HOOK_ABI = [
   "function lastSwapAt(bytes32) view returns (uint64)",
   "function poolTick(address) view returns (int24)",
@@ -114,6 +130,34 @@ const wallet = new ethers.Wallet(KEY, provider);
 const factory = new ethers.Contract(dep.contracts.factory, FACTORY_ABI, wallet);
 const factoryListings = new ethers.Contract(dep.contracts.factory, LISTINGS_ABI, wallet);
 const hook = new ethers.Contract(dep.contracts.hook, HOOK_ABI, wallet);
+const payouts = dep.contracts.payouts ? new ethers.Contract(dep.contracts.payouts, PAYOUTS_ABI, wallet) : null;
+const limitOrders = dep.contracts.limitOrders ? new ethers.Contract(dep.contracts.limitOrders, LIMIT_ABI, wallet) : null;
+
+/** Fill whatever open limit orders the pools can meet right now. A fill that
+ *  would miss the owner's price reverts in simulation and is skipped. */
+async function fillLimitOrders() {
+  if (!limitOrders) return;
+  const total = Number(await limitOrders.totalOrders());
+  for (let id = 0; id < total; id++) {
+    const o = await limitOrders.order(id);
+    if (o.amountIn === 0n) continue;
+    try {
+      await limitOrders.fill.staticCall(id);
+    } catch { continue; } // not fillable yet
+    console.log(`fill limit order ${id} (${o.isBuy ? "buy" : "sell"} ${o.coin})`);
+    await send(`fill ${id}`, () => limitOrders.fill(id));
+    stats.limitFilled++;
+  }
+}
+
+/** Convert a 5x holder's dividends into what they picked. */
+async function collectPayout(coin, holder) {
+  const quoted = await payouts.collect.staticCall(coin, holder, 0n);
+  if (quoted === 0n) return;
+  const minOut = (quoted * (10_000n - PAYOUT_SLIPPAGE_BPS)) / 10_000n;
+  await send(`collect ${coin} ${holder}`, () => payouts.collect(coin, holder, minOut));
+  stats.payoutsConverted++;
+}
 
 /** Live wall set for a pool: LiquidityAdded(wall) minus WallRemoved, netted
  *  per (lower, upper) band. */
@@ -219,7 +263,10 @@ async function holdersOf(coin, toBlock) {
     }
   }
   const system = new Set(
-    [ZERO, DEAD, dep.contracts.poolManager, dep.contracts.factory, dep.contracts.router, dep.contracts.hook, coin]
+    // The order book and payout router only hold coins in passing; pushing
+    // rewards to them would strand WETH they have no way to pass on.
+    [ZERO, DEAD, dep.contracts.poolManager, dep.contracts.factory, dep.contracts.router, dep.contracts.hook, coin,
+      dep.contracts.limitOrders ?? ZERO, dep.contracts.payouts ?? ZERO]
       .map((a) => a.toLowerCase()),
   );
   return [...balances.entries()]
@@ -269,6 +316,11 @@ async function main() {
       stats.failed++;
       console.log(`coin ${coin} failed: ${String(e?.shortMessage ?? e?.message ?? e).slice(0, 160)}`);
     }
+  }
+  try {
+    await fillLimitOrders();
+  } catch (e) {
+    if (!(e instanceof SpendCap)) console.log(`limit orders failed: ${String(e?.shortMessage ?? e?.message ?? e).slice(0, 160)}`);
   }
   const solvency = await checkSolvency(total, head);
   console.log(JSON.stringify({ keeper: "venture-ops", solvency, chain: Number(dep.chainId), ventures: total, ...stats, spentWei: stats.spentWei.toString(), minDeliver: minDeliver.toString(), balanceWei: balance.toString() }));
@@ -355,8 +407,24 @@ async function processCoin(coin, now, head, minDeliver) {
     const token = new ethers.Contract(coin, TOKEN_ABI, wallet);
     const holders = await holdersOf(coin, head);
     const due = [];
+    const agentPaid = [];
     for (const h of holders) {
-      try { if ((await token.pendingRewards(h)) >= minDeliver) due.push(h); } catch { /* skip */ }
+      try {
+        if ((await token.pendingRewards(h)) < minDeliver) continue;
+        // Holders who picked a payout through VenturePayouts get it converted;
+        // a plain claimFor would hand them the raw WETH instead.
+        if (payouts && (await token.payoutAgent(h)).toLowerCase() === payouts.target.toLowerCase() && (await token.atAgentTier(h))) {
+          agentPaid.push(h);
+        } else {
+          due.push(h);
+        }
+      } catch { /* skip */ }
+    }
+    for (const h of agentPaid) {
+      try { await collectPayout(coin, h); } catch (e) {
+        if (e instanceof SpendCap) throw e;
+        console.log(`payout for ${h} on ${coin} failed: ${String(e?.shortMessage ?? e?.message ?? e).slice(0, 120)}`);
+      }
     }
     if (due.length === 0) return;
     console.log(`deliver dividends on ${coin}: ${due.length} holder(s)`);
