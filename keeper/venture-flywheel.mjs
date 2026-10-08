@@ -6,6 +6,7 @@
 //   2) size the jackpot: the protocol's estimated epoch revenue in ETH
 //      (volume x platformFeeBps) x JACKPOT_BPS, capped by the keeper wallet;
 //   3) spend it, each share capped by WASH_CAP_BPS: 40% market-buys the
+//      DoublePlus token when DP_TOKEN is set, otherwise the
 //      top-3 ventures by volume (weighted 50/30/20) and burns the tokens to
 //      dEaD; 30% pays ETH rebates to the top-10 traders pro-rata by volume;
 //      30% goes to outside liquidity makers when MAKER_REWARDS is on, and
@@ -45,6 +46,10 @@
 //                       share). Wash trading then always costs more than it
 //                       earns; the unspent budget stays in the treasury.
 //   LOG_CHUNK           (default 500000)
+//   DP_TOKEN            the DoublePlus token (a WETH-paired coin on this
+//                       factory). Once set, the whole buyback buys and burns
+//                       it instead of the top-3 coins, and trader rebates are
+//                       paid in it (bought in one market order per epoch).
 //   DRY_RUN             set to print the plan to epoch-<n>.dryrun.json without
 //                       sending txs or advancing the cursor
 import { ethers } from "ethers";
@@ -65,6 +70,7 @@ const MAKER_REWARDS = (process.env.MAKER_REWARDS ?? "off") === "on";
 const WASH_CAP_BPS = BigInt(envInt("WASH_CAP_BPS", 5000, 0, 10_000));
 const SLIPPAGE_BPS = BigInt(envInt("BUYBACK_SLIPPAGE_BPS", 300, 1, 5000));
 const DEAD = "0x000000000000000000000000000000000000dEaD";
+const DP_TOKEN = process.env.DP_TOKEN ? ethers.getAddress(process.env.DP_TOKEN) : null;
 
 const ROUTER_ABI = [
   "event Routed(address indexed trader, address indexed coin, bool isBuy, uint256 ethIn, uint256 ethOut)",
@@ -245,7 +251,14 @@ async function buildPlan(epoch, fromBlock, toBlock) {
   const kept = 10_000n - BigInt(dep.refShareBps ?? 2000) - POT_BPS;
   const netFee = (vol) => (vol * bps * 9_000n * kept) / 10n ** 12n;
   const washCap = (vol) => (netFee(vol) * WASH_CAP_BPS) / 10_000n;
-  for (let i = 0; i < topCoins.length; i++) {
+  if (DP_TOKEN) {
+    // Every platform buyback goes into the DoublePlus token. Capped by what
+    // the whole epoch's volume paid in fees, the same wash bound as below.
+    let spend = burnBudget;
+    if (spend > washCap(totalVolume)) spend = washCap(totalVolume);
+    ventures.push({ coin: DP_TOKEN, volumeEth: ethers.formatEther(totalVolume), spendEth: ethers.formatEther(spend), spendWei: spend.toString(), burnable: spend > 0n, burnedTokens: "0", buyTx: null, burnTx: null });
+  }
+  for (let i = 0; i < (DP_TOKEN ? 0 : topCoins.length); i++) {
     const [coin, vol] = topCoins[i];
     let spend = (burnBudget * BigInt(weights[i])) / 100n;
     // Buying back more than the coin's own volume paid in fees would make
@@ -279,6 +292,9 @@ async function buildPlan(epoch, fromBlock, toBlock) {
     totalVolumeEth: ethers.formatEther(totalVolume),
     budgetEth: ethers.formatEther(budget),
     ventures, rebates, makers,
+    rebatesIn: DP_TOKEN ?? "ETH",
+    rebateBuyTx: null,
+    rebateTokens: "0",
     makerAttribution: "tx sender of each positive ModifyLiquidity on venture pools; protocol addresses excluded",
   };
 }
@@ -333,12 +349,42 @@ async function execute(plan, save) {
     if (got > 0n) await send(v, "burnTx", save, erc.transfer(DEAD, got));
   }
 
-  for (const [list, who] of [[plan.rebates, "trader"], [plan.makers, "maker"]]) {
+  if (plan.rebatesIn && plan.rebatesIn !== "ETH") await payRebatesInToken(plan, save);
+  for (const [list, who] of (plan.rebatesIn && plan.rebatesIn !== "ETH" ? [[plan.makers, "maker"]] : [[plan.rebates, "trader"], [plan.makers, "maker"]])) {
     for (const entry of list) {
       const amount = BigInt(entry.amountWei);
       if (amount === 0n || (await alreadyDone(entry.tx, `${who} ${entry[who]}`))) continue;
       await send(entry, "tx", save, wallet.sendTransaction({ to: entry[who], value: amount }));
     }
+  }
+}
+
+/** Rebates in the DoublePlus token: one floored market buy for the epoch's
+ *  rebate total, then each trader's pro-rata share of what it bought. */
+async function payRebatesInToken(plan, save) {
+  const total = plan.rebates.reduce((a, r) => a + BigInt(r.amountWei), 0n);
+  if (total === 0n) return;
+  const token = plan.rebatesIn;
+  const erc = new ethers.Contract(token, ERC20_ABI, wallet);
+  let receipt = await alreadyDone(plan.rebateBuyTx, "rebate buy");
+  if (!receipt) {
+    const quoted = await router.buy.staticCall(token, "0x", 0, { value: total });
+    const minOut = (quoted * (10_000n - SLIPPAGE_BPS)) / 10_000n;
+    receipt = await send(plan, "rebateBuyTx", save, router.buy(token, "0x", minOut, { value: total }));
+  }
+  const transferTopic = erc.interface.getEvent("Transfer").topicHash;
+  const got = receipt.logs
+    .filter((l) => l.address.toLowerCase() === token.toLowerCase() && l.topics[0] === transferTopic)
+    .map((l) => erc.interface.parseLog(l).args)
+    .filter((a) => a.to.toLowerCase() === wallet.address.toLowerCase())
+    .reduce((a, b) => a + BigInt(b.value), 0n);
+  plan.rebateTokens = got.toString();
+  save();
+  for (const entry of plan.rebates) {
+    const share = (got * BigInt(entry.amountWei)) / total;
+    entry.tokens = share.toString();
+    if (share === 0n || (await alreadyDone(entry.tx, `trader ${entry.trader}`))) continue;
+    await send(entry, "tx", save, erc.transfer(entry.trader, share));
   }
 }
 
