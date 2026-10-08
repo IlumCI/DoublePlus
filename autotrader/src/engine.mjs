@@ -39,7 +39,8 @@ export class Account {
 }
 
 export class Engine {
-  constructor(accounts, cfg = CONFIG, { entryAfter = -Infinity, entryBefore = Infinity } = {}) {
+  constructor(accounts, cfg = CONFIG, { entryAfter = -Infinity, entryBefore = Infinity, entry = entrySignal } = {}) {
+    this.entry = entry; // swappable: the Monte Carlo runs random entries through the same book
     this.accounts = accounts;
     this.cfg = cfg;
     this.entryAfter = entryAfter; // replay windows: read the past, trade only inside
@@ -98,7 +99,7 @@ export class Engine {
     }
     if (sweepOnly || c.graduated || now < this.entryAfter || now >= this.entryBefore) return;
     const social = socialScore(c.socials, this.linkUses.get(c.socials) ?? 0);
-    const sig = entrySignal(f, h, social, this.cfg);
+    const sig = this.entry(f, h, social, this.cfg, c);
     if (!sig.go) return;
     this.signals.push({ t: now, token: c.token, score: sig.score, price: f.price, progress: f.progress });
     for (const a of this.accounts) {
