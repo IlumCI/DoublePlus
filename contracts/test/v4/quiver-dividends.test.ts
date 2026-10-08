@@ -55,25 +55,29 @@ describe("QuiverToken dividend weight", function () {
     expect(await t.eligibleSupply()).to.equal(10_001n * ONE);
   });
 
-  it("steps the multiplier at 10x, 100x and 1000x the floor, capped at 2x", async () => {
-    const [, a, b, c, d] = await ethers.getSigners();
+  it("steps the multiplier from 1x up to 10x at 1000x the floor", async () => {
+    const signers = await ethers.getSigners();
     const t = await token(1_000n, 1);
-    await (await t.transfer(a.address, 1_000n * ONE)).wait();     // 1x    -> 1.00
-    await (await t.transfer(b.address, 10_000n * ONE)).wait();    // 10x   -> 1.25
-    await (await t.transfer(c.address, 100_000n * ONE)).wait();   // 100x  -> 1.50
-    await (await t.transfer(d.address, 1_000_000n * ONE)).wait(); // 1000x -> 2.00
-
-    expect(await t.dividendWeight(a.address)).to.equal(1_000n * ONE);
-    expect(await t.dividendWeight(b.address)).to.equal((10_000n * ONE * 12_500n) / 10_000n);
-    expect(await t.dividendWeight(c.address)).to.equal((100_000n * ONE * 15_000n) / 10_000n);
-    expect(await t.dividendWeight(d.address)).to.equal(2_000_000n * ONE);
+    // [multiple of the floor, multiplier in bps]
+    const ladder: [bigint, bigint][] = [
+      [1n, 10_000n], [2n, 10_000n], [3n, 15_000n], [10n, 20_000n], [30n, 30_000n],
+      [100n, 50_000n], [300n, 75_000n], [999n, 75_000n], [1000n, 100_000n],
+    ];
+    for (let i = 0; i < ladder.length; i++) {
+      const [m, bps] = ladder[i];
+      const who = signers[i + 1].address;
+      await (await t.transfer(who, m * 1_000n * ONE)).wait();
+      expect(await t.dividendWeight(who)).to.equal((m * 1_000n * ONE * bps) / 10_000n);
+      expect(await t.tierMultiplierBps(m)).to.equal(bps);
+    }
+    expect(await t.tierMultiplierBps(1_000_000n)).to.equal(100_000n); // capped at 10x
   });
 
   it("cannot be farmed by splitting a balance across wallets", async () => {
     const [, whale, s1, s2] = await ethers.getSigners();
     const t = await token(1_000n, 1);
     await (await t.transfer(whale.address, 1_000_000n * ONE)).wait();
-    const whole = await t.dividendWeight(whale.address); // 2.00x
+    const whole = await t.dividendWeight(whale.address); // 10x
 
     // Split it in two: each half now sits a tier lower, so the pair is worth
     // strictly less than the single holding was.
@@ -90,14 +94,14 @@ describe("QuiverToken dividend weight", function () {
       (await t.dividendWeight(s2.address));
     expect(thrice).to.be.at.most(split);
 
-    // Crossing a boundary costs again: 250k sits at 250x, and halving it to
-    // 125k each leaves both still at 100x, but dropping under 100x does bite.
+    // Crossing a boundary costs again: 250k sits at 250x (5x), and dropping
+    // under 100x of the floor falls to the 3x step.
     await (await t.connect(s2).transfer(whale.address, 250_000n * ONE - 99_000n * ONE)).wait();
     const after =
       (await t.dividendWeight(whale.address)) +
       (await t.dividendWeight(s1.address)) +
       (await t.dividendWeight(s2.address));
-    expect(await t.dividendWeight(s2.address)).to.equal((99_000n * ONE * 12_500n) / 10_000n);
+    expect(await t.dividendWeight(s2.address)).to.equal((99_000n * ONE * 30_000n) / 10_000n);
     expect(after).to.be.at.most(whole);
   });
 
@@ -127,8 +131,8 @@ describe("QuiverToken dividend weight", function () {
     await (await t.initHook(hook.address, [])).wait();
 
     await (await t.transfer(a.address, 2_000n * ONE)).wait();     // 2x    -> 1.00
-    await (await t.transfer(b.address, 20_000n * ONE)).wait();    // 20x   -> 1.25
-    await (await t.transfer(c.address, 2_000_000n * ONE)).wait(); // 2000x -> 2.00
+    await (await t.transfer(b.address, 20_000n * ONE)).wait();    // 20x   -> 2.00
+    await (await t.transfer(c.address, 2_000_000n * ONE)).wait(); // 2000x -> 10.0
 
     const pot = ethers.parseEther("10");
     await (await t.connect(hook).distributeRewardsNative({ value: pot })).wait();

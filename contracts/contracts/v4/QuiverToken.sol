@@ -37,7 +37,7 @@ contract QuiverToken is ERC20 {
     uint256 public immutable minHoldForDividends;
     /// @notice 0 = linear (a holder's share is its balance). 1 = tiered, where
     ///         holding a larger multiple of the minimum earns a larger share
-    ///         per token, up to 2x. Splitting a balance lowers the multiplier,
+    ///         per token, up to 10x. Splitting a balance lowers the multiplier,
     ///         so the ladder cannot be farmed with extra wallets.
     uint8 public immutable dividendMode;
 
@@ -169,13 +169,21 @@ contract QuiverToken is ERC20 {
         uint256 floor_ = minHoldForDividends;
         if (bal < floor_) return 0;
         if (dividendMode == 0 || floor_ == 0) return bal;
-        // A short ladder rather than a curve: three comparisons, legible on a
-        // term sheet, and capped so one wallet can never take the whole flow.
-        uint256 mult = W_BPS;
-        if (bal >= floor_ * 1000) mult = 2 * W_BPS;
-        else if (bal >= floor_ * 100) mult = W_BPS + W_BPS / 2;
-        else if (bal >= floor_ * 10) mult = W_BPS + W_BPS / 4;
-        return (bal * mult) / W_BPS;
+        return (bal * tierMultiplierBps(bal / floor_)) / W_BPS;
+    }
+
+    /// @notice The tier ladder: holding `m` times the minimum earns this many
+    ///         bps per token. A ladder rather than a curve, so it reads on a
+    ///         term sheet: 1x, 3x, 10x, 30x, 100x, 300x and 1000x the minimum
+    ///         earn 1x, 1.5x, 2x, 3x, 5x, 7.5x and 10x.
+    function tierMultiplierBps(uint256 m) public pure returns (uint256) {
+        if (m >= 1000) return 100_000;
+        if (m >= 300) return 75_000;
+        if (m >= 100) return 50_000;
+        if (m >= 30) return 30_000;
+        if (m >= 10) return 20_000;
+        if (m >= 3) return 15_000;
+        return 10_000;
     }
 
     /// @notice Pending, not-yet-settled rewards for a holder.

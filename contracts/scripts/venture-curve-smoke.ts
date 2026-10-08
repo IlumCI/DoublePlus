@@ -131,8 +131,7 @@ async function main() {
   await (await factory.buy(divCoin, 0, { value: buyWei })).wait();
   const bal = await dt.balanceOf(signer.address);
   const weight = await dt.dividendWeight(signer.address);
-  const mult = bal >= floor * 1000n ? 20_000n : bal >= floor * 100n ? 15_000n
-    : bal >= floor * 10n ? 12_500n : bal >= floor ? 10_000n : 0n;
+  const mult = bal < floor ? 0n : await dt.tierMultiplierBps(bal / floor);
   const want = (bal * mult) / 10_000n;
   if (weight !== want) throw new Error(`weight ${weight} != ${want} (balance ${bal}, floor ${floor})`);
   console.log(`dividends: floor ${ethers.formatEther(floor)} tokens, mode ${dmode}, ` +
