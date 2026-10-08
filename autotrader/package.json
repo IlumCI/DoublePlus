@@ -1,0 +1,12 @@
+{
+  "name": "doubleplus-autotrader",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Hawkes-driven auto-trader for Robinhood Chain launchpad coins: data feed, strategy, paper engine and benchmark.",
+  "scripts": {
+    "fetch": "node src/fetch.mjs",
+    "bench": "node src/bench.mjs",
+    "test": "node --test test/"
+  }
+}
