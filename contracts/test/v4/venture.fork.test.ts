@@ -690,6 +690,15 @@ describe("Venture bonding-curve launchpad (fork)", function () {
     await (await payouts.connect(keeper).collectMany(coin, [a.address, whale.address], [0, 0])).wait();
     expect((await ethers.provider.getBalance(whale.address)) - eth).to.be.greaterThanOrEqual(due);
     expect(await erc.pendingRewards(a.address)).to.be.greaterThan(0n);
+    // A route: WETH -> USDG through the 0.01% V3 pool.
+    const USDG = "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168";
+    await (await payouts.connect(whale).setPref(2, ethers.solidityPacked(["address", "uint24", "address"], [WETH, 100, USDG]))).wait();
+    await (await router.connect(b).buy(coin, "0x", 0, { value: ethers.parseEther("0.2") })).wait();
+    const usdg = await ethers.getContractAt("IERC20", USDG);
+    const u0 = await usdg.balanceOf(whale.address);
+    await (await payouts.connect(whale).collect(coin, whale.address, 1)).wait();
+    expect(await usdg.balanceOf(whale.address), "paid in USDG").to.be.greaterThan(u0);
+
     // A plain claimFor still pays the WETH straight to the holder.
     await (await erc.connect(b).claimFor(a.address)).wait();
     expect(await erc.pendingRewards(a.address)).to.equal(0n);
