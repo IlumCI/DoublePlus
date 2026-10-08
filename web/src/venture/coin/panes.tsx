@@ -9,6 +9,7 @@ import { Donut, Legend, SplitBar, type Slice } from "../charts";
 import { CopyButton, fmtEth, fmtTok, pct, short } from "../ui";
 import { useWallet, errorText } from "../../lib/useWallet";
 import { useUi } from "../../store";
+import { useModules } from "./Header";
 import { env } from "../../lib/env";
 
 
@@ -108,6 +109,13 @@ export function TermsPane({ v }: { v: VentureT }) {
 
 export function ContractCard({ v }: { v: VentureT }) {
   const vested = v.vesting !== zeroAddress;
+  const mods = useModules(v.address);
+  const extras = mods?.set ? [
+    mods.burnBps ? `burn ${mods.burnBps / 100}%` : "",
+    mods.surgeBps ? `surge up to ${mods.surgeBps / 100}%` : "",
+    mods.jackpotEvery ? `jackpot every ${mods.jackpotEvery}th buy` : "",
+    mods.noFlip ? "no flips" : "",
+  ].filter(Boolean).join(" · ") : "";
   const deployed = new Date(v.createdAt * 1000).toLocaleDateString("en-GB", {
     day: "numeric", month: "short", year: "numeric",
   });
@@ -117,6 +125,7 @@ export function ContractCard({ v }: { v: VentureT }) {
     ["fee policy", `${(v.policy.buyTaxBps / 100).toFixed(2)}% buy · ${(v.policy.sellTaxBps / 100).toFixed(2)}% sell`],
     ["fee split", `${v.policy.devBps / 100} / ${v.policy.dividendBps / 100} / ${v.policy.liquidityBps / 100} / ${v.policy.mmBps / 100}`],
     ["protocol fee", `${feePct(VENTURE.platformFeeBps)}%`],
+    ...(extras ? ([["extras", extras]] as [string, React.ReactNode][]) : []),
     ...(v.mode === 1 ? [] : ([["per-wallet cap", `${fmtEth(v.maxBuyWei, 3)} ETH`]] as [string, React.ReactNode][])),
     ["founder stake", vested ? "vested from graduation" : "none"],
     ...(v.phase === "graduated"

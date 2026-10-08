@@ -211,6 +211,16 @@ a:hover > .dp-badge.dp-dexpend, a:hover > .dp-badge.dp-dexunpaid { color: var(--
 .dp-tb-go.dp-buy { background: var(--buy); color: var(--bg); } .dp-tb-go.dp-buy:hover { background: var(--paper); }
 .dp-tb-go.dp-sell { background: var(--sell); color: var(--bg); } .dp-tb-go.dp-sell:hover { background: var(--paper); }
 .dp-tb-note { font-size: 10.5px; color: var(--faint); margin: 10px 0 0; line-height: 1.45; }
+.dp-tb-mode { display: flex; gap: 2px; margin-bottom: 8px; font-family: var(--mono); font-size: 10.5px; }
+.dp-tb-mode button { flex: 1; padding: 4px 0; background: transparent; border: 1px solid var(--line); color: var(--faint); cursor: pointer; }
+.dp-tb-mode button.on { color: var(--text); border-color: var(--line-2); background: var(--panel-2); }
+.dp-tb-at { margin-top: 6px; }
+.dp-orders { margin-top: 10px; font-family: var(--mono); font-size: 10.5px; color: var(--dim); }
+.dp-orders > div { display: grid; grid-template-columns: 30px 1fr 1fr auto; gap: 6px; align-items: center; padding: 2px 0; }
+.dp-orders button { background: transparent; border: 0; color: var(--faint); cursor: pointer; font: inherit; text-decoration: underline; }
+.dp-payout { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; font-family: var(--body); color: var(--faint); }
+.dp-payout select { font-family: var(--mono); font-size: 10.5px; }
+.dp-mods { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0 18px; }
 .dp-tiers { margin-top: 12px; font-family: var(--mono); font-size: 10.5px; color: var(--dim); }
 .dp-tiers-head, .dp-tier { display: grid; grid-template-columns: 1fr 52px 64px; gap: 8px; align-items: center; }
 .dp-tiers-head { color: var(--faint); font-family: var(--body); margin-bottom: 4px; }

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { zeroAddress } from "viem";
 
-import { factoryAbi, hookAbi, SOCIAL_FIELDS, VENTURE, venturePc, type PoolTrade, type Venture as VentureT } from "../client";
+import { factoryAbi, hookAbi, modulesAbi, SOCIAL_FIELDS, VENTURE, venturePc, type Modules, type PoolTrade, type Venture as VentureT } from "../client";
 import { marketStats } from "../marketStats";
 import { profileLinks, type DexProfile } from "../../lib/dexscreener";
 import { loadHolding, type Holding } from "../portfolio";
@@ -36,7 +36,7 @@ export function Socials({ meta, dex }: { meta: VentureT["meta"]; dex?: DexProfil
 }
 
 /** Price, size and momentum, read straight off the swap log. */
-export function StatBar({ coin, trades, ethUsd }: { coin: `0x${string}`; trades: PoolTrade[]; ethUsd: number }) {
+export function StatBar({ coin, poolId, trades, ethUsd }: { coin: `0x${string}`; poolId: `0x${string}`; trades: PoolTrade[]; ethUsd: number }) {
   const st = useMemo(() => marketStats(trades, chainNowSecs()), [trades]);
   const priceEth = Number(st.priceWei) / 1e18;
   return (
@@ -50,6 +50,7 @@ export function StatBar({ coin, trades, ethUsd }: { coin: `0x${string}`; trades:
         <StatCell k="4h"><Delta pct={st.change.h4} sinceInception={st.ageSecs < 14_400} ageSecs={st.ageSecs} /></StatCell>
         <StatCell k="24h"><Delta pct={st.change.h24} sinceInception={st.ageSecs < 86_400} ageSecs={st.ageSecs} /></StatCell>
         <PotCell coin={coin} priceWei={st.priceWei} ethUsd={ethUsd} tradeCount={trades.length} />
+        <JackpotCell coin={coin} poolId={poolId} priceWei={st.priceWei} ethUsd={ethUsd} tradeCount={trades.length} />
       </div>
       {st.buys24 + st.sells24 > 0 && (
         <div style={{ margin: "-4px 0 14px" }}>
@@ -89,6 +90,42 @@ function PotCell({ coin, priceWei, ethUsd, tradeCount }: { coin: `0x${string}`; 
       <span title={leading ? `Last buyer: ${pot.leader}` : undefined}>{value}</span>
     </StatCell>
   );
+}
+
+/** Every-Nth-buy jackpot: what it holds and how many buys until it pays. */
+function JackpotCell({ coin, poolId, priceWei, ethUsd, tradeCount }: { coin: `0x${string}`; poolId: `0x${string}`; priceWei: bigint; ethUsd: number; tradeCount: number }) {
+  const mods = useModules(coin);
+  const [jp, setJp] = useState<{ pair: bigint; coin: bigint; buys: bigint } | null>(null);
+  useEffect(() => {
+    if (!mods?.jackpotEvery) return;
+    let live = true;
+    venturePc.readContract({ address: VENTURE.hook, abi: modulesAbi, functionName: "jackpotOf", args: [poolId] })
+      .then(([pair, c, buys]) => { if (live) setJp({ pair, coin: c, buys }); })
+      .catch(() => {});
+    return () => { live = false; };
+  }, [poolId, mods?.jackpotEvery, tradeCount]);
+  if (!mods?.jackpotEvery || !jp) return null;
+  const wei = jp.pair + (jp.coin * priceWei) / 10n ** 18n;
+  const every = BigInt(mods.jackpotEvery);
+  const left = every - (jp.buys % every);
+  return (
+    <StatCell k={`jackpot · ${left} to go`}>
+      {ethUsd > 0 ? fmtUsdV((Number(wei) / 1e18) * ethUsd) : `${fmtEth(wei, 4)} ETH`}
+    </StatCell>
+  );
+}
+
+/** A coin's hook modules (read once; they're fixed after launch). */
+export function useModules(coin: `0x${string}`): Modules | null {
+  const [m, setM] = useState<Modules | null>(null);
+  useEffect(() => {
+    let live = true;
+    venturePc.readContract({ address: VENTURE.hook, abi: modulesAbi, functionName: "modulesOf", args: [coin] })
+      .then(([burnBps, surgeBps, jackpotBps, jackpotEvery, noFlip, set]) => { if (live) setM({ burnBps, surgeBps, jackpotBps, jackpotEvery, noFlip, set }); })
+      .catch(() => {});
+    return () => { live = false; };
+  }, [coin]);
+  return m;
 }
 
 /** Watch a coin: an alert when it is nearly full, graduates, or opens

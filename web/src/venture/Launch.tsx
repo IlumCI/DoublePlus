@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useWalletClient } from "wagmi";
 import { concatHex, encodeAbiParameters, getContractAddress, keccak256, parseEther, toEventSelector, zeroAddress, type Hex } from "viem";
 
-import { confirmTx, factoryAbi, VENTURE, venturePc } from "./client";
+import { confirmTx, factoryAbi, modulesAbi, VENTURE, venturePc } from "./client";
 import { minGrossTargetEth, raiseFields, requiresTarget, targetIssue } from "./raiseMode";
 import { fmtEth, fmtUsdV } from "./ui";
 import { Donut, Legend, SPLIT_COLORS, type Slice } from "./charts";
@@ -60,6 +60,9 @@ export function LaunchVenture() {
   // Where the founder tax goes, in % that must total 100.
   const [alloc, setAlloc] = useState({ dev: 40, dividends: 30, liquidity: 15, mm: 15 });
   const allocTotal = alloc.dev + alloc.dividends + alloc.liquidity + alloc.mm;
+  // Hook modules, fixed once set (within ten minutes of launch).
+  const [mods, setMods] = useState({ burnBps: 0, surgeBps: 0, jackpotEvery: 0, jackpotBps: 2000, noFlip: false });
+  const anyMod = mods.burnBps > 0 || mods.surgeBps > 0 || mods.jackpotEvery > 0 || mods.noFlip;
 
   const [logoData, setLogoData] = useState("");
   const [busy, setBusy] = useState(false);
@@ -276,7 +279,19 @@ export function LaunchVenture() {
       // Straight to the new coin's page, where the share buttons are. The
       // token is the first indexed topic of the factory's Launched event.
       const launched = rc.logs.find((l) => l.address.toLowerCase() === VENTURE.factory.toLowerCase() && l.topics[0] === LAUNCHED_TOPIC);
-      const coin = launched?.topics[1] ? `0x${launched.topics[1].slice(26)}` : null;
+      const coin = launched?.topics[1] ? (`0x${launched.topics[1].slice(26)}` as `0x${string}`) : null;
+      if (coin && anyMod) {
+        try {
+          const mh = await wc.writeContract({
+            address: VENTURE.hook, abi: modulesAbi, functionName: "setModules",
+            args: [coin, { ...mods, jackpotBps: mods.jackpotEvery > 0 ? mods.jackpotBps : 0, set: false }],
+            chain: wc.chain, account: wc.account,
+          });
+          await confirmTx(mh);
+        } catch (err) {
+          pushToast({ kind: "error", title: "Extras not set", body: errorText(err) });
+        }
+      }
       navigate(coin ? `/venture/${coin}` : "/");
     } catch (err) {
       setMining(false);
@@ -639,12 +654,52 @@ export function LaunchVenture() {
                           ? "Needs a minimum to be a multiple of. Set one first."
                           : divMode === 1
                           ? `3x the minimum earns 1.5x per token, 10x earns 2x, 30x earns 3x, 100x earns 5x, 300x earns 7.5x and 1000x earns 10x. Splitting a balance across wallets lowers the multiplier.`
-                          : "Turn on to pay a larger stake more per token, up to 2x."}
+                          : "Turn on to pay a larger stake more per token, up to 10x."}
                       </span>
                     </div>
                   </div>
                 </>
               )}
+            </div>
+          )}
+
+          {step === 2 && (
+            <div className="dp-form-sheet" style={{ marginTop: 14 }}>
+              <p className="dp-sec">Extras</p>
+              <div className="dp-mods">
+                <div className="dp-field">
+                  <label htmlFor="v-burn">Burn on buys</label>
+                  <select id="v-burn" value={mods.burnBps} onChange={(e) => setMods({ ...mods, burnBps: Number(e.target.value) })}>
+                    {[0, 50, 100, 200].map((b) => <option key={b} value={b}>{b ? `${b / 100}%` : "off"}</option>)}
+                  </select>
+                </div>
+                <div className="dp-field">
+                  <label htmlFor="v-surge">Surge fee on big moves</label>
+                  <select id="v-surge" value={mods.surgeBps} onChange={(e) => setMods({ ...mods, surgeBps: Number(e.target.value) })}>
+                    {[0, 100, 200, 300].map((b) => <option key={b} value={b}>{b ? `up to ${b / 100}%` : "off"}</option>)}
+                  </select>
+                </div>
+                <div className="dp-field">
+                  <label htmlFor="v-jackpot">Jackpot</label>
+                  <select id="v-jackpot" value={mods.jackpotEvery} onChange={(e) => setMods({ ...mods, jackpotEvery: Number(e.target.value) })}>
+                    {[0, 25, 50, 100].map((n) => <option key={n} value={n}>{n ? `every ${n}th buy` : "off"}</option>)}
+                  </select>
+                </div>
+                <div className="dp-field">
+                  <label htmlFor="v-jshare">Jackpot share</label>
+                  <select id="v-jshare" value={mods.jackpotBps} disabled={mods.jackpotEvery === 0}
+                    onChange={(e) => setMods({ ...mods, jackpotBps: Number(e.target.value) })}>
+                    {[1000, 2000, 3000, 5000].map((b) => <option key={b} value={b}>{b / 100}% of the fee</option>)}
+                  </select>
+                </div>
+                <div className="dp-field">
+                  <label htmlFor="v-noflip">Same-second flips</label>
+                  <select id="v-noflip" value={mods.noFlip ? "1" : "0"} onChange={(e) => setMods({ ...mods, noFlip: e.target.value === "1" })}>
+                    <option value="0">allowed</option>
+                    <option value="1">blocked</option>
+                  </select>
+                </div>
+              </div>
             </div>
           )}
 
@@ -668,6 +723,12 @@ export function LaunchVenture() {
                         ? `, to wallets holding ${minHold.toLocaleString("en-US")}+ $${(form.symbol || "TICK").toUpperCase()}`
                         : ", to every holder"}${divMode === 1 ? ", tiered up to 10x for larger stakes" : ""}`
                     : "none"}</dd>
+                  <dt>Extras</dt><dd>{anyMod ? [
+                    mods.burnBps ? `burn ${mods.burnBps / 100}% of buys` : "",
+                    mods.surgeBps ? `surge fee up to ${mods.surgeBps / 100}%` : "",
+                    mods.jackpotEvery ? `jackpot every ${mods.jackpotEvery}th buy (${mods.jackpotBps / 100}% of the fee)` : "",
+                    mods.noFlip ? "no same-second flips" : "",
+                  ].filter(Boolean).join(", ") : "none"}</dd>
                   <dt>Description</dt><dd>{form.pitch.trim() || "none"}{longDesc.trim() ? ", plus a longer description" : ""}</dd>
                   <dt>Links</dt><dd>{[
                     ["logo", !!logoData], ["cover", !!form.banner.trim()], ["website", !!form.website.trim()],

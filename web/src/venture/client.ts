@@ -42,6 +42,8 @@ export const VENTURE = {
   /** Referrer's cut of the protocol fee, mirrors the hook's immutable value. */
   refShareBps: envBps(vite.VITE_REF_SHARE_BPS, 2000),
   updates: envAddress(vite.VITE_VENTURE_UPDATES),
+  limitOrders: envAddress(vite.VITE_VENTURE_LIMIT_ORDERS),
+  payouts: envAddress(vite.VITE_VENTURE_PAYOUTS),
   poolManager: envAddress(vite.VITE_V4_POOL_MANAGER, "0x8366a39cc670b4001a1121b8f6a443a643e40951"),
 };
 
@@ -195,6 +197,67 @@ export const ercAbi = [
   { type: "function", name: "minHoldForDividends", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
   { type: "function", name: "dividendMode", stateMutability: "view", inputs: [], outputs: [{ type: "uint8" }] },
   { type: "function", name: "eligibleSupply", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "payoutAgent", stateMutability: "view", inputs: [{ type: "address" }], outputs: [{ type: "address" }] },
+  { type: "function", name: "atAgentTier", stateMutability: "view", inputs: [{ type: "address" }], outputs: [{ type: "bool" }] },
+  { type: "function", name: "setPayoutAgent", stateMutability: "nonpayable", inputs: [{ type: "address" }], outputs: [] },
+] as const;
+
+const modulesTuple = {
+  type: "tuple",
+  components: [
+    { name: "burnBps", type: "uint16" },
+    { name: "surgeBps", type: "uint16" },
+    { name: "jackpotBps", type: "uint16" },
+    { name: "jackpotEvery", type: "uint16" },
+    { name: "noFlip", type: "bool" },
+    { name: "set", type: "bool" },
+  ],
+} as const;
+
+export interface Modules { burnBps: number; surgeBps: number; jackpotBps: number; jackpotEvery: number; noFlip: boolean; set: boolean }
+
+export const modulesAbi = [
+  { type: "function", name: "setModules", stateMutability: "nonpayable", inputs: [{ type: "address" }, { ...modulesTuple, name: "m" }], outputs: [] },
+  {
+    type: "function", name: "modulesOf", stateMutability: "view", inputs: [{ type: "address" }],
+    outputs: modulesTuple.components,
+  },
+  {
+    type: "function", name: "jackpotOf", stateMutability: "view", inputs: [{ type: "bytes32" }],
+    outputs: [{ name: "pair", type: "uint128" }, { name: "coin", type: "uint128" }, { name: "buys", type: "uint64" }],
+  },
+] as const;
+
+const orderTuple = {
+  type: "tuple",
+  components: [
+    { name: "owner", type: "address" },
+    { name: "coin", type: "address" },
+    { name: "isBuy", type: "bool" },
+    { name: "tipBps", type: "uint16" },
+    { name: "expiry", type: "uint64" },
+    { name: "amountIn", type: "uint256" },
+    { name: "minOut", type: "uint256" },
+  ],
+} as const;
+
+export const limitAbi = [
+  {
+    type: "function", name: "place", stateMutability: "payable",
+    inputs: [{ name: "coin", type: "address" }, { name: "isBuy", type: "bool" }, { name: "amountIn", type: "uint256" }, { name: "minOut", type: "uint256" }, { name: "tipBps", type: "uint16" }, { name: "expiry", type: "uint64" }],
+    outputs: [{ type: "uint256" }],
+  },
+  { type: "function", name: "cancel", stateMutability: "nonpayable", inputs: [{ type: "uint256" }], outputs: [] },
+  { type: "function", name: "order", stateMutability: "view", inputs: [{ type: "uint256" }], outputs: [orderTuple] },
+] as const;
+
+export const placedEvent = parseAbiItem(
+  "event Placed(uint256 indexed id, address indexed owner, address indexed coin, bool isBuy, uint256 amountIn, uint256 minOut, uint16 tipBps, uint64 expiry)",
+);
+
+export const payoutsAbi = [
+  { type: "function", name: "setPref", stateMutability: "nonpayable", inputs: [{ name: "kind", type: "uint8" }, { name: "path", type: "bytes" }], outputs: [] },
+  { type: "function", name: "prefOf", stateMutability: "view", inputs: [{ type: "address" }], outputs: [{ name: "kind", type: "uint8" }, { name: "path", type: "bytes" }] },
 ] as const;
 
 export const hookAbi = [
