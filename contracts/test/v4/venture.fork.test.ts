@@ -506,4 +506,79 @@ describe("Venture bonding-curve launchpad (fork)", function () {
     expect(pot.leader, "D's buy starts the next round").to.equal(d.address);
     expect(pot.coinAmount, "and seeds it").to.be.greaterThan(0n);
   });
+  it("runs the creator's modules: burn, surge, every-Nth-buy jackpot, no same-second flips", async () => {
+    const [admin, founder, whale, a, b, c, treasury] = await ethers.getSigners();
+    const { hook, factory, tokenDeployer, router } = await deployAll(admin, treasury);
+    const coin = await launch(factory, tokenDeployer, founder, WETH);
+    const erc = await ethers.getContractAt("QuiverToken", coin);
+    const mods = { burnBps: 100, surgeBps: 300, jackpotBps: 5000, jackpotEvery: 3, noFlip: true, set: false };
+
+    await expect(hook.connect(whale).setModules(coin, mods)).to.be.revertedWithCustomError(hook, "NotDevWallet");
+    await expect(hook.connect(founder).setModules(coin, { ...mods, burnBps: 201 }))
+      .to.be.revertedWithCustomError(hook, "BadPolicy");
+    await expect(hook.connect(founder).setModules(coin, { ...mods, jackpotEvery: 0 }))
+      .to.be.revertedWithCustomError(hook, "BadPolicy");
+    await (await hook.connect(founder).setModules(coin, mods)).wait();
+    await expect(hook.connect(founder).setModules(coin, mods)).to.be.revertedWithCustomError(hook, "AlreadyConfigured");
+    expect((await hook.modulesOf(coin)).set).to.equal(true);
+
+    await (await factory.connect(whale).buy(coin, 0, { value: ethers.parseEther("2.1") })).wait(); // graduates
+    await network.provider.send("evm_increaseTime", [20]);
+    await network.provider.send("evm_mine");
+    const rAddr = await router.getAddress();
+    const fee = async (tx: any) => {
+      const r = await (await tx).wait();
+      for (const l of r!.logs) {
+        try {
+          const e = hook.interface.parseLog(l);
+          if (e?.name === "FeeTaken") return e.args;
+        } catch { /* other contracts' logs */ }
+      }
+      throw new Error("no FeeTaken");
+    };
+
+    // Burn: a buy shrinks the supply by a slice of its output.
+    const supply0 = await erc.totalSupply();
+    const small = await fee(router.connect(a).buy(coin, "0x", 0, { value: ethers.parseEther("0.002") }));
+    const burned = supply0 - (await erc.totalSupply());
+    expect(burned).to.be.greaterThan(0n);
+
+    // Surge: a trade that moves the price far pays a larger founder tax per
+    // unit than a small one in a quiet second.
+    await network.provider.send("evm_increaseTime", [5]);
+    await network.provider.send("evm_mine");
+    const big = await fee(router.connect(b).buy(coin, "0x", 0, { value: ethers.parseEther("1") }));
+    // founderTax / platform normalises away the trade size (platform is a flat 1%).
+    const smallRate = (small.founderTax * 10_000n) / small.platform;
+    const bigRate = (big.founderTax * 10_000n) / big.platform;
+    expect(bigRate, "big move pays the surge").to.be.greaterThan(smallRate);
+
+    // Jackpot: A and B were buys 1 and 2; C's is the 3rd and wins it.
+    const jp = await hook.jackpotOf((await factory.listings(coin)).poolId);
+    expect(jp.buys).to.equal(2n);
+    expect(jp.coin).to.be.greaterThan(0n);
+    await network.provider.send("evm_increaseTime", [5]);
+    await network.provider.send("evm_mine");
+    const cBefore = await erc.balanceOf(c.address);
+    const rc = await (await router.connect(c).buy(coin, "0x", 0, { value: ethers.parseEther("0.002") })).wait();
+    const won = rc!.logs.map((l: any) => { try { return hook.interface.parseLog(l); } catch { return null; } })
+      .find((e: any) => e?.name === "JackpotWon");
+    expect(won!.args.winner).to.equal(c.address);
+    expect(won!.args.buyNumber).to.equal(3n);
+    expect((await erc.balanceOf(c.address)) - cBefore).to.be.greaterThan(won!.args.coinAmount);
+    const after = await hook.jackpotOf((await factory.listings(coin)).poolId);
+    expect(after.buys).to.equal(3n);
+
+    // No flip: a buy and a sell from one signer in the same second.
+    await (await erc.connect(a).approve(rAddr, ethers.MaxUint256)).wait();
+    await network.provider.send("evm_setAutomine", [false]);
+    const buyTx = await router.connect(a).buy(coin, "0x", 0, { value: ethers.parseEther("0.002"), gasLimit: 3_000_000 });
+    const sellTx = await router.connect(a).sell(coin, (await erc.balanceOf(a.address)) / 2n, "0x", 0, { gasLimit: 3_000_000 });
+    await network.provider.send("evm_mine");
+    await network.provider.send("evm_setAutomine", [true]);
+    expect((await ethers.provider.getTransactionReceipt(buyTx.hash))!.status).to.equal(1);
+    expect((await ethers.provider.getTransactionReceipt(sellTx.hash))!.status).to.equal(0);
+    // A second later the sell goes through.
+    await (await router.connect(a).sell(coin, (await erc.balanceOf(a.address)) / 2n, "0x", 0)).wait();
+  });
 });

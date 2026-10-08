@@ -18,6 +18,7 @@ import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
 import {LiquidityAmounts} from "@uniswap/v4-periphery/src/libraries/LiquidityAmounts.sol";
 
 import {IQuiverToken} from "../interfaces/IQuiverToken.sol";
+import {IVentureListings} from "./VentureUpdates.sol";
 
 /// @title VentureFeeHook
 /// @notice Fee engine for the doubleplus startup launchpad. Every graduated
@@ -55,6 +56,17 @@ import {IQuiverToken} from "../interfaces/IQuiverToken.sol";
 ///         Anti-snipe: for the first seconds after graduation trades pay a
 ///         decaying premium (15% under 5s, 5% under 15s) and the entire
 ///         premium is routed into the bid wall — snipers fund the floor.
+///
+///         Optional modules, chosen by the creator once, within
+///         MODULE_WINDOW of launch, and fixed after:
+///           - burn     : a slice of every buy's coin output is burned.
+///           - surge    : a surcharge that grows with how far a trade moves
+///             the price from where it stood at the end of the last active
+///             second, added to the founder tax and split the same way.
+///           - jackpot  : a share of the founder tax builds a jackpot that
+///             every Nth qualifying buy wins.
+///           - no flip  : one signer can't buy and sell the same coin in the
+///             same second.
 contract VentureFeeHook is IHooks, ReentrancyGuard, IUnlockCallback {
     using PoolIdLibrary for PoolKey;
     using StateLibrary for IPoolManager;
@@ -81,6 +93,11 @@ contract VentureFeeHook is IHooks, ReentrancyGuard, IUnlockCallback {
     uint64 public constant RECENTER_QUIET_SECS = 60;
     uint16 internal constant SNIPE_BPS_1 = 1_500; // 15%
     uint16 internal constant SNIPE_BPS_2 = 500; // 5%
+    uint16 public constant MAX_BURN_BPS = 200;
+    uint16 public constant MAX_SURGE_BPS = 300;
+    /// @notice The surcharge reaches surgeBps at this many ticks of move (~10%).
+    uint256 internal constant SURGE_FULL_TICKS = 1_000;
+    uint64 public constant MODULE_WINDOW = 10 minutes;
 
     struct FeePolicy {
         address devWallet;
@@ -97,6 +114,27 @@ contract VentureFeeHook is IHooks, ReentrancyGuard, IUnlockCallback {
         uint128 coin;
         address leader;
         uint64 deadline;
+    }
+
+    struct Modules {
+        uint16 burnBps; // 0..MAX_BURN_BPS of each buy's coin output
+        uint16 surgeBps; // 0..MAX_SURGE_BPS at a SURGE_FULL_TICKS move
+        uint16 jackpotBps; // share of the founder tax, 0..5000
+        uint16 jackpotEvery; // every Nth qualifying buy wins; 0 = off
+        bool noFlip;
+        bool set;
+    }
+
+    struct Jackpot {
+        uint128 pair;
+        uint128 coin;
+        uint64 buys; // qualifying buys so far
+    }
+
+    struct Surge {
+        int24 refTick; // where the price stood at the end of the last active second
+        int24 lastTick;
+        uint64 lastTs;
     }
 
     struct Band {
@@ -140,6 +178,11 @@ contract VentureFeeHook is IHooks, ReentrancyGuard, IUnlockCallback {
     ///         plumbing swaps don't count).
     mapping(PoolId => uint64) public lastSwapAt;
     mapping(PoolId => Pot) public potOf;
+    mapping(address coin => Modules) public modulesOf;
+    mapping(PoolId => Jackpot) public jackpotOf;
+    mapping(PoolId => Surge) internal _surgeOf;
+    /// @dev keccak(pool, signer, isBuy) => timestamp of that side's last trade.
+    mapping(bytes32 => uint64) internal _lastSide;
     error PriceMoving();
 
     error NotPoolManager();
@@ -149,6 +192,7 @@ contract VentureFeeHook is IHooks, ReentrancyGuard, IUnlockCallback {
     error BadPolicy();
     error HookNotImplemented();
     error PotNotWon();
+    error NoFlip();
 
     event PoolConfigured(PoolId indexed id, address indexed coin, FeePolicy policy);
     event FeeTaken(PoolId indexed id, Currency currency, bool isBuy, uint256 platform, uint256 founderTax, uint256 sniper);
@@ -163,6 +207,8 @@ contract VentureFeeHook is IHooks, ReentrancyGuard, IUnlockCallback {
     event ReferralPaid(address indexed trader, address indexed referrer, Currency currency, uint256 amount);
     event PotLeader(PoolId indexed id, address indexed leader, uint64 deadline);
     event PotWon(PoolId indexed id, address indexed winner, uint256 pairAmount, uint256 coinAmount);
+    event ModulesSet(address indexed coin, Modules modules);
+    event JackpotWon(PoolId indexed id, address indexed winner, uint256 pairAmount, uint256 coinAmount, uint64 buyNumber);
     event PayoutDeferred(address indexed to, Currency indexed currency, uint256 amount);
 
     modifier onlyPoolManager() {
@@ -208,6 +254,21 @@ contract VentureFeeHook is IHooks, ReentrancyGuard, IUnlockCallback {
         emit ReferrerBound(msg.sender, ref);
     }
 
+    /// @notice The coin's creator picks its modules once, within
+    ///         MODULE_WINDOW of launch and before graduation.
+    function setModules(address coin, Modules calldata m) external {
+        (address creator,,, uint64 createdAt,) = IVentureListings(launcher).listings(coin);
+        if (msg.sender != creator) revert NotDevWallet();
+        if (modulesOf[coin].set || configOf[_poolOf[coin]].set || block.timestamp > createdAt + MODULE_WINDOW) {
+            revert AlreadyConfigured();
+        }
+        if (m.burnBps > MAX_BURN_BPS || m.surgeBps > MAX_SURGE_BPS || m.jackpotBps > 5_000) revert BadPolicy();
+        if ((m.jackpotBps == 0) != (m.jackpotEvery == 0)) revert BadPolicy();
+        modulesOf[coin] = m;
+        modulesOf[coin].set = true;
+        emit ModulesSet(coin, m);
+    }
+
     // ---------------------------------------------------------------------
     // Configuration (factory-only, once per pool, immutable after)
     // ---------------------------------------------------------------------
@@ -231,6 +292,10 @@ contract VentureFeeHook is IHooks, ReentrancyGuard, IUnlockCallback {
             set: true
         });
         _poolOf[coin] = id;
+        if (modulesOf[coin].surgeBps > 0) {
+            (, int24 tick,,) = poolManager.getSlot0(id);
+            _surgeOf[id] = Surge(tick, tick, uint64(block.timestamp));
+        }
         emit PoolConfigured(id, coin, p);
     }
 
@@ -273,7 +338,10 @@ contract VentureFeeHook is IHooks, ReentrancyGuard, IUnlockCallback {
 
         // Direction: a buy takes the coin OUT of the pool.
         bool coinIsOutput = params.zeroForOne != c.coinIsCurrency0;
-        uint16 sideTaxBps = coinIsOutput ? c.policy.buyTaxBps : c.policy.sellTaxBps;
+        Modules memory m = modulesOf[c.coin];
+        if (m.noFlip) _noFlip(id, coinIsOutput);
+        uint256 sideTaxBps = coinIsOutput ? c.policy.buyTaxBps : c.policy.sellTaxBps;
+        if (m.surgeBps > 0) sideTaxBps += _surgeBps(id, m.surgeBps);
 
         // Sniper premium in the first seconds after graduation; the factory's
         // own swaps (none today) would be exempt by sender check if added.
@@ -295,7 +363,9 @@ contract VentureFeeHook is IHooks, ReentrancyGuard, IUnlockCallback {
         if (ref != address(0)) platformFee -= (platformFee * REFEREE_DISCOUNT_BPS) / BPS;
         uint256 founderTax = (magnitude * sideTaxBps) / BPS;
         uint256 sniperFee = (magnitude * snipeBps) / BPS;
-        uint256 total = platformFee + founderTax + sniperFee;
+        // Burn only applies when the fee side is the coin, i.e. an exact-input buy.
+        uint256 burnAmt = Currency.unwrap(feeCurrency) == c.coin && coinIsOutput ? (magnitude * m.burnBps) / BPS : 0;
+        uint256 total = platformFee + founderTax + sniperFee + burnAmt;
         if (total == 0) return (IHooks.afterSwap.selector, 0);
 
         if (platformFee > 0) {
@@ -316,6 +386,18 @@ contract VentureFeeHook is IHooks, ReentrancyGuard, IUnlockCallback {
             }
             _payOut(feeCurrency, platformTreasury, platformFee - toReferrer - toPot);
         }
+        if (burnAmt > 0) {
+            poolManager.take(feeCurrency, address(this), burnAmt);
+            IQuiverToken(c.coin).burn(burnAmt);
+        }
+        if (m.jackpotBps > 0 && founderTax > 0) {
+            uint256 toJackpot = (founderTax * m.jackpotBps) / BPS;
+            founderTax -= toJackpot;
+            poolManager.mint(address(this), feeCurrency.toId(), toJackpot);
+            Jackpot storage j = jackpotOf[id];
+            if (Currency.unwrap(feeCurrency) == c.coin) j.coin += toJackpot.toUint128();
+            else j.pair += toJackpot.toUint128();
+        }
         if (coinIsOutput && trader != address(0)) {
             int128 paid = c.coinIsCurrency0 ? delta.amount1() : delta.amount0();
             if (paid < 0 && uint256(uint128(-paid)) >= potMinBuyWei) {
@@ -324,6 +406,7 @@ contract VentureFeeHook is IHooks, ReentrancyGuard, IUnlockCallback {
                 pot.leader = trader;
                 pot.deadline = deadline;
                 emit PotLeader(id, trader, deadline);
+                if (m.jackpotEvery > 0) _countJackpotBuy(id, c, trader, m.jackpotEvery);
             }
         }
         if (founderTax > 0) _settleBuckets(key, id, c, feeCurrency, founderTax, sniperFee);
@@ -338,6 +421,50 @@ contract VentureFeeHook is IHooks, ReentrancyGuard, IUnlockCallback {
 
         emit FeeTaken(id, feeCurrency, coinIsOutput, platformFee, founderTax, sniperFee);
         return (IHooks.afterSwap.selector, total.toInt128());
+    }
+
+    /// @dev One signer can't trade both sides of a coin in the same second.
+    function _noFlip(PoolId id, bool isBuy) private {
+        bytes32 mine = keccak256(abi.encode(id, tx.origin, isBuy));
+        if (_lastSide[keccak256(abi.encode(id, tx.origin, !isBuy))] == block.timestamp) revert NoFlip();
+        _lastSide[mine] = uint64(block.timestamp);
+    }
+
+    /// @dev Surcharge for moving the price away from where it stood at the end
+    ///      of the last second that saw a trade; a trade back toward it pays less.
+    function _surgeBps(PoolId id, uint16 maxBps) private returns (uint256) {
+        Surge memory g = _surgeOf[id];
+        if (g.lastTs != block.timestamp) {
+            g.refTick = g.lastTick;
+            g.lastTs = uint64(block.timestamp);
+        }
+        (, int24 tick,,) = poolManager.getSlot0(id);
+        g.lastTick = tick;
+        _surgeOf[id] = g;
+        uint256 move = uint256(int256(tick > g.refTick ? tick - g.refTick : g.refTick - tick));
+        if (move >= SURGE_FULL_TICKS) return maxBps;
+        return (move * maxBps) / SURGE_FULL_TICKS;
+    }
+
+    function _countJackpotBuy(PoolId id, Config memory c, address trader, uint16 every) private {
+        Jackpot memory j = jackpotOf[id];
+        j.buys += 1;
+        if (j.buys % every != 0) {
+            jackpotOf[id].buys = j.buys;
+            return;
+        }
+        jackpotOf[id] = Jackpot(0, 0, j.buys);
+        if (j.pair > 0) {
+            Currency pair = Currency.wrap(c.pair);
+            poolManager.burn(address(this), pair.toId(), j.pair);
+            _payOut(pair, trader, j.pair);
+        }
+        if (j.coin > 0) {
+            Currency coin = Currency.wrap(c.coin);
+            poolManager.burn(address(this), coin.toId(), j.coin);
+            _payOut(coin, trader, j.coin);
+        }
+        emit JackpotWon(id, trader, j.pair, j.coin, j.buys);
     }
 
     function _unspecified(PoolKey calldata key, SwapParams calldata params, BalanceDelta delta)

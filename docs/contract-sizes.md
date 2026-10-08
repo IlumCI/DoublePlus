@@ -13,7 +13,7 @@ share helpers overlap, so rows add up to a little more than the whole.
 | Contract | Runtime bytes | Headroom |
 |---|---|---|
 | VentureFactory | 24,395 | **181** |
-| VentureFeeHook | 16,308 | 8,268 |
+| VentureFeeHook | 20,295 | 4,281 |
 | VentureTokenDeployer (embeds QuiverToken's initcode) | 9,706 | 14,870 |
 | QuiverToken (one per coin) | 5,634 | 18,942 |
 | VentureRouter | 5,112 | 19,464 |
@@ -37,7 +37,10 @@ override in `hardhat.config.ts`.
 | Dispatcher and math shared across features | ~2,500 | 10% |
 | Views and admin (curveState, terms, setParams, pause) | ~900 | 4% |
 
-## VentureFeeHook (16,308)
+## VentureFeeHook (20,295)
+
+The creator modules (burn, surge, every-Nth-buy jackpot, no-flip, setModules)
+added 3,987 bytes on top of the 16,308 measured below.
 
 Rougher: almost everything hangs off `afterSwap`, so stubbing a helper also
 removes code after it.
@@ -63,4 +66,4 @@ removes code after it.
    ~6 KB. Costs a redeploy, a little gas per graduation, and audit surface.
 3. Move launch validation into a helper: 2–3 KB.
 
-New features that fit in the hook have ~8 KB there.
+New features that fit in the hook have ~4 KB there.
