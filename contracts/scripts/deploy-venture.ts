@@ -163,6 +163,12 @@ async function main() {
   await payouts.waitForDeployment();
   console.log("payouts:", await payouts.getAddress(), "keeper:", payoutKeeper);
 
+  // Paid placement on the board, priced per hour, paid straight to the treasury.
+  const boostPrice = ethers.parseEther(process.env.BOOST_PRICE_ETH ?? "0.001");
+  const boosts = await (await ethers.getContractFactory("VentureBoosts")).deploy(factoryAddr, treasury, boostPrice);
+  await boosts.waitForDeployment();
+  console.log("boosts:", await boosts.getAddress(), `${ethers.formatEther(boostPrice)} ETH/h`);
+
   // setParams: open-curve graduation trigger and launch fee.
   const gradWei = ethers.parseEther(process.env.GRADUATION_RAISE_ETH ?? "4");
   const creationFeeWei = ethers.parseEther(process.env.CREATION_FEE_ETH ?? "0.0003");
@@ -201,6 +207,7 @@ async function main() {
       updates: await updates.getAddress(),
       limitOrders: await limitOrders.getAddress(),
       payouts: await payouts.getAddress(),
+      boosts: await boosts.getAddress(),
       tokenDeployer: await tokenDeployer.getAddress(),
       vestingDeployer: await vestingDeployer.getAddress(),
       poolManager: infra.poolManager,
