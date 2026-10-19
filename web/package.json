@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:venture": "VITE_BRAND=venture vite --mode venture",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "gen:env": "node scripts/gen-env.mjs",
