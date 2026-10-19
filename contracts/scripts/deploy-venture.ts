@@ -11,7 +11,8 @@ import { join } from "path";
 // Env:
 //   ADMIN            protocolAdmin: pause/resume and setParams only; it has no
 //                    power over pools (default: deployer)
-//   TREASURY         protocol fee treasury baked into the hook (default: ADMIN)
+//   TREASURY         protocol fee treasury baked into the hook and boosts
+//                    (default: the mainnet receiving wallet on 4663, else ADMIN)
 //   PLATFORM_FEE_BPS protocol fee on every trade, 50..100 (default 55 = 0.55%)
 //   REF_SHARE_BPS    referrer's cut of the protocol fee, 0..5000 (default 2000 = 20%)
 //   POT_SHARE_BPS    share of the protocol fee feeding each coin's last-buyer
@@ -31,6 +32,11 @@ import { join } from "path";
 // The V4 PoolManager sits at the same address on both networks. WETH differs;
 // the testnet has no self-deployed V3 stack, so venture launches there are
 // WETH-paired only (v3Router = zero, never called for WETH pairs).
+// Where mainnet fees and boost payments land. Immutable once deployed.
+const DEFAULT_TREASURY: Record<number, string> = {
+  4663: "0x16d762c8644883C8169Ed950EE383dCb90F9Fbf2",
+};
+
 const INFRA: Record<number, { poolManager: string; weth: string; v3Router: string; file: string }> = {
   4663: {
     poolManager: "0x8366a39cc670b4001a1121b8f6a443a643e40951",
@@ -68,7 +74,7 @@ async function main() {
 
   const [signer] = await ethers.getSigners();
   const admin = process.env.ADMIN ?? signer.address;
-  const treasury = process.env.TREASURY ?? admin;
+  const treasury = process.env.TREASURY ?? DEFAULT_TREASURY[chainId] ?? admin;
   const platformFeeBps = Number(process.env.PLATFORM_FEE_BPS ?? 75);
   const refShareBps = Number(process.env.REF_SHARE_BPS ?? 2000);
   const potShareBps = Number(process.env.POT_SHARE_BPS ?? 2000);
