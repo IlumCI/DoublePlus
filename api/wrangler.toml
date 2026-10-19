@@ -8,7 +8,7 @@ compatibility_flags = ["nodejs_compat"]
 [vars]
 SUPABASE_URL = "https://fkdwbaovohfvuqcobbtl.supabase.co"
 RPC_URL = "https://rpc.testnet.chain.robinhood.com"
-FACTORY = "0x7699AE7AB5b5a720ca99C3B650A44cba69170d16"
+FACTORY = "0x2044d0aBfa3B4CC6979cC35e9393001e8C35D073"
 ALLOWED_ORIGINS = "https://doubleplus.fun,https://www.doubleplus.fun,http://localhost:5173"
 
 # Blocklist of abusive IPs and spent sign-in signatures, both with TTLs.
