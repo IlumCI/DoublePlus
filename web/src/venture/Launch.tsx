@@ -72,6 +72,7 @@ export function LaunchVenture() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    if (VENTURE.launchEthUsd8 > 0n) return setEthUsd(Number(VENTURE.launchEthUsd8) / 1e8);
     pairUsd(VENTURE.weth, venturePc)
       .then((v) => setEthUsd(v > 0 ? v : Number(VENTURE.ethUsd8Fallback) / 1e8))
       .catch(() => setEthUsd(Number(VENTURE.ethUsd8Fallback) / 1e8));
@@ -491,7 +492,7 @@ export function LaunchVenture() {
               {open && (
                 <p className="dp-hint" style={{ margin: "2px 0 14px" }}>
                   An open curve graduates at{" "}
-                  <b className="dp-up">{chain ? `${(Number(chain.grad) / 1e18).toFixed(2)} ETH` : "the protocol threshold"}</b>{" "}
+                  <b className="dp-up">{chain ? `${+(Number(chain.grad) / 1e18).toPrecision(3)} ETH` : "the protocol threshold"}</b>{" "}
                   on the curve{chain && ethUsd > 0 ? ` (about ${fmtUsdV(gradFdvUsd(Number(chain.grad) / 1e18, ethUsd))} market cap)` : ""}, then locks its liquidity into the pool like any other launch. Buyers
                   can sell back to the curve at any moment, so there is no deadline to miss and no
                   refund to open. You earn from trade fees rather than a cut of a raise.
