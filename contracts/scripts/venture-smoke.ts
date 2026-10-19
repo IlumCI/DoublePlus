@@ -30,7 +30,7 @@ async function main() {
   const weth = dep.contracts.weth;
 
   const ethUsd8 = BigInt(process.env.ETH_USD_8 ?? 1_865_000n * 10n ** 8n);
-  const target = ethers.parseEther(process.env.SMOKE_TARGET_ETH ?? "0.011");
+  const target = ethers.parseEther(process.env.SMOKE_TARGET_ETH ?? "0.003");
 
   // 1) Launch with a tiny target so one wallet can graduate it.
   const params = {
@@ -74,18 +74,27 @@ async function main() {
   }
   if (!salt) throw new Error("no vanity salt");
   const creationFee = await factory.creationFeeWei();
+  try { await factory.launch.staticCall(params, salt, { value: creationFee }); }
+  catch (e: any) { const d = e.data ?? e.error?.data ?? e.info?.error?.data; console.log("revert data", d, factory.interface.parseError(d ?? "0x")?.name); throw e; }
   await (await factory.launch(params, salt, { value: creationFee })).wait();
   const coin = await factory.allTokens((await factory.totalTokens()) - 1n);
   console.log("launched:", coin);
+
+  // The first minute caps each wallet at 1% of the target; wait it out.
+  await new Promise((r) => setTimeout(r, 65_000));
 
   // 2) Fill the curve to target in one buy (self-backed).
   await (await factory.buy(coin, 0, { value: target + target / 10n })).wait();
   const st = await factory.curveState(coin);
   console.log("curve:", { sold: st.soldWhole.toString(), raised: ethers.formatEther(st.raisedWei) });
 
-  // 3) Graduate.
-  await (await factory.finalize(coin)).wait();
-  const listing = await factory.listings(coin);
+  // 3) The filling buy graduates in the same transaction; finalize() is the
+  // fallback for a curve that reached its target without one.
+  let listing = await factory.listings(coin);
+  if (listing.poolId === ethers.ZeroHash) {
+    await (await factory.finalize(coin)).wait();
+    listing = await factory.listings(coin);
+  }
   console.log("graduated, poolId:", listing.poolId);
 
   // 4) Router round-trip.
@@ -121,6 +130,32 @@ async function main() {
   const vesting = await ethers.getContractAt("FounderVesting", vestingAddr);
   console.log("vesting:", vestingAddr, "started:", (await vesting.startTime()).toString(),
     "allocation:", ethers.formatEther(await vesting.totalAllocation()));
+
+  // 6) Limit order: escrow a small sell, then cancel it and get it back.
+  if (dep.contracts.limitOrders) {
+    const lo = await ethers.getContractAt("VentureLimitOrders", dep.contracts.limitOrders);
+    const bag = (await erc.balanceOf(signer.address)) / 10n;
+    await (await erc.approve(dep.contracts.limitOrders, ethers.MaxUint256)).wait();
+    const expiry = BigInt((await ethers.provider.getBlock("latest"))!.timestamp) + 3600n;
+    await (await lo.place(coin, false, bag, ethers.parseEther("1"), 50, expiry)).wait();
+    const id = (await lo.totalOrders()) - 1n;
+    await (await lo.cancel(id)).wait();
+    console.log("limit order placed and cancelled:", id.toString());
+  }
+
+  // 7) One hour of boost; on testnet the treasury is this wallet.
+  if (dep.contracts.boosts) {
+    const boosts = await ethers.getContractAt("VentureBoosts", dep.contracts.boosts);
+    await (await boosts.boost(coin, 1, { value: await boosts.pricePerHour() })).wait();
+    console.log("boosted until:", (await boosts.activeBoost(coin))[0].toString());
+  }
+
+  // 8) Get the ETH back: sell the whole bag into the pool, then withdraw
+  // whatever accrued to this wallet as treasury.
+  const rest = await erc.balanceOf(signer.address);
+  if (rest > 0n) await (await router.sell(coin, rest, "0x", 0)).wait();
+  if ((await factory.feesAccrued(signer.address)) > 0n) await (await factory.withdrawFees()).wait();
+  console.log("balance after:", ethers.formatEther(await ethers.provider.getBalance(signer.address)));
   console.log("SMOKE PASSED");
 }
 main().catch((e) => { console.error(e); process.exit(1); });
