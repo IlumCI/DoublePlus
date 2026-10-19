@@ -8,7 +8,7 @@ import { minGrossTargetEth, raiseFields, requiresTarget, targetIssue } from "./r
 import { fmtEth, fmtUsdV } from "./ui";
 import { Donut, Legend, SPLIT_COLORS, type Slice } from "./charts";
 import { usePageMeta } from "./seo";
-import { QUIVER_TOKEN_BYTECODE } from "../lib/rh/tokenBytecode";
+import { QUIVER_TOKEN_BYTECODE } from "./tokenBytecode";
 import { pairUsd } from "../lib/rh/routes";
 
 import { errorText, useWallet } from "../lib/useWallet";
