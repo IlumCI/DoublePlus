@@ -51,8 +51,7 @@ export const VENTURE = {
   poolManager: envAddress(vite.VITE_V4_POOL_MANAGER, "0x8366a39cc670b4001a1121b8f6a443a643e40951"),
 };
 
-export const TOTAL_SUPPLY = 1_000_000_000;
-export const CURVE_SUPPLY = 600_000_000; // whole tokens sold on the curve
+export { CURVE_SUPPLY, TOTAL_SUPPLY } from "./protocol";
 
 export const factoryAbi = [
   { type: "function", name: "totalTokens", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },

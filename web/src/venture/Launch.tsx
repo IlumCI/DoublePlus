@@ -13,13 +13,12 @@ import { pairUsd } from "../lib/rh/routes";
 
 import { errorText, useWallet } from "../lib/useWallet";
 import { useUi } from "../store";
+import { CURVE_SUPPLY, MAX_RAISE_DAYS, START_FDV_USD, TOTAL_SUPPLY } from "./protocol";
 
-const TOTAL_SUPPLY = 10n ** 27n;
-const CURVE_SHARE = 0.6; // 60% of supply sells on the curve
+const TOKEN_SUPPLY_WEI = BigInt(TOTAL_SUPPLY) * 10n ** 18n;
+const CURVE_SHARE = CURVE_SUPPLY / TOTAL_SUPPLY;
 const UNALLOCATED_COLOR = "#4a5368";
-const START_FDV_USD = 750; // mirrors VentureFactory.START_MCAP_USD_8
 const MIN_TARGET_ETH = 2; // mirrors VentureFactory.minTargetWei on mainnet
-const MAX_RAISE_DAYS = 14; // mirrors VentureFactory.MAX_RAISE_SECS
 const LAUNCHED_TOPIC = toEventSelector("Launched(address,address,address,uint16,uint256,uint64,address)");
 // On-chain metadata budget. A launch transaction is capped at 2^24 gas, and
 // storing ~25 KB of metadata already reaches it; leave room for the rest.
@@ -210,7 +209,7 @@ export function LaunchVenture() {
           { type: "uint256" }, { type: "uint8" },
         ],
         [
-          form.name.trim(), symbol, metadataURI, TOTAL_SUPPLY, me, VENTURE.factory, buyTaxBps, VENTURE.weth,
+          form.name.trim(), symbol, metadataURI, TOKEN_SUPPLY_WEI, me, VENTURE.factory, buyTaxBps, VENTURE.weth,
           // The deployer scales the whole-token floor; the salt must be mined
           // against the value the constructor actually receives.
           BigInt(minHold) * 10n ** 18n, divMode,

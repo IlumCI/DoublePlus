@@ -67,8 +67,7 @@ export function Impact({ pct, curve }: { pct: number; curve?: boolean }) {
   );
 }
 
-/** VentureFactory.LAUNCH_WINDOW_SECS. */
-export const LAUNCH_WINDOW_SECS = 60;
+export { LAUNCH_WINDOW_SECS } from "../protocol";
 
 /** Measured on a mainnet fork: a plain curve buy uses ~119k gas, the filling
  *  buy that graduates ~788k. */
