@@ -560,6 +560,10 @@ main { container-type: inline-size; }
 .dp-mixer .dp-who { display: flex; align-items: center; gap: 8px; font-family: var(--body); font-size: 11.5px; color: var(--dim); }
 .dp-mixer .dp-who i { width: 10px; height: 10px; border-radius: 3px; }
 .dp-mixer .dp-amt { font-family: var(--mono); font-size: 13px; text-align: right; }
+.dp-unalloc-bar { height: 4px; border-radius: 2px; background: rgba(255,255,255,0.06); overflow: hidden; }
+.dp-unalloc-bar b { display: block; height: 100%; background: #4a5368; transition: width .15s; }
+.dp-unalloc .dp-amt { color: var(--dim); }
+.dp-unalloc.on .dp-amt, .dp-unalloc.on .dp-who { color: #f0c987; }
 @media (max-width: 700px) { .dp-mixer > div { grid-template-columns: 110px 1fr 40px; } }
 
 /* klinecharts sits flush inside the panel */

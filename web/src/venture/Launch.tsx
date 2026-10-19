@@ -16,6 +16,7 @@ import { useUi } from "../store";
 
 const TOTAL_SUPPLY = 10n ** 27n;
 const CURVE_SHARE = 0.6; // 60% of supply sells on the curve
+const UNALLOCATED_COLOR = "#4a5368";
 const START_FDV_USD = 750; // mirrors VentureFactory.START_MCAP_USD_8
 const MIN_TARGET_ETH = 2; // mirrors VentureFactory.minTargetWei on mainnet
 const MAX_RAISE_DAYS = 14; // mirrors VentureFactory.MAX_RAISE_SECS
@@ -142,7 +143,7 @@ export function LaunchVenture() {
       return pushToast({ kind: "error", title: `Target too low`, body });
     }
     if (allocTotal !== 100) {
-      return pushToast({ kind: "error", title: "Fee split must total 100%", body: `It totals ${allocTotal}% right now.` });
+      return pushToast({ kind: "error", title: `${100 - allocTotal}% of the fee is unallocated` });
     }
     setBusy(true);
     try {
@@ -314,29 +315,13 @@ export function LaunchVenture() {
     if (k === "profit") { setBuyTaxPct(3); setSellTaxPct(4); setAlloc({ dev: 60, dividends: 15, liquidity: 15, mm: 10 }); }
   };
 
-  // Moving one slider pushes the difference onto the others in proportion, so
-  // the split is always exactly 100% — there is no such thing as unallocated,
-  // and any single bucket may take the whole thing.
+  // Each slider only takes from what's unallocated; nothing else moves. The
+  // launch waits until the split is used up.
   const BUCKETS = ["dev", "dividends", "liquidity", "mm"] as const;
-  const setAllocBalanced = (key: (typeof BUCKETS)[number]) => (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = Math.max(0, Math.min(100, Math.round(Number(e.target.value) || 0)));
-    const others = BUCKETS.filter((b) => b !== key);
-    const rest = 100 - value;
-    const othersTotal = others.reduce((a, b) => a + alloc[b], 0);
-    const next = { ...alloc, [key]: value } as typeof alloc;
-    if (othersTotal === 0) {
-      // everything was on this bucket: spread the remainder evenly
-      others.forEach((b, i) => { next[b] = Math.floor(rest / others.length) + (i < rest % others.length ? 1 : 0); });
-    } else {
-      others.forEach((b) => { next[b] = Math.round((alloc[b] / othersTotal) * rest); });
-    }
-    // absorb rounding drift into the largest of the others
-    const drift = 100 - BUCKETS.reduce((a, b) => a + next[b], 0);
-    if (drift !== 0) {
-      const fat = others.reduce((m, b) => (next[b] > next[m] ? b : m), others[0]);
-      next[fat] = Math.max(0, next[fat] + drift);
-    }
-    setAlloc(next);
+  const unallocated = 100 - allocTotal;
+  const setAllocFree = (key: (typeof BUCKETS)[number]) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const want = Math.max(0, Math.min(100, Math.round(Number(e.target.value) || 0)));
+    setAlloc({ ...alloc, [key]: Math.min(want, alloc[key] + unallocated) });
     setPreset("custom");
   };
 
@@ -378,13 +363,14 @@ export function LaunchVenture() {
     { label: "Holders", value: alloc.dividends, note: "paid out to people holding the coin" },
     { label: "Liquidity", value: alloc.liquidity, note: "added to the pool, so prices move less" },
     { label: "Market-making", value: alloc.mm, note: "buy and sell orders kept near the price" },
+    ...(unallocated > 0 ? [{ label: "Unallocated", value: unallocated, color: UNALLOCATED_COLOR }] : []),
   ];
 
   const STEPS = ["Your coin", "The raise", "Trading fees", "Review"];
   const canAdvance =
     step === 0 ? form.name.trim().length > 0 && form.symbol.trim().length > 0 && form.pitch.trim().length > 0
     : step === 1 ? open || (parsedTarget > 0n && (minTargetEth === 0 || Number(target) >= minTargetEth * 0.999))
-    : step === 2 ? true
+    : step === 2 ? unallocated === 0
     : true;
 
   return (
@@ -587,7 +573,7 @@ export function LaunchVenture() {
                   ["community", "Holders first", "Half to holders", "Pays people to keep holding."],
                   ["balanced", "Balanced", "Spread across four", "A quarter to each."],
                   ["profit", "Creator first", "Most to you", "The largest share to your wallet."],
-                  ["custom", "Custom", "Set it yourself", "Moving one slider rebalances the others."],
+                  ["custom", "Custom", "Set it yourself", "Split the fee four ways yourself."],
                 ] as const).map(([k, title, line, why]) => (
                   <button type="button" key={k} className={preset === k ? "on" : ""} onClick={() => applyPreset(k)}>
                     <b>{title}</b>
@@ -607,18 +593,20 @@ export function LaunchVenture() {
 
               {preset === "custom" && (
                 <div className="dp-expert">
-                  <p className="dp-hint" style={{ marginBottom: 10 }}>
-                    Always adds to 100%. Push one to 100 and it takes everything.
-                  </p>
                   <div className="dp-mixer">
                     {([["dev", "You"], ["dividends", "Holders"], ["liquidity", "Liquidity"], ["mm", "Market-making"]] as const).map(([k, label], i) => (
                       <div key={k}>
                         <span className="dp-who"><i style={{ background: SPLIT_COLORS[i] }} />{label}</span>
                         <input type="range" min={0} max={100} step={1} value={alloc[k]}
-                          onChange={setAllocBalanced(k)} aria-label={label} />
+                          onChange={setAllocFree(k)} aria-label={label} />
                         <span className="dp-amt">{alloc[k]}%</span>
                       </div>
                     ))}
+                    <div className={unallocated > 0 ? "dp-unalloc on" : "dp-unalloc"}>
+                      <span className="dp-who"><i style={{ background: UNALLOCATED_COLOR }} />Unallocated</span>
+                      <span className="dp-unalloc-bar"><b style={{ width: `${unallocated}%` }} /></span>
+                      <span className="dp-amt">{unallocated}%</span>
+                    </div>
                   </div>
                 </div>
               )}
