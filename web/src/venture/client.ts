@@ -1,4 +1,4 @@
-import { createPublicClient, fallback, http, isAddress, parseAbiItem, zeroAddress, type Address, type Hex, type PublicClient, type WalletClient } from "viem";
+import { createPublicClient, encodeAbiParameters, fallback, http, isAddress, keccak256, parseAbiItem, zeroAddress, type Address, type Hex, type PublicClient, type WalletClient } from "viem";
 
 import { chain, env } from "../lib/env";
 import { isProtocolSwap } from "./marketStats";
@@ -311,6 +311,16 @@ export const venturePc = createPublicClient({
   pollingInterval: 8_000,
   batch: { multicall: { wait: 24 } },
 }) as PublicClient;
+
+/** Storage slots of a coin's ERC20 balance and allowance (OpenZeppelin v5
+ *  ERC20: balances at slot 0, allowances at slot 1). Quotes override them so a
+ *  sell can be priced before the wallet has approved anything. */
+const mapSlot = (key: Address, slot: Hex | bigint): Hex =>
+  keccak256(encodeAbiParameters([{ type: "address" }, typeof slot === "bigint" ? { type: "uint256" } : { type: "bytes32" }], [key, slot as never]));
+export const balanceSlot = (owner: Address): Hex => mapSlot(owner, 0n);
+export const allowanceSlot = (owner: Address, spender: Address): Hex => mapSlot(spender, mapSlot(owner, 1n));
+export const MAX_ALLOWANCE: Hex = `0x${"f".repeat(64)}`;
+export const pad32 = (v: bigint): Hex => `0x${v.toString(16).padStart(64, "0")}`;
 
 /** Check a transaction against the chain, then send it. One that would fail
  *  throws here with the contract's reason (errorText turns it into words)

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useBalance, useWalletClient } from "wagmi";
 import { formatEther, parseEther, zeroAddress, type Hex } from "viem";
 
-import { confirmTx, ercAbi, limitAbi, payoutsAbi, placedEvent, routerAbi, VENTURE, venturePc, type PoolTrade, type Venture as VentureT, sendTx } from "../client";
+import { confirmTx, ercAbi, limitAbi, payoutsAbi, placedEvent, routerAbi, VENTURE, venturePc, type PoolTrade, type Venture as VentureT, sendTx, allowanceSlot, balanceSlot, MAX_ALLOWANCE, pad32 } from "../client";
 import { choiceFor, payoutChoices } from "../payouts";
 import { feePct, priceImpactPct, taxPct } from "../curve";
 import { marketStats } from "../marketStats";
@@ -12,6 +12,9 @@ import { fmtEth, fmtTok, fmtUsdV } from "../ui";
 import { useWallet, errorText } from "../../lib/useWallet";
 import { useUi } from "../../store";
 import { Impact, ReferralBanner } from "./shared";
+
+// Any plain address can price a sell before a wallet connects.
+const QUOTE_WALLET = "0x000000000000000000000000000000000000dEaD" as const;
 
 /** Post-graduation: ETH buy/sell through the router + dividend claim. */
 export function TradePanel({ v, trades, ethUsd }: { v: VentureT; trades: PoolTrade[]; ethUsd: number }) {
@@ -54,9 +57,19 @@ export function TradePanel({ v, trades, ethUsd }: { v: VentureT; trades: PoolTra
     setQuoting(true);
     const id = setTimeout(() => {
       const account = me ?? VENTURE.router;
+      const seller = me ?? QUOTE_WALLET;
       const sim = side === "buy"
         ? venturePc.simulateContract({ address: VENTURE.router, abi: routerAbi, functionName: "buy", args: [v.address, "0x", 0n], value: parsed, account })
-        : venturePc.simulateContract({ address: VENTURE.router, abi: routerAbi, functionName: "sell", args: [v.address, parsed, "0x", 0n], account });
+        : venturePc.simulateContract({
+          address: VENTURE.router, abi: routerAbi, functionName: "sell", args: [v.address, parsed, "0x", 0n], account: seller,
+          // Priced as if the router were already approved (and, before a
+          // wallet connects, as if the amount were held), so the quote shows
+          // before the approval the sell itself asks for.
+          stateOverride: [{ address: v.address, stateDiff: [
+            { slot: allowanceSlot(seller, VENTURE.router), value: MAX_ALLOWANCE },
+            ...(me ? [] : [{ slot: balanceSlot(seller), value: pad32(parsed) }]),
+          ] }],
+        });
       sim.then((r) => { if (live) setQuote(r.result); })
         .catch(() => { if (live) setQuote(null); })
         .finally(() => { if (live) setQuoting(false); });
