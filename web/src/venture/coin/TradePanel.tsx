@@ -132,6 +132,19 @@ export function TradePanel({ v, trades, ethUsd }: { v: VentureT; trades: PoolTra
     const out = side === "buy" ? (amount * keep) / priceEth : amount * priceEth * keep;
     return BigInt(Math.floor(out * 1e18));
   })();
+  // An order fills whole or not at all, so it waits until the *entire* trade
+  // clears its floor. A large order in a thin pool moves the price, so it
+  // fills further out than the market cap typed: show where, from the same
+  // simulated quote the market tab uses.
+  const impact = (() => {
+    if (quote === null || parsed === 0n || mcapNow <= 0) return 0;
+    const spotPriceEth = Number(v.priceWei) / 1e18;
+    const keep = 1 - (tax + VENTURE.platformFeeBps) / 10_000;
+    const amount = Number(parsed) / 1e18;
+    const spotOut = side === "buy" ? (amount * keep) / spotPriceEth : amount * spotPriceEth * keep;
+    return spotOut > 0 ? Math.max(0, 1 - Number(quote) / 1e18 / spotOut) : 0;
+  })();
+  const triggerMcap = target > 0 && impact < 0.95 ? (side === "sell" ? target / (1 - impact) : target * (1 - impact)) : 0;
   const placeLimit = async () => {
     if (!isConnected) return connectFirst();
     if (!wc || limitMinOut === 0n) return;
@@ -194,6 +207,8 @@ export function TradePanel({ v, trades, ethUsd }: { v: VentureT; trades: PoolTra
               {limitMinOut === 0n ? <span style={{ color: "var(--faint)" }}>now {usd ? fmtUsdV(mcapNow) : `${mcapNow.toFixed(2)} ETH`}</span>
                 : side === "buy" ? <>at least <b>{fmtTok(limitMinOut)} ${v.symbol}</b></>
                 : <>at least <b>{fmtEth(limitMinOut, 6)} ETH</b></>}
+              {limitMinOut > 0n && impact >= 0.02 && triggerMcap > 0 && <><br />
+                fills near <b>{usd ? fmtUsdV(triggerMcap) : `${triggerMcap.toFixed(2)} ETH`}</b> mcap: this size moves the price {(impact * 100).toFixed(0)}%</>}
             </p>
             <button className={`dp-tb-go ${side === "buy" ? "dp-buy" : "dp-sell"}`}
               disabled={busy || shortOnEth || shortOnTokens || (isConnected && limitMinOut === 0n)} onClick={placeLimit}>
