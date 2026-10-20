@@ -131,7 +131,7 @@ function VentureBody({ v, fills, ethUsd }: { v: VentureT; fills: Fill[]; ethUsd:
             {TABS.map(([k, label]) => (
               <button key={k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>
                 {label}
-                {k === "backers" && fills.length > 0 && <span className="dp-cnt"> ({fills.length})</span>}
+                {k === "backers" && fills.length > 0 && <span className="dp-cnt"> ({new Set(fills.map((f) => f.buyer.toLowerCase())).size})</span>}
               </button>
             ))}
           </div>

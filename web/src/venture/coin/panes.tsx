@@ -11,6 +11,7 @@ import { useWallet, errorText } from "../../lib/useWallet";
 import { useUi } from "../../store";
 import { useModules } from "./Header";
 import { env } from "../../lib/env";
+import { SNIPE_BPS_1, SNIPE_BPS_2, SNIPE_T1, SNIPE_T2 } from "../protocol";
 
 
 export function ProjectPane({ v }: { v: VentureT }) {
@@ -48,17 +49,30 @@ export function UpdatesPane({ v }: { v: VentureT }) {
   );
 }
 
+/** One row per wallet: its curve buys summed, biggest backer first. */
+export function backersOf(fills: Fill[]): { buyer: Fill["buyer"]; ethIn: bigint; tokensOut: bigint; buys: number }[] {
+  const by = new Map<string, { buyer: Fill["buyer"]; ethIn: bigint; tokensOut: bigint; buys: number }>();
+  for (const f of fills) {
+    const k = f.buyer.toLowerCase();
+    const b = by.get(k) ?? { buyer: f.buyer, ethIn: 0n, tokensOut: 0n, buys: 0 };
+    b.ethIn += f.ethIn; b.tokensOut += f.tokensOut; b.buys++;
+    by.set(k, b);
+  }
+  return [...by.values()].sort((a, b) => (b.ethIn > a.ethIn ? 1 : b.ethIn < a.ethIn ? -1 : 0));
+}
+
 export function BackersPane({ v, fills }: { v: VentureT; fills: Fill[] }) {
   if (fills.length === 0) return <p className="dp-agate">No buyers yet.</p>;
-  const total = fills.reduce((s, f) => s + f.ethIn, 0n);
+  const backers = backersOf(fills);
+  const total = backers.reduce((s, f) => s + f.ethIn, 0n);
   return (
     <table className="dp-holders" style={{ width: "100%", borderCollapse: "collapse" }}>
       <tbody>
-        {fills.slice().reverse().map((f) => {
+        {backers.map((f) => {
           const share = total > 0n ? pct(f.ethIn, total) : 0;
           return (
-            <tr key={f.txHash + f.buyer}>
-              <td className="dp-mono">{short(f.buyer)}</td>
+            <tr key={f.buyer}>
+              <td className="dp-mono">{short(f.buyer)}{f.buys > 1 && <span className="dp-agate"> ×{f.buys}</span>}</td>
               <td style={{ width: "34%" }}><div className="dp-bar"><i style={{ ["--pct" as string]: `${share}%` }} /></div></td>
               <td className="dp-mono">{fmtTok(f.tokensOut)} ${v.symbol}</td>
               <td className="dp-mono" style={{ textAlign: "right", color: "var(--up)" }}>{fmtEth(f.ethIn, 4)} ETH</td>
@@ -85,7 +99,7 @@ export function TermsPane({ v }: { v: VentureT }) {
     targetEth: fmtEth(v.targetRaiseWei, 4),
     founderCutPct: (v.founderRaiseBps / 100).toFixed(1),
     days,
-    antiSnipe: "15% for the first 5 s, 5% until 15 s; it goes to the buy wall",
+    antiSnipe: `${SNIPE_BPS_1 / 100}% for the first ${SNIPE_T1} s, ${SNIPE_BPS_2 / 100}% until ${SNIPE_T2} s; it goes to the buy wall`,
   });
   return (
     <>

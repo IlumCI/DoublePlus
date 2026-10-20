@@ -39,6 +39,12 @@ describe("protocol constants match the contracts", () => {
     expect(num(constant(hook, "REFEREE_DISCOUNT_BPS"))).toBe(P.REFEREE_DISCOUNT_BPS);
   });
 
+  it("anti-snipe premium", () => {
+    for (const k of ["SNIPE_T1", "SNIPE_T2", "SNIPE_BPS_1", "SNIPE_BPS_2"] as const) {
+      expect(num(constant(hook, k).replace(/\/\/.*$/, "").trim())).toBe(P[k]);
+    }
+  });
+
   it("holder tier ladder", () => {
     const body = src("QuiverToken.sol").match(/function tierMultiplierBps[\s\S]*?\n {4}}/)![0];
     const steps = [...body.matchAll(/m >= (\d+)\) return ([\d_]+)/g)].map(([, m, b]) => [BigInt(m), BigInt(b.replace(/_/g, ""))]);

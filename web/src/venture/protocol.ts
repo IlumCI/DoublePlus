@@ -12,5 +12,10 @@ export const START_FDV_USD = 750;
 export const MAX_RAISE_DAYS = 14;
 /** VentureFactory.LAUNCH_WINDOW_SECS: the first minute's 1%-of-target cap. */
 export const LAUNCH_WINDOW_SECS = 60;
+/** VentureFeeHook.SNIPE_*: the premium on trades just after graduation. */
+export const SNIPE_T1 = 5;
+export const SNIPE_T2 = 15;
+export const SNIPE_BPS_1 = 1_500;
+export const SNIPE_BPS_2 = 500;
 /** VentureFeeHook.REFEREE_DISCOUNT_BPS: a referred wallet's fee discount. */
 export const REFEREE_DISCOUNT_BPS = 1_000;
