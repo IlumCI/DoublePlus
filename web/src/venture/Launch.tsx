@@ -52,7 +52,7 @@ export function LaunchVenture() {
   const [founderStake, setFounderStake] = useState(10); // % of supply
   const [vestDays, setVestDays] = useState(365);
   const [capPct, setCapPct] = useState(2); // per-wallet, % of target
-  const [mode, setMode] = useState<0 | 1>(0); // 0 = funded raise, 1 = open curve
+  const [mode, setMode] = useState<0 | 1>(1); // 0 = funded raise, 1 = open curve
   const open = !requiresTarget(mode);
   const [chain, setChain] = useState<{ creation: bigint; grad: bigint; buyBps: number; sellBps: number; minTarget: bigint } | null>(null);
   const [buyTaxPct, setBuyTaxPct] = useState(2); // 0-4, founder trade tax on buys
@@ -463,8 +463,8 @@ export function LaunchVenture() {
 
               <div className="dp-presets" style={{ gridTemplateColumns: "1fr 1fr" }}>
                 {([
-                  [0, "Raise with a target", "Refund or rocket", "You set a target and a deadline. Hit it and the coin moves to Uniswap. Miss it and every buyer gets their ETH back."],
                   [1, "Open curve", "No target", "No deadline and no refunds. People can buy and sell from the start, and it moves to Uniswap when the curve fills."],
+                  [0, "Raise with a target", "Refund or rocket", "You set a target and a deadline. Hit it and the coin moves to Uniswap. Miss it and every buyer gets their ETH back."],
                 ] as const).map(([m, title, line, why]) => (
                   <button type="button" key={m} className={mode === m ? "on" : ""} onClick={() => setMode(m)}>
                     <b>{title}</b>
@@ -524,9 +524,9 @@ export function LaunchVenture() {
                       <input id="v-vest" type="range" min={0} max={730} step={30} value={vestDays}
                         onChange={(e) => setVestDays(Number(e.target.value))} disabled={founderStake === 0} />
                       <span className="dp-hint">Released evenly, starting at graduation. Buyers can see the schedule.</span></div>
-                    <div className="dp-field" style={{ display: open ? "none" : undefined }}><label htmlFor="v-cap">Most one wallet can put in: {capPct}% of target</label>
+                    <div className="dp-field" style={{ display: open ? "none" : undefined }}><label htmlFor="v-cap">Max per wallet: {parsedTarget > 0n ? `${+(Number(parsedTarget) * capPct / 100 / 1e18).toPrecision(3)} ETH (${capPct}%)` : `${capPct}% of target`}</label>
                       <input id="v-cap" type="range" min={1} max={100} value={capPct} onChange={(e) => setCapPct(Number(e.target.value))} />
-                      <span className="dp-hint">Lower spreads the coins across more buyers. Higher fills faster.</span></div>
+                      <span className="dp-hint">No wallet can buy more than this. Filling the raise takes at least {Math.ceil(100 / capPct)} wallet{capPct >= 100 ? "" : "s"}.</span></div>
                   </div>
                 </div>
               )}

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useBalance, useWalletClient } from "wagmi";
-import { parseEther, zeroAddress } from "viem";
+import { formatEther, parseEther, zeroAddress } from "viem";
 
 import { confirmTx, ercAbi, factoryAbi, hookAbi, VENTURE, venturePc, type Venture as VentureT } from "../client";
 import { capState, feePct, gradValueWei, priceImpactPct, quoteBuy, quoteSellWei } from "../curve";
@@ -64,7 +64,8 @@ export function RaisePanel({ v }: { v: VentureT }) {
   const windowCap = v.targetRaiseWei / 100n;
   const inWindow = windowLeft > 0;
   const effectiveCap = inWindow && windowCap < v.maxBuyWei ? windowCap : v.maxBuyWei;
-  const { overCap } = capState(effectiveCap, spent, parsed);
+  const { overCap, capLeft } = capState(effectiveCap, spent, parsed);
+  const capped = effectiveCap > 0n && effectiveCap < 10n ** 30n;
   const shortOnEth = eth.data !== undefined && parsed > eth.data.value;
   const ethUsdInPanel = useEthUsd();
 
@@ -149,7 +150,8 @@ export function RaisePanel({ v }: { v: VentureT }) {
               <span>ETH</span>
             </div>
             <div className="dp-quicks">
-              {["0.05", "0.1", "0.5", "1"].map((q) => <button key={q} onClick={() => setAmt(q)}>{q}</button>)}
+              {["0.05", "0.1", "0.5", "1"].filter((q) => !capped || parseEther(q) <= capLeft).map((q) => <button key={q} onClick={() => setAmt(q)}>{q}</button>)}
+              {capped && capLeft > 0n && <button onClick={() => setAmt(formatEther(capLeft))}>max</button>}
             </div>
             <p className="dp-tb-est">
               {tokensOut > 0n ? <>you receive ≈ <b>{fmtTok(tokensOut, true)} ${v.symbol}</b><Impact curve pct={priceImpactPct("buy", parsed - entryFee, tokensOut * 10n ** 18n, v.priceWei, 0)} /></> : <>enter an amount to see what you get</>}
@@ -159,11 +161,13 @@ export function RaisePanel({ v }: { v: VentureT }) {
               {busy ? "Confirm in wallet…"
                 : !isConnected ? "Connect wallet"
                 : shortOnEth ? "Not enough ETH"
-                : overCap ? (inWindow ? `First minute: max ${fmtEth(windowCap, 4)} ETH` : "Over your wallet cap")
+                : overCap ? (capLeft === 0n ? (inWindow ? "First-minute limit reached" : "You've bought the max per wallet")
+                  : `${inWindow ? "First minute: max" : "Max per wallet:"} ${fmtEth(capLeft, 6)} ETH`)
                 : `Buy $${v.symbol}`}
             </button>
             <div className="dp-tb-slip">
               <span>balance <b style={{ color: "var(--dim)" }}>{eth.data ? fmtEth(eth.data.value, 4) : "—"} ETH</b></span>
+              {capped && <span>max per wallet <b style={{ color: "var(--dim)" }}>{fmtEth(effectiveCap, 6)} ETH</b></span>}
               <span>entry fee {feePct(fees.buyBps)}%{entryFee > 0n ? ` · ${fmtEth(entryFee, 5)} ETH` : ""}</span>
             </div>
           </>
