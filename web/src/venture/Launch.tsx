@@ -520,7 +520,7 @@ export function LaunchVenture() {
               </div>
               <div className="dp-field" style={{ display: open ? "none" : undefined }}><label htmlFor="v-cap">Max per wallet: {parsedTarget > 0n ? `${+(Number(parsedTarget) * capPct / 100 / 1e18).toPrecision(3)} ETH (${capPct}%)` : `${capPct}% of target`}</label>
                 <input id="v-cap" type="range" min={1} max={100} value={capPct} onChange={(e) => setCapPct(Number(e.target.value))} />
-                <span className="dp-hint">No wallet can buy more than this. Filling the raise takes at least {Math.ceil(100 / capPct)} wallet{capPct >= 100 ? "" : "s"}.</span></div>
+                <span className="dp-hint">No wallet can buy more than this. Filling the raise takes at least {Math.ceil(100 / capPct)} wallet{capPct >= 100 ? "" : "s"}. For the first minute after launch, every wallet is held to 1%.</span></div>
 
               {expertRaise && (
                 <div className="dp-expert">

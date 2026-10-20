@@ -162,13 +162,13 @@ export function RaisePanel({ v }: { v: VentureT }) {
                 : !isConnected ? "Connect wallet"
                 : shortOnEth ? "Not enough ETH"
                 : parsed === 0n ? "Enter an amount"
-                : overCap ? (capLeft === 0n ? (inWindow ? "First-minute limit reached" : "You've bought the max per wallet")
-                  : `${inWindow ? "First minute: max" : "Max per wallet:"} ${fmtEth(capLeft, 6)} ETH`)
+                : overCap ? (capLeft === 0n ? (inWindow ? `First-minute limit reached, ${windowLeft}s left` : "You've bought the max per wallet")
+                  : inWindow ? `Max ${fmtEth(capLeft, 6)} ETH for ${windowLeft}s more` : `Max per wallet: ${fmtEth(capLeft, 6)} ETH`)
                 : `Buy $${v.symbol}`}
             </button>
             <div className="dp-tb-slip">
               <span>balance <b style={{ color: "var(--dim)" }}>{eth.data ? fmtEth(eth.data.value, 4) : "—"} ETH</b></span>
-              {capped && <span>max per wallet <b style={{ color: "var(--dim)" }}>{fmtEth(effectiveCap, 6)} ETH</b></span>}
+              {capped && <span>{inWindow ? <>first minute, max <b style={{ color: "var(--dim)" }}>{fmtEth(effectiveCap, 6)} ETH</b> · {windowLeft}s</> : <>max per wallet <b style={{ color: "var(--dim)" }}>{fmtEth(effectiveCap, 6)} ETH</b></>}</span>}
               <span>entry fee {feePct(fees.buyBps)}%{entryFee > 0n ? ` · ${fmtEth(entryFee, 5)} ETH` : ""}</span>
             </div>
           </>
