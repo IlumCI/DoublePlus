@@ -195,8 +195,8 @@ a:hover > .dp-badge.dp-dexpend, a:hover > .dp-badge.dp-dexunpaid { color: var(--
 .dp-tradebox { position: sticky; top: 64px; }
 .dp-tb-tabs { display: grid; grid-template-columns: 1fr 1fr; }
 .dp-tb-tabs button { font-family: var(--body); font-size: 13px; font-weight: 700; padding: 11px 0 9px; background: var(--bg); color: var(--faint); border: none; border-bottom: 1px solid var(--line); }
-.dp-tb-tabs button.dp-buy.dp-on { background: var(--panel); color: var(--up); border-bottom-color: transparent; box-shadow: inset 0 2px 0 var(--up); }
-.dp-tb-tabs button.dp-sell.dp-on { background: var(--panel); color: var(--down); border-bottom-color: transparent; box-shadow: inset 0 2px 0 var(--down); }
+.dp-tb-tabs button.dp-buy.on { background: var(--panel); color: var(--up); border-bottom-color: transparent; box-shadow: inset 0 2px 0 var(--up); }
+.dp-tb-tabs button.dp-sell.on { background: var(--panel); color: var(--down); border-bottom-color: transparent; box-shadow: inset 0 2px 0 var(--down); }
 .dp-tb-body { padding: 14px; }
 .dp-tb-amt { display: flex; align-items: baseline; gap: 8px; border: 1px solid var(--line-2); border-radius: 6px; padding: 10px 12px; background: var(--bg); }
 .dp-tb-amt input { flex: 1; background: none; border: none; color: var(--text); font-family: var(--mono); font-size: 18px; min-width: 0; }
