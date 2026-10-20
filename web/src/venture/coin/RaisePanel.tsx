@@ -3,7 +3,7 @@ import { useBalance, useWalletClient } from "wagmi";
 import { formatEther, parseEther, zeroAddress } from "viem";
 
 import { confirmTx, ercAbi, factoryAbi, hookAbi, VENTURE, venturePc, type Venture as VentureT, sendTx } from "../client";
-import { capState, feePct, gradValueWei, priceImpactPct, quoteBuy, quoteSellWei } from "../curve";
+import { capState, feePct, gradValueWei, grossForNet, priceImpactPct, quoteBuy, quoteSellWei } from "../curve";
 import { Countdown, fmtEth, fmtTok, fmtUsdV, pct, useEthUsd, useTick } from "../ui";
 import { useWallet, errorText } from "../../lib/useWallet";
 import { useUi } from "../../store";
@@ -64,8 +64,12 @@ export function RaisePanel({ v }: { v: VentureT }) {
   const windowCap = v.targetRaiseWei / 100n;
   const inWindow = windowLeft > 0;
   const effectiveCap = inWindow && windowCap < v.maxBuyWei ? windowCap : v.maxBuyWei;
-  const { overCap, capLeft } = capState(effectiveCap, spent, parsed);
   const capped = effectiveCap > 0n && effectiveCap < 10n ** 30n;
+  // Caps count what reaches the curve, after the entry fee.
+  const { overCap, capLeft } = capState(effectiveCap, spent, parsed - entryFee);
+  const toFill = v.targetRaiseWei > v.raisedWei ? v.targetRaiseWei - v.raisedWei : 0n;
+  const maxNet = capped && capLeft < toFill ? capLeft : toFill;
+  const maxGross = grossForNet(maxNet, fees.buyBps, referred);
   const shortOnEth = eth.data !== undefined && parsed > eth.data.value;
   const ethUsdInPanel = useEthUsd();
 
@@ -150,8 +154,8 @@ export function RaisePanel({ v }: { v: VentureT }) {
               <span>ETH</span>
             </div>
             <div className="dp-quicks">
-              {["0.05", "0.1", "0.5", "1"].filter((q) => !capped || parseEther(q) <= capLeft).map((q) => <button key={q} onClick={() => setAmt(q)}>{q}</button>)}
-              {capped && capLeft > 0n && <button onClick={() => setAmt(formatEther(capLeft))}>max</button>}
+              {["0.05", "0.1", "0.5", "1"].filter((q) => parseEther(q) <= maxGross).map((q) => <button key={q} onClick={() => setAmt(q)}>{q}</button>)}
+              {maxGross > 0n && <button onClick={() => setAmt(formatEther(maxGross))}>{maxNet === toFill ? "fill" : "max"}</button>}
             </div>
             <p className="dp-tb-est">
               {tokensOut > 0n ? <>you receive ≈ <b>{fmtTok(tokensOut, true)} ${v.symbol}</b><Impact curve pct={priceImpactPct("buy", parsed - entryFee, tokensOut * 10n ** 18n, v.priceWei, 0)} /></> : <>enter an amount to see what you get</>}

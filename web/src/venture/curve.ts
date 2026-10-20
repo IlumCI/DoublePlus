@@ -116,6 +116,22 @@ export function entryFeeWei(valueWei: bigint, buyFeeBps: number, referred = fals
   return curveFeeWei(valueWei, buyFeeBps, referred);
 }
 
+/** The most a wallet can send so that, after the entry fee, at most `netWei`
+ *  reaches the curve. Per-wallet caps and the raise target both count what
+ *  reaches the curve, so a max button must add the fee on top. */
+export function grossForNet(netWei: bigint, buyFeeBps: number, referred = false): bigint {
+  if (netWei <= 0n) return 0n;
+  // What reaches the curve never falls as the amount sent rises, so search for
+  // the largest amount whose net still fits.
+  const net = (g: bigint) => g - entryFeeWei(g, buyFeeBps, referred);
+  let lo = netWei, hi = netWei * 2n + 1n;
+  while (lo < hi) {
+    const mid = (lo + hi + 1n) / 2n;
+    if (net(mid) <= netWei) lo = mid; else hi = mid - 1n;
+  }
+  return lo;
+}
+
 /** What a buy of `valueWei` actually gets, fee first then curve. */
 export function quoteBuy(v: CurveState, valueWei: bigint, buyFeeBps: number, referred = false): {
   fee: bigint;

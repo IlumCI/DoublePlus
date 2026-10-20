@@ -331,3 +331,14 @@ describe("priceImpactPct", () => {
     expect(priceImpactPct("sell", coin, ((coin * price) / 10n ** 18n) * 3n / 4n, price, 0)).toBeCloseTo(25, 6);
   });
 });
+
+describe("grossForNet", () => {
+  it("adds the entry fee on top so exactly the net reaches the curve", async () => {
+    const { grossForNet, entryFeeWei } = await import("./curve");
+    for (const [net, bps, ref] of [[300_000_000_000n, 100, false], [3n * 10n ** 15n, 100, true], [1n, 100, false], [123_456_789n, 250, false]] as const) {
+      const g = grossForNet(net, bps, ref);
+      expect(g - entryFeeWei(g, bps, ref)).toBeLessThanOrEqual(net);
+      expect(g + 1n - entryFeeWei(g + 1n, bps, ref)).toBeGreaterThan(net);
+    }
+  });
+});
