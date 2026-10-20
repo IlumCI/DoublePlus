@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useBalance, useWalletClient } from "wagmi";
 import { formatEther, parseEther, zeroAddress, type Hex } from "viem";
 
-import { confirmTx, ercAbi, limitAbi, payoutsAbi, placedEvent, routerAbi, VENTURE, venturePc, type PoolTrade, type Venture as VentureT } from "../client";
+import { confirmTx, ercAbi, limitAbi, payoutsAbi, placedEvent, routerAbi, VENTURE, venturePc, type PoolTrade, type Venture as VentureT, sendTx } from "../client";
 import { choiceFor, payoutChoices } from "../payouts";
 import { feePct, priceImpactPct, taxPct } from "../curve";
 import { marketStats } from "../marketStats";
@@ -75,14 +75,14 @@ export function TradePanel({ v, trades, ethUsd }: { v: VentureT; trades: PoolTra
     try {
       let hash: `0x${string}`;
       if (side === "buy") {
-        hash = await wc.writeContract({ address: VENTURE.router, abi: routerAbi, functionName: "buy", args: [v.address, "0x", minOut], value: parsed, chain: wc.chain, account: wc.account });
+        hash = await sendTx(wc, { address: VENTURE.router, abi: routerAbi, functionName: "buy", args: [v.address, "0x", minOut], value: parsed, chain: wc.chain, account: wc.account });
       } else {
         const allowance = (await venturePc.readContract({ address: v.address, abi: ercAbi, functionName: "allowance", args: [wc.account.address, VENTURE.router] }));
         if (allowance < parsed) {
-          const a = await wc.writeContract({ address: v.address, abi: ercAbi, functionName: "approve", args: [VENTURE.router, 2n ** 256n - 1n], chain: wc.chain, account: wc.account });
+          const a = await sendTx(wc, { address: v.address, abi: ercAbi, functionName: "approve", args: [VENTURE.router, 2n ** 256n - 1n], chain: wc.chain, account: wc.account });
           await confirmTx(a);
         }
-        hash = await wc.writeContract({ address: VENTURE.router, abi: routerAbi, functionName: "sell", args: [v.address, parsed, "0x", minOut], chain: wc.chain, account: wc.account });
+        hash = await sendTx(wc, { address: VENTURE.router, abi: routerAbi, functionName: "sell", args: [v.address, parsed, "0x", minOut], chain: wc.chain, account: wc.account });
       }
       pushToast({ kind: "info", title: `${side === "buy" ? "Buy" : "Sell"} submitted`, txHash: hash });
       await confirmTx(hash);
@@ -97,7 +97,7 @@ export function TradePanel({ v, trades, ethUsd }: { v: VentureT; trades: PoolTra
     if (!wc) return;
     setBusy(true);
     try {
-      const hash = await wc.writeContract({ address: v.address, abi: ercAbi, functionName: "claim", args: [], chain: wc.chain, account: wc.account });
+      const hash = await sendTx(wc, { address: v.address, abi: ercAbi, functionName: "claim", args: [], chain: wc.chain, account: wc.account });
       await confirmTx(hash);
       pushToast({ kind: "success", title: "ETH drip claimed", txHash: hash });
       setPending(0n);
@@ -127,11 +127,11 @@ export function TradePanel({ v, trades, ethUsd }: { v: VentureT; trades: PoolTra
       if (side === "sell") {
         const allowance = await venturePc.readContract({ address: v.address, abi: ercAbi, functionName: "allowance", args: [wc.account.address, VENTURE.limitOrders] });
         if (allowance < parsed) {
-          const a = await wc.writeContract({ address: v.address, abi: ercAbi, functionName: "approve", args: [VENTURE.limitOrders, 2n ** 256n - 1n], chain: wc.chain, account: wc.account });
+          const a = await sendTx(wc, { address: v.address, abi: ercAbi, functionName: "approve", args: [VENTURE.limitOrders, 2n ** 256n - 1n], chain: wc.chain, account: wc.account });
           await confirmTx(a);
         }
       }
-      const hash = await wc.writeContract({
+      const hash = await sendTx(wc, {
         address: VENTURE.limitOrders, abi: limitAbi, functionName: "place",
         args: [v.address, side === "buy", side === "buy" ? 0n : parsed, limitMinOut, 25, 0n],
         value: side === "buy" ? parsed : 0n, chain: wc.chain, account: wc.account,
@@ -184,7 +184,9 @@ export function TradePanel({ v, trades, ethUsd }: { v: VentureT; trades: PoolTra
             </p>
             <button className={`dp-tb-go ${side === "buy" ? "dp-buy" : "dp-sell"}`}
               disabled={busy || shortOnEth || shortOnTokens || (isConnected && limitMinOut === 0n)} onClick={placeLimit}>
-              {busy ? "Confirm in wallet…" : !isConnected ? "Connect wallet" : `Limit ${side} $${v.symbol}`}
+              {busy ? "Confirm in wallet…" : !isConnected ? "Connect wallet"
+                : shortOnEth ? "Not enough ETH" : shortOnTokens ? `Not enough $${v.symbol}`
+                : limitMinOut === 0n ? "Set an amount and a price" : `Limit ${side} $${v.symbol}`}
             </button>
           </>
         ) : <>
@@ -201,6 +203,9 @@ export function TradePanel({ v, trades, ethUsd }: { v: VentureT; trades: PoolTra
             : !isConnected ? "Connect wallet"
             : shortOnEth ? "Not enough ETH"
             : shortOnTokens ? `Not enough $${v.symbol}`
+            : parsed === 0n ? "Enter an amount"
+            : quoting ? "Quoting…"
+            : quote === null ? "No price for this trade"
             : `${side === "buy" ? "Buy" : "Sell"} $${v.symbol}`}
         </button>
         </>}
@@ -302,7 +307,7 @@ function MyOrders({ v, me, tick }: { v: VentureT; me: `0x${string}`; tick: numbe
     if (!wc) return;
     setBusy(true);
     try {
-      const hash = await wc.writeContract({ address: VENTURE.limitOrders, abi: limitAbi, functionName: "cancel", args: [id], chain: wc.chain, account: wc.account });
+      const hash = await sendTx(wc, { address: VENTURE.limitOrders, abi: limitAbi, functionName: "cancel", args: [id], chain: wc.chain, account: wc.account });
       await confirmTx(hash);
     } catch (e) {
       pushToast({ kind: "error", title: "Cancel failed", body: errorText(e) });
@@ -349,9 +354,9 @@ function PayoutPick({ v }: { v: VentureT }) {
     try {
       const agent = await venturePc.readContract({ address: v.address, abi: ercAbi, functionName: "payoutAgent", args: [me] });
       if (agent.toLowerCase() !== VENTURE.payouts.toLowerCase()) {
-        await confirmTx(await wc.writeContract({ address: v.address, abi: ercAbi, functionName: "setPayoutAgent", args: [VENTURE.payouts], chain: wc.chain, account: wc.account }));
+        await confirmTx(await sendTx(wc, { address: v.address, abi: ercAbi, functionName: "setPayoutAgent", args: [VENTURE.payouts], chain: wc.chain, account: wc.account }));
       }
-      await confirmTx(await wc.writeContract({ address: VENTURE.payouts, abi: payoutsAbi, functionName: "setPref", args: [c.kind, c.path], chain: wc.chain, account: wc.account }));
+      await confirmTx(await sendTx(wc, { address: VENTURE.payouts, abi: payoutsAbi, functionName: "setPref", args: [c.kind, c.path], chain: wc.chain, account: wc.account }));
       setCurrent(key);
     } catch (e) {
       pushToast({ kind: "error", title: "Couldn't set payout", body: errorText(e) });

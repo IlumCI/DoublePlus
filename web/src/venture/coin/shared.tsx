@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useWalletClient } from "wagmi";
 import { toEventSelector } from "viem";
 
-import { confirmTx, hookAbi, VENTURE, venturePc } from "../client";
+import { confirmTx, hookAbi, VENTURE, venturePc, sendTx } from "../client";
 import { storedRef } from "../referral";
 import { short } from "../ui";
 import { useWallet, errorText } from "../../lib/useWallet";
@@ -32,7 +32,7 @@ export function ReferralBanner() {
     if (!wc) return;
     setBusy(true);
     try {
-      const hash = await wc.writeContract({ address: VENTURE.hook, abi: hookAbi, functionName: "setReferrer", args: [ref], chain: wc.chain, account: wc.account });
+      const hash = await sendTx(wc, { address: VENTURE.hook, abi: hookAbi, functionName: "setReferrer", args: [ref], chain: wc.chain, account: wc.account });
       await confirmTx(hash);
       pushToast({ kind: "success", title: "Linked. Your fees are 10% lower now.", txHash: hash });
     } catch (e) {

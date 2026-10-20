@@ -163,7 +163,7 @@ export function Comments({ v }: { v: Venture }) {
           <span className={left < 0 ? "dp-chat-over" : "dp-chat-left"}>{left}</span>
           {note && <span className="dp-chat-note">{note}</span>}
           <button className="dp-action" onClick={send} disabled={busy || left < 0 || (isConnected && !draft.trim())}>
-            {!isConnected ? "Connect to chat" : busy ? "Posting…" : readSession(address ?? "") ? "Post" : "Sign in & post"}
+            {!isConnected ? "Connect to chat" : busy ? "Posting…" : left < 0 ? `${-left} characters too long` : readSession(address ?? "") ? "Post" : "Sign in & post"}
           </button>
         </div>
         <p className="dp-chat-hint">Signing in takes one signature a week. It costs no gas and can't move funds.</p>

@@ -1,4 +1,4 @@
-import { createPublicClient, fallback, http, isAddress, parseAbiItem, zeroAddress, type Address, type Hex, type PublicClient } from "viem";
+import { createPublicClient, fallback, http, isAddress, parseAbiItem, zeroAddress, type Address, type Hex, type PublicClient, type WalletClient } from "viem";
 
 import { chain, env } from "../lib/env";
 import { isProtocolSwap } from "./marketStats";
@@ -311,6 +311,15 @@ export const venturePc = createPublicClient({
   pollingInterval: 8_000,
   batch: { multicall: { wait: 24 } },
 }) as PublicClient;
+
+/** Check a transaction against the chain, then send it. One that would fail
+ *  throws here with the contract's reason (errorText turns it into words)
+ *  instead of reaching the wallet as an impossible gas estimate. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function sendTx(wc: WalletClient, req: any): Promise<Hex> {
+  await venturePc.simulateContract({ ...req, account: wc.account });
+  return wc.writeContract(req);
+}
 
 export interface VentureMeta {
   description?: string;

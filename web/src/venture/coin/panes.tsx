@@ -2,7 +2,7 @@ import { zeroAddress } from "viem";
 import { useEffect, useState } from "react";
 import { useWalletClient } from "wagmi";
 
-import { confirmTx, loadUpdates, VENTURE, venturePc, vestingAbi, type Fill, type Venture as VentureT } from "../client";
+import { confirmTx, loadUpdates, VENTURE, venturePc, vestingAbi, type Fill, type Venture as VentureT, sendTx } from "../client";
 import { termSheetRows, type RaiseMode } from "../raiseMode";
 import { feePct } from "../curve";
 import { Donut, Legend, SplitBar, type Slice } from "../charts";
@@ -211,7 +211,7 @@ export function VestingCard({ v }: { v: VentureT }) {
     if (!wc) return;
     setBusy(true);
     try {
-      const hash = await wc.writeContract({ address: v.vesting, abi: vestingAbi, functionName: "claim", args: [], chain: wc.chain, account: wc.account });
+      const hash = await sendTx(wc, { address: v.vesting, abi: vestingAbi, functionName: "claim", args: [], chain: wc.chain, account: wc.account });
       await confirmTx(hash);
       pushToast({ kind: "success", title: "Vested tokens claimed", txHash: hash });
     } catch (e) {

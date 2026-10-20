@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useWalletClient } from "wagmi";
 import { concatHex, encodeAbiParameters, getContractAddress, keccak256, parseEther, toEventSelector, zeroAddress, type Hex } from "viem";
 
-import { confirmTx, factoryAbi, modulesAbi, VENTURE, venturePc } from "./client";
+import { confirmTx, factoryAbi, modulesAbi, VENTURE, venturePc, sendTx } from "./client";
 import { minGrossTargetEth, raiseFields, requiresTarget, targetIssue } from "./raiseMode";
 import { fmtEth, fmtUsdV } from "./ui";
 import { Donut, Legend, SPLIT_COLORS, type Slice } from "./charts";
@@ -237,7 +237,7 @@ export function LaunchVenture() {
       setMining(false);
       if (!salt) throw new Error("Could not mine a launch address. Try again.");
 
-      const hash = await wc.writeContract({
+      const hash = await sendTx(wc, {
         address: VENTURE.factory,
         abi: factoryAbi,
         functionName: "launch",
@@ -283,7 +283,7 @@ export function LaunchVenture() {
       const coin = launched?.topics[1] ? (`0x${launched.topics[1].slice(26)}` as `0x${string}`) : null;
       if (coin && anyMod) {
         try {
-          const mh = await wc.writeContract({
+          const mh = await sendTx(wc, {
             address: VENTURE.hook, abi: modulesAbi, functionName: "setModules",
             args: [coin, { ...mods, jackpotBps: mods.jackpotEvery > 0 ? mods.jackpotBps : 0, set: false }],
             chain: wc.chain, account: wc.account,
@@ -371,6 +371,11 @@ export function LaunchVenture() {
     : step === 1 ? open || (parsedTarget > 0n && (minTargetEth === 0 || Number(target) >= minTargetEth * 0.999))
     : step === 2 ? unallocated === 0
     : true;
+  // What the Continue button says while it can't go on.
+  const blockedBy =
+    step === 0 ? (!form.name.trim() ? "Add a name" : !form.symbol.trim() ? "Add a ticker" : "Add a one-line pitch")
+    : step === 1 ? (parsedTarget === 0n ? "Set how much to raise" : `Minimum raise: ${+minTargetEth.toPrecision(3)} ETH`)
+    : `${unallocated}% of the fee is unallocated`;
 
   return (
     <div className="dp-shell" style={{ paddingBottom: 70, maxWidth: 1120 }}>
@@ -738,7 +743,7 @@ export function LaunchVenture() {
                 <span>I've checked the details above.</span>
               </label>
               <button className="dp-action" type="submit" disabled={busy || !confirmed} style={{ width: "100%", marginTop: 12 }}>
-                {mining ? "Finding your address…" : busy ? "Confirm in wallet…" : isConnected ? "Launch" : "Connect wallet"}
+                {mining ? "Finding your address…" : busy ? "Confirm in wallet…" : !isConnected ? "Connect wallet" : confirmed ? "Launch" : "Tick the box above to launch"}
               </button>
               <p className="dp-hint" style={{ textAlign: "center", marginTop: 8 }}>
                 {chain && chain.creation > 0n
@@ -755,7 +760,7 @@ export function LaunchVenture() {
               {step > 0 && <button type="button" className="dp-action dp-ghost" onClick={() => setStep(step - 1)}>Back</button>}
               <span style={{ flex: 1 }} />
               <button type="button" className="dp-action" disabled={!canAdvance} onClick={() => setStep(step + 1)}>
-                Continue
+                {canAdvance ? "Continue" : blockedBy}
               </button>
             </div>
           )}

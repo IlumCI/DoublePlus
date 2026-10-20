@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { zeroAddress } from "viem";
 import { useWalletClient } from "wagmi";
 
-import { boostsAbi, confirmTx, factoryAbi, hookAbi, modulesAbi, SOCIAL_FIELDS, VENTURE, venturePc, type Modules, type PoolTrade, type Venture as VentureT } from "../client";
+import { boostsAbi, confirmTx, factoryAbi, hookAbi, modulesAbi, SOCIAL_FIELDS, VENTURE, venturePc, type Modules, type PoolTrade, type Venture as VentureT, sendTx } from "../client";
 import { marketStats } from "../marketStats";
 import { profileLinks, type DexProfile } from "../../lib/dexscreener";
 import { loadHolding, type Holding } from "../portfolio";
@@ -157,7 +157,7 @@ export function BoostButton({ v }: { v: VentureT }) {
     if (!wc) return;
     setBusy(true);
     try {
-      const hash = await wc.writeContract({ address: VENTURE.boosts, abi: boostsAbi, functionName: "boost", args: [v.address, BigInt(hours)], value: price * BigInt(hours), chain: wc.chain, account: wc.account });
+      const hash = await sendTx(wc, { address: VENTURE.boosts, abi: boostsAbi, functionName: "boost", args: [v.address, BigInt(hours)], value: price * BigInt(hours), chain: wc.chain, account: wc.account });
       await confirmTx(hash);
       pushToast({ kind: "success", title: `$${v.symbol} boosted for ${hours}h`, txHash: hash });
       setOpen(false);

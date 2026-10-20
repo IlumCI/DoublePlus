@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useWalletClient } from "wagmi";
 
-import { confirmTx, ercAbi, factoryAbi, VENTURE, venturePc, type Venture as VentureT } from "../client";
+import { confirmTx, ercAbi, factoryAbi, VENTURE, venturePc, type Venture as VentureT, sendTx } from "../client";
 import { fmtEth, fmtTok } from "../ui";
 import { useWallet, errorText } from "../../lib/useWallet";
 import { useUi } from "../../store";
@@ -18,7 +18,7 @@ export function GraduatePanel({ v }: { v: VentureT }) {
     if (!wc) return;
     setBusy(true);
     try {
-      const hash = await wc.writeContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "finalize", args: [v.address], chain: wc.chain, account: wc.account });
+      const hash = await sendTx(wc, { address: VENTURE.factory, abi: factoryAbi, functionName: "finalize", args: [v.address], chain: wc.chain, account: wc.account });
       pushToast({ kind: "info", title: "Graduating…", txHash: hash });
       await confirmTx(hash);
       pushToast({ kind: "success", title: "Graduated. Trading is open.", txHash: hash });
@@ -69,11 +69,11 @@ export function FailPanel({ v }: { v: VentureT }) {
       if (fn === "refund") {
         const allowance = (await venturePc.readContract({ address: v.address, abi: ercAbi, functionName: "allowance", args: [wc.account.address, VENTURE.factory] }));
         if (allowance < bought) {
-          const a = await wc.writeContract({ address: v.address, abi: ercAbi, functionName: "approve", args: [VENTURE.factory, 2n ** 256n - 1n], chain: wc.chain, account: wc.account });
+          const a = await sendTx(wc, { address: v.address, abi: ercAbi, functionName: "approve", args: [VENTURE.factory, 2n ** 256n - 1n], chain: wc.chain, account: wc.account });
           await confirmTx(a);
         }
       }
-      const hash = await wc.writeContract({ address: VENTURE.factory, abi: factoryAbi, functionName: fn, args: [v.address], chain: wc.chain, account: wc.account });
+      const hash = await sendTx(wc, { address: VENTURE.factory, abi: factoryAbi, functionName: fn, args: [v.address], chain: wc.chain, account: wc.account });
       pushToast({ kind: "info", title: fn === "abort" ? "Closing the round…" : "Refunding…", txHash: hash });
       await confirmTx(hash);
       pushToast({ kind: "success", title: fn === "abort" ? "Round closed. Refunds are open." : "Refunded. Your ETH is back in your wallet.", txHash: hash });

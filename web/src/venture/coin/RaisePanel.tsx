@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useBalance, useWalletClient } from "wagmi";
 import { formatEther, parseEther, zeroAddress } from "viem";
 
-import { confirmTx, ercAbi, factoryAbi, hookAbi, VENTURE, venturePc, type Venture as VentureT } from "../client";
+import { confirmTx, ercAbi, factoryAbi, hookAbi, VENTURE, venturePc, type Venture as VentureT, sendTx } from "../client";
 import { capState, feePct, gradValueWei, priceImpactPct, quoteBuy, quoteSellWei } from "../curve";
 import { Countdown, fmtEth, fmtTok, fmtUsdV, pct, useEthUsd, useTick } from "../ui";
 import { useWallet, errorText } from "../../lib/useWallet";
@@ -94,7 +94,7 @@ export function RaisePanel({ v }: { v: VentureT }) {
       // Only gas used is charged.
       const left = v.targetRaiseWei > v.raisedWei ? v.targetRaiseWei - v.raisedWei : 0n;
       const mayFill = funded >= 50 || parsed * 2n >= left;
-      const hash = await wc.writeContract({
+      const hash = await sendTx(wc, {
         address: VENTURE.factory, abi: factoryAbi, functionName: "buy",
         args: [v.address, (tokensOut * 10n ** 18n * BigInt(10_000 - slipBps)) / 10_000n], value: parsed,
         chain: wc.chain, account: wc.account, ...(mayFill ? { gas: GRADUATING_BUY_GAS } : {}),
@@ -117,11 +117,11 @@ export function RaisePanel({ v }: { v: VentureT }) {
       const need = sellWhole * 10n ** 18n;
       const allowance = (await venturePc.readContract({ address: v.address, abi: ercAbi, functionName: "allowance", args: [wc.account.address, VENTURE.factory] }));
       if (allowance < need) {
-        const a = await wc.writeContract({ address: v.address, abi: ercAbi, functionName: "approve", args: [VENTURE.factory, 2n ** 256n - 1n], chain: wc.chain, account: wc.account });
+        const a = await sendTx(wc, { address: v.address, abi: ercAbi, functionName: "approve", args: [VENTURE.factory, 2n ** 256n - 1n], chain: wc.chain, account: wc.account });
         await confirmTx(a);
       }
       const minOut = (sellQuote.out * BigInt(10_000 - slipBps)) / 10_000n;
-      const hash = await wc.writeContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "sell", args: [v.address, sellWhole, minOut], chain: wc.chain, account: wc.account });
+      const hash = await sendTx(wc, { address: VENTURE.factory, abi: factoryAbi, functionName: "sell", args: [v.address, sellWhole, minOut], chain: wc.chain, account: wc.account });
       pushToast({ kind: "info", title: "Sell sent", txHash: hash });
       await confirmTx(hash);
       pushToast({ kind: "success", title: "Sold back to the curve", txHash: hash });
@@ -161,6 +161,7 @@ export function RaisePanel({ v }: { v: VentureT }) {
               {busy ? "Confirm in wallet…"
                 : !isConnected ? "Connect wallet"
                 : shortOnEth ? "Not enough ETH"
+                : parsed === 0n ? "Enter an amount"
                 : overCap ? (capLeft === 0n ? (inWindow ? "First-minute limit reached" : "You've bought the max per wallet")
                   : `${inWindow ? "First minute: max" : "Max per wallet:"} ${fmtEth(capLeft, 6)} ETH`)
                 : `Buy $${v.symbol}`}
@@ -189,7 +190,9 @@ export function RaisePanel({ v }: { v: VentureT }) {
             </p>
             <button className="dp-tb-go dp-sell"
               disabled={busy || (isConnected && sellWhole === 0n)} onClick={sell}>
-              {busy ? "Confirm in wallet…" : !isConnected ? "Connect wallet" : `Sell ${fmtTok(sellWhole, true)} $${v.symbol}`}
+              {busy ? "Confirm in wallet…" : !isConnected ? "Connect wallet"
+                : bought === 0n ? `You have no $${v.symbol} from the curve`
+                : sellWhole === 0n ? "Enter an amount" : `Sell ${fmtTok(sellWhole, true)} $${v.symbol}`}
             </button>
             <div className="dp-tb-slip">
               <span>you hold <b style={{ color: "var(--dim)" }}>{fmtTok(bought)}</b></span>

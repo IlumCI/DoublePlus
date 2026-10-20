@@ -3,8 +3,7 @@ import { Link } from "react-router-dom";
 import { useWalletClient } from "wagmi";
 
 import { confirmTx,
-  ercAbi, factoryAbi, loadReferralEarnings, updatesAbi, VENTURE, venturePc, vestingAbi,
-} from "./client";
+  ercAbi, factoryAbi, loadReferralEarnings, updatesAbi, VENTURE, venturePc, vestingAbi, sendTx } from "./client";
 import { loadPortfolio, type Holding } from "./portfolio";
 import { fmtEth, fmtTok, pct, short } from "./ui";
 import { usePageMeta } from "./seo";
@@ -67,7 +66,7 @@ export function Desk() {
     try {
       for (const r of rows) {
         if (r.pending > 0n) {
-          const hash = await wc.writeContract({ address: r.v.address, abi: ercAbi, functionName: "claim", args: [], chain: wc.chain, account: wc.account });
+          const hash = await sendTx(wc, { address: r.v.address, abi: ercAbi, functionName: "claim", args: [], chain: wc.chain, account: wc.account });
           await confirmTx(hash);
         }
       }
@@ -81,7 +80,7 @@ export function Desk() {
     if (!wc) return;
     setBusy(true);
     try {
-      const hash = await wc.writeContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "withdrawFees", args: [], chain: wc.chain, account: wc.account });
+      const hash = await sendTx(wc, { address: VENTURE.factory, abi: factoryAbi, functionName: "withdrawFees", args: [], chain: wc.chain, account: wc.account });
       await confirmTx(hash);
       pushToast({ kind: "success", title: `${fmtEth(factoryOwed, 6)} ETH withdrawn`, txHash: hash });
     } catch (e) {
@@ -96,14 +95,14 @@ export function Desk() {
     setBusy(true);
     try {
       const send = async (fn: "abort" | "refund") => {
-        const hash = await wc.writeContract({ address: VENTURE.factory, abi: factoryAbi, functionName: fn, args: [r.v.address], chain: wc.chain, account: wc.account });
+        const hash = await sendTx(wc, { address: VENTURE.factory, abi: factoryAbi, functionName: fn, args: [r.v.address], chain: wc.chain, account: wc.account });
         await confirmTx(hash);
         return hash;
       };
       if (!r.v.aborted) await send("abort");
       const allowance = (await venturePc.readContract({ address: r.v.address, abi: ercAbi, functionName: "allowance", args: [wc.account.address, VENTURE.factory] }));
       if (allowance < r.bought) {
-        const a = await wc.writeContract({ address: r.v.address, abi: ercAbi, functionName: "approve", args: [VENTURE.factory, r.bought], chain: wc.chain, account: wc.account });
+        const a = await sendTx(wc, { address: r.v.address, abi: ercAbi, functionName: "approve", args: [VENTURE.factory, r.bought], chain: wc.chain, account: wc.account });
         await confirmTx(a);
       }
       const hash = await send("refund");
@@ -117,7 +116,7 @@ export function Desk() {
     if (!wc) return;
     setBusy(true);
     try {
-      const hash = await wc.writeContract({ address: r.v.vesting, abi: vestingAbi, functionName: "claim", args: [], chain: wc.chain, account: wc.account });
+      const hash = await sendTx(wc, { address: r.v.vesting, abi: vestingAbi, functionName: "claim", args: [], chain: wc.chain, account: wc.account });
       await confirmTx(hash);
       pushToast({ kind: "success", title: `Vested $${r.v.symbol} claimed`, txHash: hash });
     } catch (e) {
@@ -130,7 +129,7 @@ export function Desk() {
     if (!text || !wc) return;
     setBusy(true);
     try {
-      const hash = await wc.writeContract({ address: VENTURE.updates, abi: updatesAbi, functionName: "postUpdate", args: [r.v.address, text], chain: wc.chain, account: wc.account });
+      const hash = await sendTx(wc, { address: VENTURE.updates, abi: updatesAbi, functionName: "postUpdate", args: [r.v.address, text], chain: wc.chain, account: wc.account });
       await confirmTx(hash);
       pushToast({ kind: "success", title: "Update posted on-chain", txHash: hash });
     } catch (e) {
