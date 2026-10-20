@@ -63,7 +63,19 @@ async function send(label, fn) {
   const rc = await (await fn()).wait();
   stats.sent++;
   stats.spentWei += (rc?.gasUsed ?? 0n) * (rc?.gasPrice ?? rc?.effectiveGasPrice ?? 0n);
+  return rc;
 }
+
+// Batches that skip a failing item (claimForMany's try/catch, refundMany's
+// gas-capped sends) can't be gas-estimated: the estimator only needs the
+// outer call to succeed, so it settles on a limit that starves every item and
+// the batch "succeeds" having paid nobody. Size them per item instead, and
+// count what actually landed from the receipt.
+const batchGas = (perItem, n) => 80_000n + perItem * BigInt(n);
+const countEvents = (rc, address, topic) =>
+  (rc?.logs ?? []).filter((l) => l.address.toLowerCase() === address.toLowerCase() && l.topics[0] === topic).length;
+const REWARDS_CLAIMED = ethers.id("RewardsClaimed(address,uint256)");
+const REFUNDED = ethers.id("Refunded(address,address,uint256,uint256)");
 
 const ZERO = "0x0000000000000000000000000000000000000000";
 const DEAD = "0x000000000000000000000000000000000000dead";
@@ -233,8 +245,10 @@ async function pushRefunds(coin, toBlock, minDeliver) {
   console.log(`push refunds on ${coin}: ${due.length} backer(s)`);
   for (let j = 0; j < due.length; j += 100) {
     const batch = due.slice(j, j + 100);
-    await send(`refundMany ${coin}`, () => factory.refundMany(coin, batch));
-    stats.refunded += batch.length;
+    const rc = await send(`refundMany ${coin}`, () => factory.refundMany(coin, batch, { gasLimit: batchGas(120_000n, batch.length) }));
+    const paid = countEvents(rc, factory.target, REFUNDED);
+    if (paid < batch.length) console.log(`  refunded ${paid}/${batch.length}; the rest can still claim on the site`);
+    stats.refunded += paid;
   }
 }
 
@@ -430,8 +444,10 @@ async function processCoin(coin, now, head, minDeliver) {
     console.log(`deliver dividends on ${coin}: ${due.length} holder(s)`);
     for (let j = 0; j < due.length; j += 100) {
       const batch = due.slice(j, j + 100);
-      await send(`claimForMany ${coin}`, () => token.claimForMany(batch));
-      stats.delivered += batch.length;
+      const rc = await send(`claimForMany ${coin}`, () => token.claimForMany(batch, { gasLimit: batchGas(150_000n, batch.length) }));
+      const paid = countEvents(rc, coin, REWARDS_CLAIMED);
+      if (paid < batch.length) console.log(`  delivered ${paid}/${batch.length}`);
+      stats.delivered += paid;
     }
   }
 }
