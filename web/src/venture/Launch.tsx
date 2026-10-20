@@ -51,7 +51,7 @@ export function LaunchVenture() {
   const [founderCut, setFounderCut] = useState(20); // % of raise
   const [founderStake, setFounderStake] = useState(10); // % of supply
   const [vestDays, setVestDays] = useState(365);
-  const [capPct, setCapPct] = useState(2); // per-wallet, % of target
+  const [capPct, setCapPct] = useState(10); // per-wallet, % of target
   const [mode, setMode] = useState<0 | 1>(1); // 0 = funded raise, 1 = open curve
   const open = !requiresTarget(mode);
   const [chain, setChain] = useState<{ creation: bigint; grad: bigint; buyBps: number; sellBps: number; minTarget: bigint } | null>(null);
@@ -518,6 +518,9 @@ export function LaunchVenture() {
                   Paid only if it hits the target. The rest goes into the locked Uniswap pool.
                 </span>
               </div>
+              <div className="dp-field" style={{ display: open ? "none" : undefined }}><label htmlFor="v-cap">Max per wallet: {parsedTarget > 0n ? `${+(Number(parsedTarget) * capPct / 100 / 1e18).toPrecision(3)} ETH (${capPct}%)` : `${capPct}% of target`}</label>
+                <input id="v-cap" type="range" min={1} max={100} value={capPct} onChange={(e) => setCapPct(Number(e.target.value))} />
+                <span className="dp-hint">No wallet can buy more than this. Filling the raise takes at least {Math.ceil(100 / capPct)} wallet{capPct >= 100 ? "" : "s"}.</span></div>
 
               {expertRaise && (
                 <div className="dp-expert">
@@ -529,9 +532,7 @@ export function LaunchVenture() {
                       <input id="v-vest" type="range" min={0} max={730} step={30} value={vestDays}
                         onChange={(e) => setVestDays(Number(e.target.value))} disabled={founderStake === 0} />
                       <span className="dp-hint">Released evenly, starting at graduation. Buyers can see the schedule.</span></div>
-                    <div className="dp-field" style={{ display: open ? "none" : undefined }}><label htmlFor="v-cap">Max per wallet: {parsedTarget > 0n ? `${+(Number(parsedTarget) * capPct / 100 / 1e18).toPrecision(3)} ETH (${capPct}%)` : `${capPct}% of target`}</label>
-                      <input id="v-cap" type="range" min={1} max={100} value={capPct} onChange={(e) => setCapPct(Number(e.target.value))} />
-                      <span className="dp-hint">No wallet can buy more than this. Filling the raise takes at least {Math.ceil(100 / capPct)} wallet{capPct >= 100 ? "" : "s"}.</span></div>
+
                   </div>
                 </div>
               )}
