@@ -53,7 +53,7 @@ async function deployAll(admin: any, treasury: any) {
     admin.address, admin.address, POOL_MANAGER, hookAddr, WETH, V3_ROUTER,
     await vestingDeployer.getAddress(), await tokenDeployer.getAddress(),
      50, 100, 1n, TEST_VANITY, // mark off: no salt grind against a forked chain
-    ETH_USD_MIN_8, ETH_USD_MAX_8,
+    ETH_USD_MIN_8, ETH_USD_MAX_8, ethers.ZeroAddress,
   );
   await factory.waitForDeployment();
   expect(await factory.getAddress()).to.equal(predictedFactory);
@@ -244,6 +244,24 @@ describe("Venture bonding-curve launchpad (fork)", function () {
     await network.provider.send("evm_increaseTime", [4 * DAY]);
     await network.provider.send("evm_mine");
     await expect(factory.abort(coin)).to.be.revertedWithCustomError(factory, "AlreadyFinalized");
+  });
+
+  it("trades through the sniper window on a coin with no tax", async () => {
+    // With no founder tax the sniper premium is quoted on its own; whatever
+    // the walls can't place must still leave the hook or the swap can't settle.
+    const [admin, founder, , whale, trader, treasury] = await ethers.getSigners();
+    const { factory, tokenDeployer, router } = await deployAll(admin, treasury);
+    const coin = await launch(factory, tokenDeployer, founder, WETH, { buyTaxBps: 0, sellTaxBps: 0 });
+    const buyBps = BigInt(await factory.curveBuyFeeBps());
+    await (await factory.connect(whale).buy(coin, 0, { value: (TARGET * 10_000n) / (10_000n - buyBps) + 10n })).wait();
+    expect((await factory.curveState(coin)).finalized).to.equal(true);
+    // Seconds after graduation: inside both sniper tiers.
+    await (await router.connect(trader).buy(coin, "0x", 0, { value: ethers.parseEther("0.05") })).wait();
+    const erc = await ethers.getContractAt("QuiverToken", coin);
+    const held = await erc.balanceOf(trader.address);
+    await (await erc.connect(trader).approve(await router.getAddress(), held)).wait();
+    await (await router.connect(trader).sell(coin, held / 2n, "0x", 0)).wait();
+    await (await router.connect(trader).buy(coin, "0x", 0, { value: ethers.parseEther("0.01") })).wait();
   });
 
   it("can't be griefed by donations to the factory before the filling buy", async () => {

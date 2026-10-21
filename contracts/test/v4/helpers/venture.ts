@@ -43,6 +43,7 @@ export const DAY = 86_400;
 export async function deployStack(
   minTargetWei: bigint = 1n,
   ethUsdBand8: [bigint, bigint] = [ETH_USD_MIN_8, ETH_USD_MAX_8],
+  escrow: string = ethers.ZeroAddress,
 ) {
   const [admin] = await ethers.getSigners();
   const weth = await (await ethers.getContractFactory("WETH9")).deploy();
@@ -80,6 +81,7 @@ export async function deployStack(
     TEST_VANITY, // mark off: the suite mines no salts
     ethUsdBand8[0],
     ethUsdBand8[1],
+    escrow,
   );
   await factory.waitForDeployment();
   expect(await factory.getAddress()).to.equal(predictedFactory);

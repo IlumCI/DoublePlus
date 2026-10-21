@@ -77,7 +77,7 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
     using PoolIdLibrary for PoolKey;
 
     uint256 public constant TOTAL_SUPPLY = 1_000_000_000 ether;
-    uint256 public constant TOTAL_SUPPLY_WHOLE = 1_000_000_000;
+    uint256 internal constant TOTAL_SUPPLY_WHOLE = 1_000_000_000;
     uint256 public constant CURVE_SUPPLY_WHOLE = 600_000_000; // 60% sold on the curve
     /// @notice Whole-supply FDV at the first curve buy. Coupled to
     ///         `minTargetWei`: the cheapest raise that can exist is the whole
@@ -89,15 +89,18 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
     ///         cheapest possible raise above the floor and make small raises
     ///         unlaunchable.
     uint256 public constant START_MCAP_USD_8 = 750 * 1e8;
-    uint256 public constant MAX_TARGET_WEI = 1_000_000 ether;
-    uint64 public constant MIN_RAISE_SECS = 1 days;
+    uint256 internal constant MAX_TARGET_WEI = 1_000_000 ether;
+    uint64 internal constant MIN_RAISE_SECS = 1 days;
     uint64 public constant MAX_RAISE_SECS = 14 days;
-    uint32 public constant MIN_VESTING_SECS = 90 days;
-    uint32 public constant MAX_VESTING_SECS = 730 days;
-    uint16 public constant MAX_FOUNDER_RAISE_BPS = 3_000; // <= 30% of the raise
-    uint16 public constant MAX_FOUNDER_SUPPLY_BPS = 1_500; // <= 15% of supply
-    uint16 public constant MAX_CURVE_FEE_BPS = 300; // ceiling on both curve fees
-    uint64 public constant MIN_SWEEP_DELAY = 180 days;
+    uint32 internal constant MIN_VESTING_SECS = 90 days;
+    uint32 internal constant MAX_VESTING_SECS = 730 days;
+    uint16 internal constant MAX_FOUNDER_RAISE_BPS = 3_000; // <= 30% of the raise
+    uint16 internal constant MAX_FOUNDER_SUPPLY_BPS = 1_500; // <= 15% of supply
+    uint16 internal constant MAX_CURVE_FEE_BPS = 300; // ceiling on both curve fees
+    uint64 internal constant MIN_SWEEP_DELAY = 180 days;
+    /// @dev Bounds what a launcher can be charged, so a fee change can never
+    ///      take more than a launch is plausibly sent with.
+    uint256 public constant MAX_CREATION_FEE_WEI = 0.05 ether;
     /// @notice For this long after launch every wallet, in either mode, may
     ///         put at most 1/LAUNCH_CAP_DIV of the target into the curve. The
     ///         cheapest tokens are the first ones, and without a limit a bot in
@@ -107,7 +110,7 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
     uint64 public constant LAUNCH_WINDOW_SECS = 60;
     uint256 internal constant LAUNCH_CAP_DIV = 100;
     int24 public constant TICK_SPACING = 60;
-    uint24 public constant LP_FEE = 0;
+    uint24 internal constant LP_FEE = 0;
     uint16 internal constant BPS = 10_000;
 
     IPoolManager public immutable poolManager;
@@ -231,6 +234,13 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
     mapping(address token => Position) public pairPositions;
     mapping(address token => mapping(address buyer => uint256)) public spentWei;
     mapping(address token => mapping(address buyer => uint256)) public boughtTokens; // token-wei
+    /// @dev First-minute spend per signer. msg.sender alone lets one tx fan a
+    ///      buy out over throwaway contracts, each under the cap.
+    mapping(address token => mapping(address origin => uint256)) internal _windowSpent;
+    /// @dev The limit-order book, which holds other people's coins, kept off
+    ///      every coin's dividend list (it's deployed after this contract, so
+    ///      the deploy passes its predicted address).
+    address public immutable escrow;
     address[] public allTokens;
     mapping(address creator => address[]) internal _tokensByCreator;
 
@@ -320,9 +330,11 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         uint256 minTargetWei_,
         uint16 vanity_,
         uint64 minEthUsd8_,
-        uint64 maxEthUsd8_
+        uint64 maxEthUsd8_,
+        address escrow_
     ) Ownable(owner_) {
-        require(protocolAdmin_ != address(0), "admin=0");
+        if (protocolAdmin_ == address(0)) revert InvalidParams();
+        escrow = escrow_;
         if (minTargetWei_ == 0 || minTargetWei_ > MAX_TARGET_WEI) revert InvalidParams();
         minTargetWei = minTargetWei_;
         // The trigger is never below the floor, whatever the floor is.
@@ -371,6 +383,7 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         if (graduationRaiseWei_ < minTargetWei || graduationRaiseWei_ > MAX_TARGET_WEI) revert InvalidParams();
         if (sweepDelaySecs_ < MIN_SWEEP_DELAY) revert InvalidParams();
         if (creatorCurveShareBps_ > 5_000) revert InvalidParams();
+        if (creationFeeWei_ > MAX_CREATION_FEE_WEI) revert InvalidParams();
         creationFeeWei = creationFeeWei_;
         graduationRaiseWei = graduationRaiseWei_;
         sweepDelaySecs = sweepDelaySecs_;
@@ -512,10 +525,11 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
             vestingOf[token] = vesting;
         }
 
-        address[] memory ex = new address[](vesting == address(0) ? 2 : 3);
+        address[] memory ex = new address[](vesting == address(0) ? 3 : 4);
         ex[0] = address(poolManager);
         ex[1] = address(this);
-        if (vesting != address(0)) ex[2] = vesting;
+        ex[2] = escrow;
+        if (vesting != address(0)) ex[3] = vesting;
         tokenDeployer.initHook(token, address(hook), ex);
 
         if (vesting != address(0)) {
@@ -623,10 +637,14 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
 
         uint256 spend = curveCost(token, q, c.soldWhole) + 1; // round the cost up
         if (spend > netValue) spend = netValue;
-        uint256 cap = block.timestamp < listings[token].createdAt + LAUNCH_WINDOW_SECS
-            ? Math.min(c.maxBuyWei, c.targetRaiseWei / LAUNCH_CAP_DIV)
-            : c.maxBuyWei;
+        bool inWindow = block.timestamp < listings[token].createdAt + LAUNCH_WINDOW_SECS;
+        uint256 cap = inWindow ? Math.min(c.maxBuyWei, c.targetRaiseWei / LAUNCH_CAP_DIV) : c.maxBuyWei;
         if (spentWei[token][msg.sender] + spend > cap) revert CapExceeded();
+        if (inWindow) {
+            uint256 w = _windowSpent[token][tx.origin] + spend;
+            if (w > cap) revert CapExceeded();
+            _windowSpent[token][tx.origin] = w;
+        }
 
         uint128 price = priceNow(token);
         c.soldWhole += q;

@@ -343,6 +343,33 @@ describe("Venture bonding-curve launchpad (unit)", function () {
     }
   });
 
+  it("holds one signer to the first-minute cap across every contract it buys through", async () => {
+    // A bot fanning one buy out over throwaway contracts keeps each under the
+    // cap by msg.sender; the window cap follows the signer instead.
+    const [, creator, sniper] = await ethers.getSigners();
+    const { factory, tokenDeployer, weth } = await deployStack();
+    const coin = await launch(factory, tokenDeployer, creator, await weth.getAddress(), { mode: 1, founderRaiseBps: 0, inLaunchWindow: true });
+    const target = (await factory.curveState(coin)).targetRaiseWei;
+    const Clone = await ethers.getContractFactory("VentureAttacker");
+    const [a, b] = [await Clone.connect(sniper).deploy(), await Clone.connect(sniper).deploy()];
+    const buy = factory.interface.encodeFunctionData("buy", [coin, 0n]);
+    const each = (target * 8n) / 1000n; // 0.8% each, 1.6% together
+    await (await a.connect(sniper).exec(await factory.getAddress(), buy, { value: each })).wait();
+    await expect(b.connect(sniper).exec(await factory.getAddress(), buy, { value: each })).to.be.revertedWithCustomError(factory, "CapExceeded");
+    // After the window, contracts buy under their own caps as before.
+    await network.provider.send("evm_increaseTime", [61]);
+    await network.provider.send("evm_mine");
+    await (await b.connect(sniper).exec(await factory.getAddress(), buy, { value: each })).wait();
+  });
+
+  it("keeps the limit-order escrow off every new coin's dividend list", async () => {
+    const [, creator, , , escrow] = await ethers.getSigners();
+    const { factory, tokenDeployer, weth } = await deployStack(1n, undefined, escrow.address);
+    const coin = await launch(factory, tokenDeployer, creator, await weth.getAddress(), { mode: 1, founderRaiseBps: 0 });
+    const token = await ethers.getContractAt("QuiverToken", coin);
+    expect(await token.excluded(escrow.address)).to.equal(true);
+  });
+
   it("refuses a buy that would fill below the buyer's floor", async () => {
     // Someone else buys first, the price moves up the curve, and the second
     // buyer's quote is stale: the floor makes that a revert, not a worse fill.

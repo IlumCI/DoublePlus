@@ -113,6 +113,9 @@ async function main() {
   // nonce n+0: hook deploy tx (CREATE2 via c2 — does not consume a signer create)
   // ...but it IS a tx from the signer, so plain creates land at n+1 and n+2.
   const predictedFactory = ethers.getCreateAddress({ from: signer.address, nonce: nonce + 2 });
+  // Factory n+2, router n+3, updates n+4, limit orders n+5: the factory keeps
+  // the order book off every coin's dividend list, so it needs it up front.
+  const predictedLimitOrders = ethers.getCreateAddress({ from: signer.address, nonce: nonce + 5 });
 
   // 2) Mine + deploy the hook at a flag-matching address, launcher pre-baked.
   const Hook = await ethers.getContractFactory("VentureFeeHook");
@@ -139,7 +142,7 @@ async function main() {
   const factory = await (await ethers.getContractFactory("VentureFactory")).deploy(
     signer.address, admin, infra.poolManager, hookAddr, infra.weth, infra.v3Router,
     await vestingDeployer.getAddress(), await tokenDeployer.getAddress(),
-    curveBuyFeeBps, curveSellFeeBps, minTargetWei, VANITY, minEthUsd8, maxEthUsd8,
+    curveBuyFeeBps, curveSellFeeBps, minTargetWei, VANITY, minEthUsd8, maxEthUsd8, predictedLimitOrders,
   );
   await factory.waitForDeployment();
   const factoryAddr = await factory.getAddress();
@@ -159,6 +162,7 @@ async function main() {
 
   const limitOrders = await (await ethers.getContractFactory("VentureLimitOrders")).deploy(routerAddr);
   await limitOrders.waitForDeployment();
+  if ((await limitOrders.getAddress()) !== predictedLimitOrders) throw new Error(`limit orders address drift: ${await limitOrders.getAddress()} != ${predictedLimitOrders}`);
   console.log("limitOrders:", await limitOrders.getAddress());
 
   // Converts 5x holders' dividends; the keeper triggers conversions for them.
