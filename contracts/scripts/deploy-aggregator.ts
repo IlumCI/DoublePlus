@@ -38,6 +38,10 @@ const INFRA: Record<number, { poolManager: string; weth: string; v3Router: strin
 
 async function main() {
   const chainId = Number((await ethers.provider.getNetwork()).chainId);
+  // A fork reports the forked chain's id while running in-process, so a deploy
+  // run against one would otherwise write an artifact that looks like the real
+  // thing and names addresses that exist nowhere. Mark it instead.
+  const onFork = network.name === "hardhat" || network.name === "localhost";
   const infra = INFRA[chainId];
   const poolManager = process.env.POOL_MANAGER ?? infra?.poolManager;
   const weth = process.env.WETH ?? infra?.weth;
@@ -71,6 +75,7 @@ async function main() {
     feeBps,
     rebateBps,
     startBlock,
+    ...(onFork ? { fork: true, note: "deployed against a fork; these addresses are not real" } : {}),
     contracts: {
       registry: await registry.getAddress(),
       router: await router.getAddress(),
@@ -80,7 +85,11 @@ async function main() {
     },
   };
   mkdirSync(join(__dirname, "../deployments"), { recursive: true });
-  const file = `aggregator-${chainId}.json`;
+  const file = onFork ? `aggregator-${chainId}.fork.json` : `aggregator-${chainId}.json`;
+  if (onFork) {
+    console.log(`\n*** ${network.name} network: this is a rehearsal. The addresses below exist only in`);
+    console.log(`*** this process. Saving as ${file} so it cannot be mistaken for a deployment.`);
+  }
   writeFileSync(join(__dirname, `../deployments/${file}`), JSON.stringify(out, null, 2));
   console.log(`registry: ${out.contracts.registry}  router: ${out.contracts.router}`);
   console.log(`saved deployments/${file}  startBlock: ${startBlock}`);

@@ -261,6 +261,26 @@ Hilferding claims for a syndicate, and it is worth being clear that is the ceili
 The treasury keeper registers graduated coins automatically when the stack is a member, because a
 registry nobody populates pays nobody.
 
+**Deploying it.** `contracts/scripts/deploy-aggregator.ts` ships both contracts and writes
+`deployments/aggregator-<chainId>.json`. Rehearse it against a fork of the real chain first — it
+costs nothing and needs no key:
+
+```bash
+cd contracts
+ROBINHOOD_RPC_URL=https://rpc.testnet.chain.robinhood.com ROBINHOOD_CHAIN_ID=46630 \
+FORK_HARDFORK=cancun TREASURY=0x… ADMIN=0x… npm run fork:aggregator
+npm run fork:syndicate   # checks the registry against the real VentureFactory
+```
+
+A fork reports the forked chain's id, so a rehearsal would otherwise write an artifact that looks
+real and names addresses that exist nowhere. The script detects it and saves
+`aggregator-<chainId>.fork.json` instead, gitignored.
+
+`SyndicateRegistry.admin` is **immutable**. Set `ADMIN` to an address you will still control years
+from now: it is the only address that can admit or remove a launchpad, and losing it means the
+syndicate can never gain another member. There is no recovery path by design — an admin that could
+be rotated by whoever held the deployer key would be a worse hole than the one it fixes.
+
 ### Tenant stacks (other brands on the venture contracts)
 
 A tenant gets its own full venture stack (hook, factory, router, updates) whose

@@ -32,3 +32,4 @@ aggregator/data/
 aggregator/dist/
 aggregator/node_modules/
 aggregator/sources.json
+aggregator-*.fork.json
