@@ -73,7 +73,11 @@ async function main() {
   if (!infra) throw new Error(`no venture infra config for chain ${chainId}`);
 
   const [signer] = await ethers.getSigners();
-  const admin = process.env.ADMIN ?? signer.address;
+  // PLATFORM_ADMIN is the name generate-deployer.ts and .env.example use.
+  const admin = process.env.ADMIN ?? process.env.PLATFORM_ADMIN ?? signer.address;
+  // On mainnet the payout keeper is a hot key on a server; it must be named,
+  // never defaulted to the admin.
+  if (chainId === 4663 && !process.env.PAYOUT_KEEPER) throw new Error("set PAYOUT_KEEPER (the ops keeper's address) for a mainnet deploy");
   const treasury = process.env.TREASURY ?? DEFAULT_TREASURY[chainId] ?? admin;
   const platformFeeBps = Number(process.env.PLATFORM_FEE_BPS ?? 75);
   const refShareBps = Number(process.env.REF_SHARE_BPS ?? 2000);
@@ -172,6 +176,11 @@ async function main() {
   );
   await payouts.waitForDeployment();
   console.log("payouts:", await payouts.getAddress(), "keeper:", payoutKeeper);
+  // The owner can swap the keeper: that belongs to the admin, not the deploy key.
+  if (admin.toLowerCase() !== signer.address.toLowerCase()) {
+    await (await payouts.transferOwnership(admin)).wait();
+    console.log("payouts owner:", admin);
+  }
 
   // Paid placement on the board, priced per hour, paid straight to the treasury.
   const boostPrice = ethers.parseEther(process.env.BOOST_PRICE_ETH ?? "0.001");
