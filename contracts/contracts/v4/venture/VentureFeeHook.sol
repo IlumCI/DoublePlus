@@ -183,6 +183,7 @@ contract VentureFeeHook is IHooks, ReentrancyGuard, IUnlockCallback {
     mapping(PoolId => Surge) internal _surgeOf;
     /// @dev keccak(pool, signer, isBuy) => timestamp of that side's last trade.
     mapping(bytes32 => uint64) internal _lastSide;
+    mapping(bytes32 => uint64) internal _jackpotCountedAt; // keccak(pool, tx.origin) => block
     error PriceMoving();
 
     error NotPoolManager();
@@ -410,7 +411,13 @@ contract VentureFeeHook is IHooks, ReentrancyGuard, IUnlockCallback {
             }
         }
         if (founderTax > 0) _settleBuckets(key, id, c, feeCurrency, founderTax, sniperFee);
-        else if (sniperFee > 0) _placeQuotes(key, id, c, feeCurrency, sniperFee);
+        else if (sniperFee > 0) {
+            // What quoting couldn't place must still leave the hook: the
+            // swap's fee delta lands after this returns, so _sweep below
+            // can't see it and an unplaced remainder fails the unlock.
+            uint256 placed = _placeQuotes(key, id, c, feeCurrency, sniperFee);
+            if (sniperFee > placed) _payOut(feeCurrency, c.policy.devWallet, sniperFee - placed);
+        }
 
         // Band placement and conversions round in pool-favouring directions,
         // which can strand dust credit on either currency; an unlock only
@@ -447,6 +454,11 @@ contract VentureFeeHook is IHooks, ReentrancyGuard, IUnlockCallback {
     }
 
     function _countJackpotBuy(PoolId id, Config memory c, address trader, uint16 every) private {
+        // One counted buy per signer per block: otherwise one contract can loop
+        // the remaining buys inside a single transaction and take every pot.
+        bytes32 k = keccak256(abi.encode(id, tx.origin));
+        if (_jackpotCountedAt[k] == block.number) return;
+        _jackpotCountedAt[k] = uint64(block.number);
         Jackpot memory j = jackpotOf[id];
         j.buys += 1;
         if (j.buys % every != 0) {
@@ -523,6 +535,9 @@ contract VentureFeeHook is IHooks, ReentrancyGuard, IUnlockCallback {
         private
         returns (uint256 used)
     {
+        // No eligible holder: the token would credit nobody and keep the
+        // funds, so leave them as a leftover for the dev wallet.
+        if (IQuiverToken(c.coin).eligibleSupply() == 0) return 0;
         bool feeIsCoin = Currency.unwrap(feeCurrency) == c.coin;
         uint256 pairAmount = amount;
         if (feeIsCoin) {
