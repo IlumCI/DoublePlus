@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Scheduled harvest keeper for the Quiver V4 launchpad.",
   "scripts": {
-    "start": "node keeper.mjs"
+    "start": "node keeper.mjs",
+    "test": "node --test"
   },
   "dependencies": {
     "@openzeppelin/merkle-tree": "^1.0.7",

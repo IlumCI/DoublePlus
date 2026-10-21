@@ -44,6 +44,12 @@
 //                       volume paid (net of the referee discount and referral
 //                       share). Wash trading then always costs more than it
 //                       earns; the unspent budget stays in the treasury.
+//   RESERVE_FLOOR_ETH   (default 0.25) ETH the jackpot may never spend below,
+//                       in any regime. Size it to an acquisition plus a stack
+//                       deploy: a reserve is what makes a bust useful.
+//   REGIME_FILE         the trailing market series the treasury keeper writes
+//                       (default ../web/public/rewards/venture/regime.json).
+//                       Missing or unreadable is treated as a normal market.
 //   LOG_CHUNK           (default 500000)
 //   DRY_RUN             set to print the plan to epoch-<n>.dryrun.json without
 //                       sending txs or advancing the cursor
@@ -53,10 +59,20 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 import { DRY_RUN, envEth, envInt, KEY, loadDeployment, LOG_CHUNK, RPC } from "./venture-config.mjs";
+import { classify, spendable } from "./venture-regime.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const { dep, depPath } = loadDeployment();
+// The jackpot is held back in a downturn, and never dips into the reserve.
+// See venture-regime.mjs: buying the epoch's top coins with the treasury's ETH
+// is the worst use of means of payment in a contraction, and a reserve is what
+// makes a bust useful (Lenin ch. 3, on buying up the unsound "for a mere
+// song").
 const MANIFEST_DIR = join(here, "../web/public/rewards/venture");
+const REGIME_FILE = process.env.REGIME_FILE?.trim() || join(MANIFEST_DIR, "regime.json");
+// Sized to what an acquisition plus a stack deploy would cost. The flywheel
+// may never spend below it, in any regime.
+const RESERVE_FLOOR_WEI = envEth("RESERVE_FLOOR_ETH", "0.25");
 
 const JACKPOT_BPS = envInt("JACKPOT_BPS", 2500, 0, 10_000);
 const MAX_JACKPOT_ETH = envEth("MAX_JACKPOT_ETH", "0.5");
@@ -193,8 +209,32 @@ async function buildPlan(epoch, fromBlock, toBlock) {
   let budget = (revenueEst * BigInt(JACKPOT_BPS)) / 10_000n;
   if (budget > MAX_JACKPOT_ETH) budget = MAX_JACKPOT_ETH;
   const balance = await provider.getBalance(wallet.address);
-  if (budget > balance / 2n) budget = balance / 2n; // never drain the keeper
-  console.log(`volume ${ethers.formatEther(totalVolume)} ETH, jackpot ${ethers.formatEther(budget)} ETH`);
+  // Was: half the balance, "never drain the keeper". That is a rule for a
+  // rising market — in a downturn it spends the means of payment on the asset
+  // that is falling. The regime decides whether to spend at all, and the
+  // reserve floor is never touched.
+  let regime = "normal";
+  try {
+    if (existsSync(REGIME_FILE)) {
+      const series = JSON.parse(readFileSync(REGIME_FILE, "utf8")).series ?? [];
+      const latest = series.at(-1);
+      // The treasury keeper owns the series; the flywheel only reads the
+      // verdict for the newest observation it finds.
+      if (latest) regime = classify(series.slice(0, -1), latest).regime;
+    }
+  } catch (e) {
+    console.warn(`regime unreadable (${e.message}); treating the market as normal`);
+  }
+  const { amount: allowed, why } = spendable(balance, budget, regime, RESERVE_FLOOR_WEI);
+  console.log(
+    `volume ${ethers.formatEther(totalVolume)} ETH, regime ${regime}, ` +
+      `jackpot ${ethers.formatEther(allowed)} ETH (wanted ${ethers.formatEther(budget)}: ${why})`,
+  );
+  budget = allowed;
+  if (budget === 0n) {
+    console.log("nothing to spend this epoch; the reserve stands");
+    return null;
+  }
 
   // 2b) Outside-maker volume: positive liquidity adds on venture pools this
   // epoch, attributed to the transaction sender, protocol addresses excluded.

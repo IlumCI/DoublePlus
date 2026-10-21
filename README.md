@@ -174,6 +174,35 @@ the factory's expected lifetime in mind.
 The script's own header comment says `PLATFORM_FEE_BPS` defaults to 100; the code
 says 55. The code is right.
 
+### Regime: what the treasury does when the market turns
+
+Both treasury keepers used to run one policy. `venture-treasury.mjs` sold a fixed 25% of each coin
+holding per run, and `venture-flywheel.mjs` would spend up to **half the keeper's ETH** buying the
+epoch's top coins back. Those are rules for a rising market: in a downturn the second one spends the
+means of payment on the asset that is falling.
+
+`keeper/venture-regime.mjs` classifies the market from two things that are actually observable —
+routed volume over a window, and what one whole unit of each held coin would currently fetch — and
+sets the policy:
+
+| Regime | Converted per coin per run | Jackpot |
+| --- | --- | --- |
+| expansion | 20% | allowed |
+| normal | 25% | allowed |
+| contraction | 60% | **held** |
+
+Conversion never stops, only its speed changes. And the jackpot may never spend below
+`RESERVE_FLOOR_ETH` in any regime: a reserve is what lets a bust be useful rather than survived.
+
+The value signal is measured **per coin** against that coin's own history, then pooled at the
+median. Totalling the treasury's quotes instead would move whenever a coin graduated or a fee
+arrived, so the detector would fire on bookkeeping rather than on price; summing raw token units
+across coins would be meaningless, since a unit of one coin is not a unit of another.
+
+Until three observations have accumulated the verdict is `normal` — it holds the middle course
+rather than guessing. The series lives in `web/public/rewards/venture/regime.json` and the workflow
+commits it, because CI runners keep no disk and the history would otherwise never build up.
+
 ### The aggregator and its router
 
 A launchpad earns only from the coins it launched; a terminal earns from every coin on the chain.

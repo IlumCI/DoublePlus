@@ -6,12 +6,13 @@
   "workspaces": [
     "aggregator",
     "contracts",
+    "keeper",
     "sdk",
     "web"
   ],
   "scripts": {
     "build": "npm run build -w sdk && npm run build -w web",
-    "test": "npm run test -w contracts && npm run test -w aggregator && npm run test -w web",
+    "test": "npm run test -w contracts && npm run test -w aggregator && npm run test -w keeper && npm run test -w web",
     "compile": "npm run compile -w contracts"
   }
 }
