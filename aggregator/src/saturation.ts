@@ -35,6 +35,17 @@ export interface SourceStats {
   graduations: number;
   /** Graduations per launch in the window, or null when nothing launched. */
   graduationRate: number | null;
+  /** Median seconds from launch to an open market, over the graduations we
+   *  saw. Null when none completed in the window.
+   *
+   *  The median, not the mean: a handful of coins that sat on a curve for
+   *  months would drag a mean so far that two launchpads could not be told
+   *  apart. */
+  medianTurnoverSecs: number | null;
+  /** Turnovers per year implied by that median — Marx's `n`. Two launchpads
+   *  graduating the same share of their coins are not equally good businesses
+   *  if one does it in a week and the other in a quarter. */
+  turnoversPerYear: number | null;
 }
 
 export interface ChainStats {
@@ -42,6 +53,8 @@ export interface ChainStats {
   launches: number;
   graduations: number;
   graduationRate: number | null;
+  medianTurnoverSecs: number | null;
+  turnoversPerYear: number | null;
   sources: SourceStats[];
 }
 
@@ -60,9 +73,32 @@ function rate(launches: number, graduations: number): number | null {
   return launches > 0 ? graduations / launches : null;
 }
 
+const SECONDS_PER_YEAR = 31_557_600;
+
+/** Median of a sorted-or-unsorted list of seconds, or null when empty. */
+function medianSecs(values: number[]): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = sorted.length >> 1;
+  return sorted.length % 2 === 1 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
+}
+
+function perYear(medianSecs: number | null): number | null {
+  return medianSecs && medianSecs > 0 ? SECONDS_PER_YEAR / medianSecs : null;
+}
+
 export function saturation(store: Store, windowDays: number, now = Math.floor(Date.now() / 1000)): SaturationReport {
   const since = now - windowDays * 86_400;
   const rows = store.countsSince(since);
+  // Turnovers are grouped by chain and by source separately, because the
+  // median of medians is not the median.
+  const bySourceTurnover = new Map<string, number[]>();
+  const byChainTurnover = new Map<number, number[]>();
+  for (const t of store.turnoversSince(since)) {
+    const key = `${t.chain_id}:${t.source_id}`;
+    bySourceTurnover.set(key, [...(bySourceTurnover.get(key) ?? []), t.secs]);
+    byChainTurnover.set(t.chain_id, [...(byChainTurnover.get(t.chain_id) ?? []), t.secs]);
+  }
 
   const byChain = new Map<number, ChainStats>();
   for (const r of rows) {
@@ -70,21 +106,35 @@ export function saturation(store: Store, windowDays: number, now = Math.floor(Da
     const graduations = Number(r.graduations ?? 0);
     const chain =
       byChain.get(r.chain_id) ??
-      ({ chainId: r.chain_id, launches: 0, graduations: 0, graduationRate: null, sources: [] } satisfies ChainStats);
+      ({
+        chainId: r.chain_id,
+        launches: 0,
+        graduations: 0,
+        graduationRate: null,
+        medianTurnoverSecs: null,
+        turnoversPerYear: null,
+        sources: [],
+      } satisfies ChainStats);
     chain.launches += launches;
     chain.graduations += graduations;
+    const sourceMedian = medianSecs(bySourceTurnover.get(`${r.chain_id}:${r.source_id}`) ?? []);
     chain.sources.push({
       chainId: r.chain_id,
       sourceId: r.source_id,
       launches,
       graduations,
       graduationRate: rate(launches, graduations),
+      medianTurnoverSecs: sourceMedian,
+      turnoversPerYear: perYear(sourceMedian),
     });
     byChain.set(r.chain_id, chain);
   }
 
   const chains = [...byChain.values()]
-    .map((c) => ({ ...c, graduationRate: rate(c.launches, c.graduations) }))
+    .map((c) => {
+      const m = medianSecs(byChainTurnover.get(c.chainId) ?? []);
+      return { ...c, graduationRate: rate(c.launches, c.graduations), medianTurnoverSecs: m, turnoversPerYear: perYear(m) };
+    })
     .sort((a, b) => b.launches - a.launches);
 
   const rivalsByChain: Record<string, number> = {};

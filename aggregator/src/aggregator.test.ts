@@ -237,3 +237,96 @@ describe("saturation", () => {
     expect(r.totals[0]).toMatchObject({ chain_id: 4663, source_id: "doubleplus", coins: 1, graduated: 0 });
   });
 });
+
+describe("turnover: how fast each launchpad reaches an open market", () => {
+  // A realistic clock: with a small one, a launch a year ago lands before the
+  // epoch and the store rejects it as an impossible timestamp.
+  const now = 1_800_000_000;
+  const DAY = 86_400;
+
+  /** A graduated coin that took `days` from launch to an open market. */
+  const graduated = (addr: string, days: number, source = "doubleplus", chain = 4663) => ({
+    ...coin({ address: addr, source_id: source, chain_id: chain, launched_at: now - days * DAY - 1000 }),
+  });
+
+  function seed(s: Store, rows: { addr: string; days: number; source?: string; chain?: number }[]) {
+    for (const r of rows) {
+      const g = graduated(r.addr, r.days, r.source, r.chain);
+      s.upsertCoin(g);
+      s.markGraduated(g.chain_id, g.address, g.launched_at + r.days * DAY, null);
+    }
+  }
+
+  it("reports the median time to graduation per launchpad", () => {
+    const s = store();
+    seed(s, [
+      { addr: "0x01".padEnd(42, "0"), days: 1 },
+      { addr: "0x02".padEnd(42, "0"), days: 3 },
+      { addr: "0x03".padEnd(42, "0"), days: 11 },
+    ]);
+    const src = saturation(s, 30, now).chains[0]!.sources[0]!;
+    expect(src.medianTurnoverSecs).toBe(3 * DAY);
+    expect(src.turnoversPerYear).toBeCloseTo(31_557_600 / (3 * DAY), 3);
+  });
+
+  it("uses the median so a few stragglers cannot hide a fast launchpad", () => {
+    const s = store();
+    seed(s, [
+      { addr: "0x01".padEnd(42, "0"), days: 1 },
+      { addr: "0x02".padEnd(42, "0"), days: 1 },
+      { addr: "0x03".padEnd(42, "0"), days: 2 },
+      { addr: "0x04".padEnd(42, "0"), days: 300 },
+      { addr: "0x05".padEnd(42, "0"), days: 300 },
+    ]);
+    const src = saturation(s, 400, now).chains[0]!.sources[0]!;
+    expect(src.medianTurnoverSecs).toBe(2 * DAY);
+    // The mean would be about 121 days and call this a slow launchpad.
+  });
+
+  it("compares two launchpads on the same chain", () => {
+    const s = store();
+    seed(s, [
+      { addr: "0x01".padEnd(42, "0"), days: 2, source: "doubleplus" },
+      { addr: "0x02".padEnd(42, "0"), days: 2, source: "doubleplus" },
+      { addr: "0x03".padEnd(42, "0"), days: 40, source: "rival-pad" },
+      { addr: "0x04".padEnd(42, "0"), days: 40, source: "rival-pad" },
+    ]);
+    const chain = saturation(s, 90, now).chains[0]!;
+    const ours = chain.sources.find((x) => x.sourceId === "doubleplus")!;
+    const theirs = chain.sources.find((x) => x.sourceId === "rival-pad")!;
+    expect(ours.medianTurnoverSecs).toBe(2 * DAY);
+    expect(theirs.medianTurnoverSecs).toBe(40 * DAY);
+    expect(ours.turnoversPerYear! / theirs.turnoversPerYear!).toBeCloseTo(20, 3);
+  });
+
+  it("takes the chain median from the coins, not from the sources' medians", () => {
+    const s = store();
+    // One fast source with one coin, one slow source with three. The median of
+    // all four is 30 days; the median of the two source medians would be 20.
+    seed(s, [
+      { addr: "0x01".padEnd(42, "0"), days: 10, source: "a" },
+      { addr: "0x02".padEnd(42, "0"), days: 30, source: "b" },
+      { addr: "0x03".padEnd(42, "0"), days: 30, source: "b" },
+      { addr: "0x04".padEnd(42, "0"), days: 30, source: "b" },
+    ]);
+    expect(saturation(s, 90, now).chains[0]!.medianTurnoverSecs).toBe(30 * DAY);
+  });
+
+  it("reports nothing rather than zero when no coin graduated", () => {
+    const s = store();
+    s.upsertCoin(coin({ address: "0x01".padEnd(42, "0"), launched_at: now - DAY }));
+    const src = saturation(s, 30, now).chains[0]!.sources[0]!;
+    expect(src.graduations).toBe(0);
+    expect(src.medianTurnoverSecs).toBeNull();
+    expect(src.turnoversPerYear).toBeNull();
+  });
+
+  it("ignores a coin whose timestamps are impossible", () => {
+    const s = store();
+    const c = coin({ address: "0x01".padEnd(42, "0"), launched_at: now });
+    s.upsertCoin(c);
+    // Graduated before it launched: a reorg or a bad block read, not speed.
+    s.markGraduated(c.chain_id, c.address, now - 5 * DAY, null);
+    expect(saturation(s, 30, now).chains[0]!.sources[0]!.medianTurnoverSecs).toBeNull();
+  });
+});

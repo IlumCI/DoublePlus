@@ -63,6 +63,11 @@ export interface Store {
   markGraduated(chainId: number, address: string, at: number, poolId: string | null): void;
   coins(opts: { chainId?: number; sourceId?: string; limit: number; offset: number }): CoinRow[];
   countsSince(since: number): { chain_id: number; source_id: string; launches: number; graduations: number }[];
+  /** Completed turnovers in the window: how long each coin took from launch to
+   *  an open market, per launchpad. The competitive measure that launch counts
+   *  cannot give — two launchpads graduating the same share of coins are not
+   *  equally good if one takes a week and the other a quarter. */
+  turnoversSince(since: number): { chain_id: number; source_id: string; secs: number }[];
   totals(): { chain_id: number; source_id: string; coins: number; graduated: number }[];
 }
 
@@ -118,6 +123,21 @@ export function makeStore(db: Database.Database): Store {
             GROUP BY chain_id, source_id ORDER BY launches DESC`,
         )
         .all(since) as { chain_id: number; source_id: string; launches: number; graduations: number }[];
+    },
+    turnoversSince(since) {
+      return db
+        .prepare(
+          // Only coins whose graduation we actually saw, and only where both
+          // timestamps are sane: a negative span would be a reorg or a bad
+          // block read, not a fast launchpad.
+          `SELECT chain_id, source_id, (graduated_at - launched_at) AS secs
+             FROM coins
+            WHERE graduated = 1 AND graduated_at IS NOT NULL
+              AND launched_at > 0 AND graduated_at >= launched_at
+              AND graduated_at >= ?
+            ORDER BY secs ASC`,
+        )
+        .all(since) as { chain_id: number; source_id: string; secs: number }[];
     },
     totals() {
       return db

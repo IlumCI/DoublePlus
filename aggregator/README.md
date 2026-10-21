@@ -99,6 +99,18 @@ foundry.
 The graduation rate is reported next to the launch count, because it is the better signal: a chain
 minting thousands of coins that never graduate is saturated however high its launch count looks.
 
+**Median time to graduation** is reported per launchpad as well, and it is the measure that makes a
+competitor comparable rather than merely countable. Two launchpads graduating the same share of
+their coins are not equally good businesses if one takes a week and the other a quarter — Capital II
+ch. 16: the annual rate "is always equal to s'n", and its two capitals differ by "900% in the annual
+rate" on turnover period alone. The report gives both the median seconds and the turnovers per year
+it implies, so our curve can be held against the alternatives on the same axis the foundry already
+scores its own formats on.
+
+The median, not the mean: a few coins that sat on a curve for months would drag a mean far enough
+that two launchpads could not be told apart. Coins whose timestamps are impossible — a graduation
+before its own launch, from a reorg or a bad block read — are dropped rather than counted as speed.
+
 ## Not built here
 
 The terminal's front end. A `VITE_BRAND=aggregator` flavor would reuse `web/`'s `Explore`,
