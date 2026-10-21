@@ -1,6 +1,7 @@
+import { verifyMessage } from "viem";
 import { describe, expect, it } from "vitest";
 
-import { authMessage, carriesDecoy, cleanBody, DECOY_KEY, isTrap, issueSession, MAX_REQUEST_BYTES, readJson, readSession, SESSION_SECS } from "../src/lib";
+import { authMessage, carriesDecoy, sigKey, fromBrowser, ipKey, cleanBody, DECOY_KEY, isTrap, issueSession, MAX_REQUEST_BYTES, readJson, readSession, SESSION_SECS } from "../src/lib";
 
 const A = "0x1111111111111111111111111111111111111111";
 
@@ -59,12 +60,48 @@ describe("isTrap", () => {
 });
 
 describe("carriesDecoy", () => {
-  it("spots the decoy key in a header or the query string", () => {
-    const u = new URL("https://api.example/comments");
-    expect(carriesDecoy(new Headers({ Authorization: `Bearer ${DECOY_KEY}` }), u)).toBe(true);
-    expect(carriesDecoy(new Headers({ apikey: DECOY_KEY }), u)).toBe(true);
-    expect(carriesDecoy(new Headers(), new URL(`https://api.example/x?key=${DECOY_KEY}`))).toBe(true);
-    expect(carriesDecoy(new Headers({ Authorization: "Bearer 0xabc.123.mac" }), u)).toBe(false);
+  it("spots the decoy key in a header, never from the query string", () => {
+    expect(carriesDecoy(new Headers({ Authorization: `Bearer ${DECOY_KEY}` }))).toBe(true);
+    expect(carriesDecoy(new Headers({ apikey: DECOY_KEY }))).toBe(true);
+    expect(carriesDecoy(new Headers())).toBe(false);
+    expect(carriesDecoy(new Headers({ Authorization: "Bearer 0xabc.123.mac" }))).toBe(false);
+  });
+});
+
+describe("sigKey", () => {
+  it("gives every encoding of one signature the same key", async () => {
+    const { privateKeyToAccount, generatePrivateKey } = await import("viem/accounts");
+    const acct = privateKeyToAccount(generatePrivateKey());
+    const sig = await acct.signMessage({ message: "hi" });
+    const r = sig.slice(2, 66), s = BigInt("0x" + sig.slice(66, 130)), v = parseInt(sig.slice(130), 16);
+    const N = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
+    const hi = (N - s).toString(16).padStart(64, "0");
+    const flip = (x: number) => (x === 27 ? 28 : 27);
+    const variants = [
+      `0x${r}${sig.slice(66, 130)}${(v - 27).toString(16).padStart(2, "0")}`,
+      `0x${r}${hi}${flip(v).toString(16)}`,
+      `0x${r}${hi}${(flip(v) - 27).toString(16).padStart(2, "0")}`,
+    ];
+    for (const x of variants) {
+      expect(await verifyMessage({ address: acct.address, message: "hi", signature: x as `0x${string}` })).toBe(true);
+      expect(sigKey(x)).toBe(sigKey(sig));
+    }
+  });
+});
+
+describe("ipKey", () => {
+  it("keeps v4 and folds v6 to its /64", () => {
+    expect(ipKey("203.0.113.9")).toBe("203.0.113.9");
+    expect(ipKey("2001:db8:a:b:1:2:3:4")).toBe(ipKey("2001:0db8:000a:000b:ffff::1"));
+    expect(ipKey("2001:db8::1")).toBe("2001:db8:0:0::/64");
+    expect(ipKey("2001:db8:a:b:1:2:3:4")).not.toBe(ipKey("2001:db8:a:c::1"));
+  });
+});
+
+describe("fromBrowser", () => {
+  it("tells a browser request from a scanner", () => {
+    expect(fromBrowser(new Headers({ "Sec-Fetch-Mode": "no-cors", "Sec-Fetch-Dest": "image" }))).toBe(true);
+    expect(fromBrowser(new Headers({ "User-Agent": "curl/8" }))).toBe(false);
   });
 });
 

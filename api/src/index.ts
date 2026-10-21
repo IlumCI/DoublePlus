@@ -1,7 +1,7 @@
 import { createPublicClient, http, keccak256, parseAbi, verifyMessage, zeroAddress, type Address, type Hex } from "viem";
 
 import {
-  authMessage, carriesDecoy, cleanBody, cooldownSecs, DECOY_KEY, isAddr, isTrap, ISSUED_SKEW_SECS, issueSession,
+  authMessage, carriesDecoy, cleanBody, fromBrowser, ipKey, sigKey, cooldownSecs, DECOY_KEY, isAddr, isTrap, ISSUED_SKEW_SECS, issueSession,
   MIN_SECRET_CHARS, NONCE, readJson, readSession,
 } from "./lib";
 
@@ -124,8 +124,8 @@ async function auth(env: Env, c: Ctx, h: Record<string, string>) {
     record(env, c, "auth_bad_signature", { address });
     return json({ error: "signature does not match" }, 401, h);
   }
-  // One use per signature: a copied or phished signature can't be replayed.
-  const used = `sig:${keccak256(signature as Hex)}`;
+  // One use per signature, in any of its encodings: a copied or phished signature can't be replayed.
+  const used = `sig:${keccak256(`0x${sigKey(signature)}`)}`;
   try {
     if (await env.GUARD.get(used)) {
       record(env, c, "auth_replay", { address });
@@ -241,8 +241,16 @@ async function route(env: Env, c: Ctx): Promise<Response> {
     }
   } catch { /* fail open: KV down must not take the API down */ }
 
-  // The decoy key, anywhere in the request: someone used what the bait gave them.
-  if (carriesDecoy(req.headers, url)) {
+  // Before anything that writes a security event, so no request path can
+  // write to the database faster than the per-IP budget.
+  const limiter = req.method === "GET" || req.method === "OPTIONS" ? env.RL_READ : url.pathname === "/auth" ? env.RL_AUTH : env.RL_WRITE;
+  if (!(await limiter.limit({ key: `ip:${c.ip}` })).success) {
+    c.event = "rate_limited";
+    return json({ error: "slow down" }, 429, { ...h, "Retry-After": "60" });
+  }
+
+  // The decoy key, in a header: someone used what the bait gave them.
+  if (carriesDecoy(req.headers)) {
     record(env, c, "decoy_key_used", { method: req.method });
     await block(env, c, "decoy_key");
     await sleep(2000);
@@ -251,8 +259,9 @@ async function route(env: Env, c: Ctx): Promise<Response> {
 
   if (url.pathname === "/robots.txt") return new Response(ROBOTS, { headers: { "Content-Type": "text/plain", ...SECURITY_HEADERS } });
   if (isTrap(url.pathname)) {
-    record(env, c, "honeypot", { method: req.method });
-    await block(env, c, "honeypot");
+    const browser = fromBrowser(req.headers);
+    record(env, c, "honeypot", { method: req.method, browser });
+    if (!browser) await block(env, c, "honeypot");
     await sleep(800 + Math.floor(Math.random() * 1200)); // tarpit
     return bait(c);
   }
@@ -271,12 +280,6 @@ async function route(env: Env, c: Ctx): Promise<Response> {
     }
   }
 
-  const limiter = req.method === "GET" ? env.RL_READ : url.pathname === "/auth" ? env.RL_AUTH : env.RL_WRITE;
-  if (!(await limiter.limit({ key: `ip:${c.ip}` })).success) {
-    c.event = "rate_limited";
-    return json({ error: "slow down" }, 429, { ...h, "Retry-After": "60" });
-  }
-
   // A missing or short secret would sign sessions anyone can forge: refuse
   // sign-in and posting rather than run that way.
   if ((url.pathname === "/auth" || req.method === "POST") && (env.SESSION_SECRET ?? "").length < MIN_SECRET_CHARS) {
@@ -293,7 +296,7 @@ export default {
   async fetch(req: Request<unknown, IncomingRequestCfProperties>, env: Env, ctx: ExecutionContext): Promise<Response> {
     const c: Ctx = {
       req, url: new URL(req.url),
-      ip: req.headers.get("CF-Connecting-IP") ?? "unknown",
+      ip: ipKey(req.headers.get("CF-Connecting-IP") ?? "unknown"),
       ua: req.headers.get("User-Agent") ?? "",
       country: String(req.cf?.country ?? ""),
       started: Date.now(),

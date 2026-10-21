@@ -127,7 +127,39 @@ export const isTrap = (path: string): boolean => TRAPS.some((re) => re.test(path
 /** The decoy service key served on a bait page. Nothing accepts it; anyone
  *  presenting it later has crawled the bait and is trying it on purpose. */
 export const DECOY_KEY = "dpk_live_7f3c9a1e5b8d2f6a4c0e9b7d3a5f1c8e";
-export const carriesDecoy = (headers: Headers, url: URL): boolean => {
-  const hay = [headers.get("Authorization"), headers.get("apikey"), headers.get("X-Api-Key"), url.search].join(" ");
+const N = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
+
+/** The one-use key for a signature. Every valid signature also verifies with v
+ *  as 0/1 and with s flipped to n - s, so keying on the raw bytes would let one
+ *  signature be used four times. r and the low form of s identify it. Wallets
+ *  differ in which v they return, so other forms are folded, not rejected. */
+export function sigKey(sig: string): string {
+  const r = sig.slice(2, 66).toLowerCase();
+  const s = BigInt("0x" + sig.slice(66, 130));
+  const low = s > N / 2n ? N - s : s;
+  return r + low.toString(16).padStart(64, "0");
+}
+
+/** The key rate limits and blocks use. An IPv6 user holds a whole /64 and can
+ *  rotate through it freely, so v6 addresses are keyed on their /64. */
+export function ipKey(ip: string): string {
+  if (!ip.includes(":")) return ip;
+  const [head, tail = ""] = ip.toLowerCase().split("::");
+  const h = head ? head.split(":") : [];
+  const t = tail ? tail.split(":") : [];
+  const groups = ip.includes("::") ? [...h, ...Array(Math.max(0, 8 - h.length - t.length)).fill("0"), ...t] : h;
+  return groups.slice(0, 4).map((g) => g.replace(/^0+(?=.)/, "")).join(":") + "::/64";
+}
+
+/** Headers only: a key in the query string can be planted in an <img> on any
+ *  page, which would block every visitor who loads it. */
+export const carriesDecoy = (headers: Headers): boolean => {
+  const hay = [headers.get("Authorization"), headers.get("apikey"), headers.get("X-Api-Key")].join(" ");
   return hay.includes(DECOY_KEY);
 };
+
+/** Browsers send Sec-Fetch-*; scanners don't. A browser hitting a trap was
+ *  sent there by someone else's page (an <img> pointing at /admin), so it is
+ *  logged but never blocked. */
+export const fromBrowser = (headers: Headers): boolean =>
+  headers.has("Sec-Fetch-Mode") || headers.has("Sec-Fetch-Dest");
