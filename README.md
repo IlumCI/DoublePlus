@@ -206,6 +206,13 @@ Fees reach the splitter four ways, and each needs a keeper call:
 `split` pushes each share with a gas cap. A recipient that rejects keeps its
 credit for `claim(asset)` and cannot block the other side.
 
+`keeper/venture-treasury.mjs` makes these calls. Point it at the tenant with
+`DEPLOYMENT_FILE=../contracts/deployments/tenant-<slug>-<chainId>.json`. The
+same keeper then sells the keeper wallet's fee-income coins to ETH (capped
+at `MAX_SELL_BPS` per coin per run, floored at a static-call quote less
+`SLIPPAGE_BPS`) and unwraps WETH. On doubleplus it runs every 6 h as the
+`treasury` job in `venture-keepers.yml`.
+
 The deploy logic for both scripts lives in `scripts/lib/venture-stack.ts`.
 
 `MIN_TARGET_ETH` is the one to think about. Testnet runs 0.002 so a faucet wallet

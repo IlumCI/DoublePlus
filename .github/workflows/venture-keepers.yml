@@ -6,6 +6,8 @@ name: Venture keepers (doubleplus)
 #   flywheel — weekly: rank the epoch's routed volume, buy back & burn the
 #              top-3 ventures, rebate the top-10 traders, publish the epoch
 #              manifest to web/public/rewards/venture/.
+#   treasury — every 6 h: sell the treasury's fee-income coins to ETH, unwrap
+#              WETH, and (tenant stacks) pull/redeem/split the FeeSplitter.
 #
 # Required repo secret (crons no-op without it):
 #   VENTURE_KEEPER_PK   the keeper/treasury wallet key, funded for gas + jackpot
@@ -15,10 +17,11 @@ on:
   schedule:
     - cron: "*/15 * * * *" # ops (GitHub cron is best-effort)
     - cron: "0 12 * * 1" # flywheel: Mondays 12:00 UTC
+    - cron: "7 */6 * * *" # treasury: every 6 h
   workflow_dispatch:
     inputs:
       job:
-        description: "which keeper to run (ops | flywheel)"
+        description: "which keeper to run (ops | flywheel | treasury)"
         default: "ops"
 
 # Least privilege: read-only unless a job asks for more (flywheel commits
@@ -56,6 +59,28 @@ jobs:
         run: |
           if [ -z "$KEEPER_PRIVATE_KEY" ]; then echo "VENTURE_KEEPER_PK not set; skipping"; exit 0; fi
           node venture-ops.mjs
+
+  treasury:
+    if: github.event.schedule == '7 */6 * * *' || github.event.inputs.job == 'treasury'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "20"
+      - name: Install keeper deps
+        working-directory: keeper
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Convert fee income to ETH
+        working-directory: keeper
+        env:
+          KEEPER_PRIVATE_KEY: ${{ secrets.VENTURE_KEEPER_PK }}
+          RPC_URL: ${{ secrets.VENTURE_RPC_URL || 'https://rpc.testnet.chain.robinhood.com' }}
+          CHAIN_ID: ${{ vars.VENTURE_CHAIN_ID || '46630' }}
+        run: |
+          if [ -z "$KEEPER_PRIVATE_KEY" ]; then echo "VENTURE_KEEPER_PK not set; skipping"; exit 0; fi
+          node venture-treasury.mjs
 
   flywheel:
     if: github.event.schedule == '0 12 * * 1' || github.event.inputs.job == 'flywheel'
