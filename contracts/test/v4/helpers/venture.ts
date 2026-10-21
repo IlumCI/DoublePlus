@@ -43,6 +43,7 @@ export const DAY = 86_400;
 export async function deployStack(
   minTargetWei: bigint = 1n,
   ethUsdBand8: [bigint, bigint] = [ETH_USD_MIN_8, ETH_USD_MAX_8],
+  treasury?: string,
 ) {
   const [admin] = await ethers.getSigners();
   const weth = await (await ethers.getContractFactory("WETH9")).deploy();
@@ -60,7 +61,7 @@ export async function deployStack(
   const nonce = await ethers.provider.getTransactionCount(admin.address);
   const predictedFactory = ethers.getCreateAddress({ from: admin.address, nonce: nonce + 2 });
   const hook = await (await ethers.getContractFactory("VentureFeeHook")).deploy(
-    placeholder, admin.address, predictedFactory, 100, 2000,
+    placeholder, treasury ?? admin.address, predictedFactory, 100, 2000,
   );
   await hook.waitForDeployment();
   const tokenDeployer = await (await ethers.getContractFactory("VentureTokenDeployer")).deploy(predictedFactory);

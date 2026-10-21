@@ -174,6 +174,40 @@ the factory's expected lifetime in mind.
 The script's own header comment says `PLATFORM_FEE_BPS` defaults to 100; the code
 says 55. The code is right.
 
+### Tenant stacks (other brands on the venture contracts)
+
+A tenant gets its own full venture stack (hook, factory, router, updates) whose
+`platformTreasury` is a `FeeSplitter`. Every protocol fee the stack earns
+(curve fees, creation fees, swept escrow, the hook's per-swap fee) lands in the
+splitter and leaves `PROTOCOL_BPS` to the protocol, the rest to the tenant. The
+factory and hook bytecode are unchanged; the cut is enforced by where the fees
+are addressed.
+
+```bash
+ROBINHOOD_RPC_URL=… ROBINHOOD_CHAIN_ID=4663 \
+TENANT_SLUG=acme TENANT_TREASURY=0x… PROTOCOL_TREASURY=0x… PROTOCOL_BPS=1000 \
+npx hardhat run scripts/deploy-tenant.ts --network robinhood
+```
+
+Writes `deployments/tenant-<slug>-<chainId>.json`: the usual venture fields
+plus a `tenant` block (slug, both treasuries, `protocolBps`, splitter). Every
+other env var from the venture table applies. `ADMIN` stays with the protocol
+unless set.
+
+Fees reach the splitter four ways, and each needs a keeper call:
+
+| Inflow | Call |
+| --- | --- |
+| Factory fee ledger (ETH) | `splitter.pullFactory(factory)` |
+| Hook `take` (WETH, coin) | lands directly |
+| Hook `mint` fallback (ERC-6909) | `splitter.redeem6909(currency, amount)` |
+| Then, per asset | `splitter.split(asset)` (`0x0` = ETH) |
+
+`split` pushes each share with a gas cap. A recipient that rejects keeps its
+credit for `claim(asset)` and cannot block the other side.
+
+The deploy logic for both scripts lives in `scripts/lib/venture-stack.ts`.
+
 `MIN_TARGET_ETH` is the one to think about. Testnet runs 0.002 so a faucet wallet
 can drive a raise to graduation; **mainnet ships 2**. It must stay above what the
 whole curve costs at the contract's `START_MCAP_USD_8` of $750 (0.24 ETH at
