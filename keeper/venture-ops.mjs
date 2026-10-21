@@ -60,11 +60,26 @@ class SpendCap extends Error {}
 async function send(label, fn) {
   if (DRY_RUN) return;
   if (stats.spentWei >= MAX_SPEND_WEI) { stats.stoppedAtCap = true; throw new SpendCap(label); }
-  const rc = await (await fn()).wait();
+  const cost = (rc) => (rc?.gasUsed ?? 0n) * (rc?.gasPrice ?? rc?.effectiveGasPrice ?? 0n);
+  let rc;
+  try {
+    rc = await (await fn()).wait();
+  } catch (e) {
+    // A reverted tx still burned gas: count it, or anyone whose order or
+    // payout reverts on chain (after passing the simulation) could drain the
+    // keeper a run at a time without ever reaching the cap.
+    if (e?.receipt) { stats.sent++; stats.spentWei += cost(e.receipt); }
+    throw e;
+  }
   stats.sent++;
-  stats.spentWei += (rc?.gasUsed ?? 0n) * (rc?.gasPrice ?? rc?.effectiveGasPrice ?? 0n);
+  stats.spentWei += cost(rc);
   return rc;
 }
+
+// Gas ceilings for txs whose cost a stranger controls (an order owner's or a
+// holder's contract receiving ETH can burn whatever gas it's given).
+const FILL_GAS = 2_500_000n; // testnet fills peaked at 677k
+const COLLECT_GAS = 1_200_000n;
 
 // Batches that skip a failing item (claimForMany's try/catch, refundMany's
 // gas-capped sends) can't be gas-estimated: the estimator only needs the
@@ -154,20 +169,27 @@ async function fillLimitOrders() {
     const o = await limitOrders.order(id);
     if (o.amountIn === 0n) continue;
     try {
-      await limitOrders.fill.staticCall(id);
+      await limitOrders.fill.staticCall(id, { gasLimit: FILL_GAS });
     } catch { continue; } // not fillable yet
     console.log(`fill limit order ${id} (${o.isBuy ? "buy" : "sell"} ${o.coin})`);
-    await send(`fill ${id}`, () => limitOrders.fill(id));
-    stats.limitFilled++;
+    // One order failing on chain must not stop the orders after it.
+    try {
+      await send(`fill ${id}`, () => limitOrders.fill(id, { gasLimit: FILL_GAS }));
+      stats.limitFilled++;
+    } catch (e) {
+      if (e instanceof SpendCap) throw e;
+      stats.failed++;
+      console.log(`fill ${id} failed: ${String(e?.shortMessage ?? e?.message ?? e).slice(0, 160)}`);
+    }
   }
 }
 
 /** Convert a 5x holder's dividends into what they picked. */
 async function collectPayout(coin, holder) {
-  const quoted = await payouts.collect.staticCall(coin, holder, 0n);
+  const quoted = await payouts.collect.staticCall(coin, holder, 0n, { gasLimit: COLLECT_GAS });
   if (quoted === 0n) return;
   const minOut = (quoted * (10_000n - PAYOUT_SLIPPAGE_BPS)) / 10_000n;
-  await send(`collect ${coin} ${holder}`, () => payouts.collect(coin, holder, minOut));
+  await send(`collect ${coin} ${holder}`, () => payouts.collect(coin, holder, minOut, { gasLimit: COLLECT_GAS }));
   stats.payoutsConverted++;
 }
 
