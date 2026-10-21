@@ -19,8 +19,13 @@ export function safeLinkUrl(u: string | undefined): string {
 }
 
 // Bidi overrides and isolates, zero-width and other invisible format marks,
-// and C0/C1 controls (newlines and tabs are kept where a field allows them).
-const INVISIBLE = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u00AD\u061C\u180E\u200B-\u200F\u202A-\u202E\u2060-\u2069\uFEFF\uFFF9-\uFFFB]/g;
+// blank-looking letters (Hangul fillers, Braille blank) that make a name look
+// empty, tag characters, and C0/C1 controls (newlines and tabs are kept where
+// a field allows them).
+const INVISIBLE = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u00AD\u061C\u115F\u1160\u180E\u200B-\u200F\u202A-\u202E\u2060-\u2069\u2800\u3164\uFEFF\uFFA0\uFFF9-\uFFFB\u{E0000}-\u{E007F}]/gu;
+// Stacked combining marks ("zalgo") draw over the rows above and below; two
+// per letter covers every real script.
+const STACKED_MARKS = /(\p{M}{2})\p{M}+/gu;
 
 /** Creator text made safe to display: right-to-left overrides (which turn
  *  "\u202Egnp.exe" into "exe.png" and flip whatever follows them, our own
@@ -28,7 +33,7 @@ const INVISIBLE = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u00AD\u0
  *  unless `multiline`, length capped. */
 export function cleanText(raw: unknown, max: number, multiline = false): string {
   if (typeof raw !== "string") return "";
-  let t = raw.replace(INVISIBLE, "");
+  let t = raw.replace(INVISIBLE, "").replace(STACKED_MARKS, "$1");
   t = multiline ? t.replace(/\r\n?/g, "\n").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n") : t.replace(/\s+/g, " ");
   t = t.trim();
   const chars = [...t];

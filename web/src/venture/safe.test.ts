@@ -63,3 +63,14 @@ describe("cleanText", () => {
     expect(cleanText({ a: 1 }, 10)).toBe("");
   });
 });
+
+describe("cleanText blank and stacked characters", () => {
+  it("drops blank-looking letters and tag characters", () => {
+    expect(cleanText("\u3164\u2800\u115F", 20)).toBe("");
+    expect(cleanText("a\u{E0041}b", 20)).toBe("ab");
+  });
+  it("keeps at most two combining marks per letter", () => {
+    expect(cleanText("e\u0301\u0302\u0303\u0304x", 20)).toBe("e\u0301\u0302x");
+    expect(cleanText("caf\u00e9 \u1ec7", 20)).toBe("caf\u00e9 \u1ec7");
+  });
+});
