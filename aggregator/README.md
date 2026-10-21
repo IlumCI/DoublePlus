@@ -49,7 +49,14 @@ guessed at.
 npm install
 cp sources.example.json sources.json   # then edit it
 npm run build && npm start             # or: npm run dev
-npm test                               # 20 tests
+npm test                               # 30 tests
+```
+
+`sources.testnet.json` is committed and ready to run against the live Robinhood Chain testnet
+venture stack — public RPC, public addresses, nothing secret:
+
+```bash
+SOURCES_FILE=sources.testnet.json npm start
 ```
 
 | Variable | Default |
@@ -110,6 +117,18 @@ scores its own formats on.
 The median, not the mean: a few coins that sat on a curve for months would drag a mean far enough
 that two launchpads could not be told apart. Coins whose timestamps are impossible — a graduation
 before its own launch, from a reorg or a bad block read — are dropped rather than counted as speed.
+
+The implied rate is **capped at one turnover a day**, matching the foundry's own fitness. This is not
+theoretical: run against the live testnet stack it first reported *181,365 turnovers a year*, off a
+median of 174 seconds — a smoke-test coin whose operator filled his own curve in three minutes. The
+median seconds is the fact; the rate is an interpretation, and an interpretation that says 181,365 is
+wrong.
+
+`fastGraduations` counts graduations completed in under ten minutes. A curve filled in minutes is the
+launchpad's operator buying his own coin to the threshold, not demand for it. It is counted and
+labelled rather than quietly excluded, because it is a real fact about that launchpad — just not the
+one turnover is measuring. Read it beside the graduation rate: a pad with a high rate and a high
+fast count is graduating its own coins.
 
 ## Not built here
 

@@ -44,8 +44,20 @@ export interface SourceStats {
   medianTurnoverSecs: number | null;
   /** Turnovers per year implied by that median — Marx's `n`. Two launchpads
    *  graduating the same share of their coins are not equally good businesses
-   *  if one does it in a week and the other in a quarter. */
+   *  if one does it in a week and the other in a quarter.
+   *
+   *  Capped at MAX_TURNOVERS_PER_YEAR, as the foundry's own fitness is. Run
+   *  against real testnet data this reported 181,365 turnovers a year, off a
+   *  median of 174 seconds — a smoke-test coin whose operator filled his own
+   *  curve in three minutes. The median seconds beside it is the fact; this is
+   *  an interpretation of it, and an interpretation that says 181,365 is
+   *  simply wrong. */
   turnoversPerYear: number | null;
+  /** Graduations that completed implausibly fast. A curve filled in minutes is
+   *  the launchpad's operator buying his own coin to the threshold, not demand
+   *  for it. Counted and labelled rather than silently dropped: it is a real
+   *  fact about the launchpad, just not the one turnover is measuring. */
+  fastGraduations: number;
 }
 
 export interface ChainStats {
@@ -55,6 +67,7 @@ export interface ChainStats {
   graduationRate: number | null;
   medianTurnoverSecs: number | null;
   turnoversPerYear: number | null;
+  fastGraduations: number;
   sources: SourceStats[];
 }
 
@@ -74,6 +87,11 @@ function rate(launches: number, graduations: number): number | null {
 }
 
 const SECONDS_PER_YEAR = 31_557_600;
+/** A turnover a day is as fast as this will credit, matching the foundry's own
+ *  cap. Without it one self-dealt graduation dominates every comparison. */
+export const MAX_TURNOVERS_PER_YEAR = 365;
+/** Under this, a graduation is the operator filling his own curve. */
+export const FAST_GRADUATION_SECS = 600;
 
 /** Median of a sorted-or-unsorted list of seconds, or null when empty. */
 function medianSecs(values: number[]): number | null {
@@ -84,7 +102,12 @@ function medianSecs(values: number[]): number | null {
 }
 
 function perYear(medianSecs: number | null): number | null {
-  return medianSecs && medianSecs > 0 ? SECONDS_PER_YEAR / medianSecs : null;
+  if (!medianSecs || medianSecs <= 0) return null;
+  return Math.min(SECONDS_PER_YEAR / medianSecs, MAX_TURNOVERS_PER_YEAR);
+}
+
+function countFast(values: number[]): number {
+  return values.filter((v) => v < FAST_GRADUATION_SECS).length;
 }
 
 export function saturation(store: Store, windowDays: number, now = Math.floor(Date.now() / 1000)): SaturationReport {
@@ -113,11 +136,13 @@ export function saturation(store: Store, windowDays: number, now = Math.floor(Da
         graduationRate: null,
         medianTurnoverSecs: null,
         turnoversPerYear: null,
+        fastGraduations: 0,
         sources: [],
       } satisfies ChainStats);
     chain.launches += launches;
     chain.graduations += graduations;
-    const sourceMedian = medianSecs(bySourceTurnover.get(`${r.chain_id}:${r.source_id}`) ?? []);
+    const sourceTurnovers = bySourceTurnover.get(`${r.chain_id}:${r.source_id}`) ?? [];
+    const sourceMedian = medianSecs(sourceTurnovers);
     chain.sources.push({
       chainId: r.chain_id,
       sourceId: r.source_id,
@@ -126,14 +151,22 @@ export function saturation(store: Store, windowDays: number, now = Math.floor(Da
       graduationRate: rate(launches, graduations),
       medianTurnoverSecs: sourceMedian,
       turnoversPerYear: perYear(sourceMedian),
+      fastGraduations: countFast(sourceTurnovers),
     });
     byChain.set(r.chain_id, chain);
   }
 
   const chains = [...byChain.values()]
     .map((c) => {
-      const m = medianSecs(byChainTurnover.get(c.chainId) ?? []);
-      return { ...c, graduationRate: rate(c.launches, c.graduations), medianTurnoverSecs: m, turnoversPerYear: perYear(m) };
+      const all = byChainTurnover.get(c.chainId) ?? [];
+      const m = medianSecs(all);
+      return {
+        ...c,
+        graduationRate: rate(c.launches, c.graduations),
+        medianTurnoverSecs: m,
+        turnoversPerYear: perYear(m),
+        fastGraduations: countFast(all),
+      };
     })
     .sort((a, b) => b.launches - a.launches);
 

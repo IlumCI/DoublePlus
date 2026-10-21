@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { adapterFor, genericAdapter, ventureAdapter } from "./adapters.js";
 import type { SourceConfig } from "./config.js";
 import { makeStore, openDb, type Store } from "./db.js";
-import { saturation } from "./saturation.js";
+import { MAX_TURNOVERS_PER_YEAR, saturation } from "./saturation.js";
 
 function store(): Store {
   return makeStore(openDb(join(mkdtempSync(join(tmpdir(), "agg-")), "test.db")));
@@ -310,6 +310,47 @@ describe("turnover: how fast each launchpad reaches an open market", () => {
       { addr: "0x04".padEnd(42, "0"), days: 30, source: "b" },
     ]);
     expect(saturation(s, 90, now).chains[0]!.medianTurnoverSecs).toBe(30 * DAY);
+  });
+
+  it("caps the implied rate, so one self-dealt graduation cannot dominate", () => {
+    const s = store();
+    // Measured against the real testnet stack this came out at 181,365
+    // turnovers a year, from a coin whose operator filled his own curve in
+    // 174 seconds. The median seconds stays as the fact; the rate is capped.
+    seed(s, [{ addr: "0x01".padEnd(42, "0"), days: 174 / 86_400 }]);
+    const src = saturation(s, 30, now).chains[0]!.sources[0]!;
+    expect(src.medianTurnoverSecs).toBe(174);
+    expect(src.turnoversPerYear).toBe(MAX_TURNOVERS_PER_YEAR);
+  });
+
+  it("counts a graduation that completed in minutes as self-dealt", () => {
+    const s = store();
+    seed(s, [
+      { addr: "0x01".padEnd(42, "0"), days: 120 / 86_400 }, // 2 minutes
+      { addr: "0x02".padEnd(42, "0"), days: 5 },
+      { addr: "0x03".padEnd(42, "0"), days: 9 },
+    ]);
+    const src = saturation(s, 30, now).chains[0]!.sources[0]!;
+    expect(src.fastGraduations).toBe(1);
+    // Labelled, not dropped: it still counts as a graduation.
+    expect(src.graduations).toBe(3);
+    expect(src.medianTurnoverSecs).toBe(5 * DAY);
+  });
+
+  it("counts fast graduations at the chain level too", () => {
+    const s = store();
+    seed(s, [
+      { addr: "0x01".padEnd(42, "0"), days: 60 / 86_400, source: "a" },
+      { addr: "0x02".padEnd(42, "0"), days: 60 / 86_400, source: "b" },
+      { addr: "0x03".padEnd(42, "0"), days: 7, source: "b" },
+    ]);
+    expect(saturation(s, 30, now).chains[0]!.fastGraduations).toBe(2);
+  });
+
+  it("flags nothing when every graduation took a plausible time", () => {
+    const s = store();
+    seed(s, [{ addr: "0x01".padEnd(42, "0"), days: 3 }, { addr: "0x02".padEnd(42, "0"), days: 8 }]);
+    expect(saturation(s, 30, now).chains[0]!.sources[0]!.fastGraduations).toBe(0);
   });
 
   it("reports nothing rather than zero when no coin graduated", () => {
