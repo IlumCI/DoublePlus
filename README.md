@@ -174,6 +174,23 @@ the factory's expected lifetime in mind.
 The script's own header comment says `PLATFORM_FEE_BPS` defaults to 100; the code
 says 55. The code is right.
 
+### The aggregator and its router
+
+A launchpad earns only from the coins it launched; a terminal earns from every coin on the chain.
+`aggregator/` indexes every launchpad it is pointed at — ours by its known ABI, anyone else's from a
+launch event described in `sources.json` — and `contracts/contracts/v4/AggregatorRouter.sol` charges
+on routed volume through any pool, V4 or V3.
+
+The router's fee is taken from the **input**, before the swap, so it is knowable before signing and
+cannot be dodged with a slippage game. It is capped at 1% (`MAX_FEE_BPS`), the treasury and the rate
+are immutable, and there is no admin withdraw: the contract never holds a user's funds past the
+transaction. `VentureRouter` stays the launchpad's router — it reads the pair from `factory.listings`
+and refuses anything else — while `AggregatorRouter` takes the pool from the caller, so a launchpad
+we have never heard of is tradeable the day it ships.
+
+The aggregator also answers how crowded each chain is, which is what the foundry's selection loop
+divides its fee income by. Read `aggregator/README.md` for what that measure can and cannot see.
+
 ### Tenant stacks (other brands on the venture contracts)
 
 A tenant gets its own full venture stack (hook, factory, router, updates) whose

@@ -4,13 +4,14 @@
   "private": true,
   "description": "Multi-brand token launchpad monorepo. One web app builds six flavors (VITE_BRAND) across Robinhood Chain, Base, Arc and Stable; contracts/ carries every deployed generation.",
   "workspaces": [
+    "aggregator",
     "contracts",
     "sdk",
     "web"
   ],
   "scripts": {
     "build": "npm run build -w sdk && npm run build -w web",
-    "test": "npm run test -w contracts && npm run test -w web",
+    "test": "npm run test -w contracts && npm run test -w aggregator && npm run test -w web",
     "compile": "npm run compile -w contracts"
   }
 }

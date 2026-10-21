@@ -26,3 +26,9 @@ api/.secrets.local
 api/.dev.vars
 api/node_modules/
 api/.wrangler/
+
+# aggregator local state (SQLite index, resolved source config)
+aggregator/data/
+aggregator/dist/
+aggregator/node_modules/
+aggregator/sources.json
