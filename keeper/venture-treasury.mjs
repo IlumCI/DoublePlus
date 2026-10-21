@@ -13,7 +13,10 @@
 //      ch. 30 says is "enormously reduced in times of crisis"
 //      through the venture router (coin -> WETH -> ETH), with a slippage floor
 //      taken from a static-call quote;
-//   3) unwrap any WETH the wallet holds.
+//   3) unwrap any WETH the wallet holds;
+//   4) register newly graduated coins with the syndicate registry, if this
+//      stack is a member, so the shared router starts paying us for volume on
+//      them. A registry nobody populates pays nobody.
 //
 // Step 2 sells the wallet's own coins, so it converts fees only where the
 // keeper wallet is the treasury (doubleplus) or the protocol's splitter
@@ -27,6 +30,9 @@
 //                       decide (2000 expansion / 2500 normal / 6000 contraction)
 //   VOLUME_WINDOW_BLOCKS (default 200000) blocks of routed volume that make up
 //                       one regime observation
+//   AGGREGATOR_DEPLOYMENT  the aggregator deployment JSON (default
+//                       ../contracts/deployments/aggregator-<chainId>.json).
+//                       Absent, or this stack not being a member, skips step 4.
 //   REGIME_FILE         where the trailing series lives (default
 //                       ../web/public/rewards/venture/regime.json). CI runners
 //                       keep no disk, so the workflow commits it.
@@ -78,6 +84,11 @@ const ERC20_ABI = [
   "function approve(address,uint256) returns (bool)",
 ];
 const WETH_ABI = [...ERC20_ABI, "function withdraw(uint256)"];
+const REGISTRY_ABI = [
+  "function beneficiaryOfFactory(address) view returns (address)",
+  "function factoryOfCoin(address) view returns (address)",
+  "function registerCoin(address factory, address coin)",
+];
 const SPLITTER_ABI = [
   "function pullFactory(address) returns (uint256)",
   "function redeem6909(address currency, uint256 amount)",
@@ -86,7 +97,7 @@ const SPLITTER_ABI = [
 ];
 const PM_ABI = ["function balanceOf(address owner, uint256 id) view returns (uint256)"];
 
-const stats = { sent: 0, spentWei: 0n, splits: 0, redeemed: 0, sold: 0, soldEthWei: 0n, unwrappedWei: 0n, skipped: 0, failed: 0, stoppedAtCap: false };
+const stats = { sent: 0, spentWei: 0n, splits: 0, redeemed: 0, registered: 0, sold: 0, soldEthWei: 0n, unwrappedWei: 0n, skipped: 0, failed: 0, stoppedAtCap: false };
 class SpendCap extends Error {}
 async function send(label, fn) {
   if (DRY_RUN) { console.log(`[dry-run] ${label}`); return null; }
@@ -203,6 +214,43 @@ async function quoteHeldCoins(all) {
   return out;
 }
 
+/** Load the aggregator deployment for this chain, or null when there is none. */
+function loadAggregator() {
+  const explicit = process.env.AGGREGATOR_DEPLOYMENT?.trim();
+  const path = explicit || join(here, `../contracts/deployments/aggregator-${Number(dep.chainId)}.json`);
+  if (!existsSync(path)) return null;
+  try {
+    const a = JSON.parse(readFileSync(path, "utf8"));
+    if (Number(a.chainId) !== Number(dep.chainId)) {
+      console.warn(`${path} is for chain ${a.chainId}, not ${dep.chainId}; skipping registration`);
+      return null;
+    }
+    return a?.contracts?.registry ? a : null;
+  } catch (e) {
+    console.warn(`could not read ${path}: ${e.message}`);
+    return null;
+  }
+}
+
+/** Register graduated coins so the shared router pays this stack for their
+ *  volume. Skipped silently when the stack is not a member: registerCoin
+ *  would revert, and not being in the syndicate is a choice, not a fault. */
+async function registerCoins(all, agg) {
+  const registry = new ethers.Contract(agg.contracts.registry, REGISTRY_ABI, wallet);
+  const beneficiary = await registry.beneficiaryOfFactory(dep.contracts.factory);
+  if (beneficiary === ZERO) {
+    console.log(`not a syndicate member on ${agg.contracts.registry}; skipping registration`);
+    return;
+  }
+  for (const { coin, graduated } of all) {
+    // Only graduated coins trade through the router, so only they can earn.
+    if (!graduated) continue;
+    if ((await registry.factoryOfCoin(coin)) !== ZERO) continue;
+    await send(`registry.registerCoin ${coin}`, () => registry.registerCoin(dep.contracts.factory, coin));
+    stats.registered++;
+  }
+}
+
 function readRegime(all) {
   return (async () => {
     let series = [];
@@ -245,7 +293,15 @@ async function main() {
   const sellBps = MAX_SELL_BPS_OVERRIDE ?? BigInt(policy.sellBps);
   console.log(`regime: ${regime} (${reasons.join("; ")}) -> selling ${sellBps} bps per coin`);
 
+  const agg = loadAggregator();
   try {
+    if (agg) {
+      try { await registerCoins(all, agg); } catch (e) {
+        if (e instanceof SpendCap) throw e;
+        console.warn(`registration failed: ${e.shortMessage ?? e.message}`);
+        stats.failed++;
+      }
+    }
     if (dep.tenant?.splitter) await serviceSplitter(all);
     for (const { coin, graduated } of all) {
       if (!graduated) continue;

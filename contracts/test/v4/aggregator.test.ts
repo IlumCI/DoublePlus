@@ -28,6 +28,8 @@ async function setup(feeBps: bigint = FEE_BPS) {
     await weth.getAddress(),
     treasury.address,
     feeBps,
+    ethers.ZeroAddress, // no syndicate: the fee is all the treasury's
+    0,
   );
   return { deployer, trader, treasury, other, weth, coin, v3, router };
 }
@@ -40,10 +42,13 @@ describe("AggregatorRouter", function () {
     const weth = await (await ethers.getContractFactory("WETH9")).deploy();
     const w = await weth.getAddress();
     const F = await ethers.getContractFactory("AggregatorRouter");
-    await expect(F.deploy(w, w, ethers.ZeroAddress, treasury.address, 100)).to.be.revertedWithCustomError(F, "BadConfig");
-    await expect(F.deploy(w, w, w, ethers.ZeroAddress, 100)).to.be.revertedWithCustomError(F, "BadConfig");
+    const Z = ethers.ZeroAddress;
+    await expect(F.deploy(w, w, Z, treasury.address, 100, Z, 0)).to.be.revertedWithCustomError(F, "BadConfig");
+    await expect(F.deploy(w, w, w, Z, 100, Z, 0)).to.be.revertedWithCustomError(F, "BadConfig");
     // Above the 1% ceiling.
-    await expect(F.deploy(w, w, w, treasury.address, 101)).to.be.revertedWithCustomError(F, "BadConfig");
+    await expect(F.deploy(w, w, w, treasury.address, 101, Z, 0)).to.be.revertedWithCustomError(F, "BadConfig");
+    // A rebate above the whole fee would pay out money never taken.
+    await expect(F.deploy(w, w, w, treasury.address, 100, Z, 10_001)).to.be.revertedWithCustomError(F, "BadConfig");
   });
 
   it("caps the fee at 1% and quotes it before the trade", async () => {

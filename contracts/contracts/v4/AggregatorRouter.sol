@@ -13,6 +13,8 @@ import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
 import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
 
+import {SyndicateRegistry} from "./SyndicateRegistry.sol";
+
 interface IWrappedNative {
     function deposit() external payable;
     function withdraw(uint256) external;
@@ -64,6 +66,19 @@ contract AggregatorRouter is IUnlockCallback, ReentrancyGuard {
     address public immutable treasury;
     uint16 public immutable feeBps;
 
+    /// @notice The syndicate's membership roll, or the zero address for no
+    ///         syndicate at all. See SyndicateRegistry: this router is the
+    ///         "central sales agency" that makes leaving cost something.
+    SyndicateRegistry public immutable registry;
+    /// @notice The share of this router's fee paid to a member whose coin the
+    ///         trade touched, in basis points of the fee.
+    uint16 public immutable rebateBps;
+
+    /// @notice Rebates credited but not yet taken, by beneficiary and token.
+    ///         Credited rather than pushed: a member treasury that reverts or
+    ///         burns gas must never be able to fail a stranger's trade.
+    mapping(address beneficiary => mapping(address token => uint256)) public owed;
+
     struct V4Swap {
         PoolKey key;
         bool zeroForOne;
@@ -79,21 +94,37 @@ contract AggregatorRouter is IUnlockCallback, ReentrancyGuard {
         uint256 amountOut,
         uint256 feeAmount
     );
+    event RebateAccrued(address indexed beneficiary, address indexed token, address indexed coin, uint256 amount);
+    event RebateClaimed(address indexed beneficiary, address indexed token, uint256 amount);
 
     error BadConfig();
     error Slippage();
     error NoInput();
+    error NothingOwed();
     error NotPoolManager();
     error EthTransferFailed();
     error WrongInputForEth();
 
-    constructor(IPoolManager pm, ISwapRouterV3 v3Router_, address weth_, address treasury_, uint16 feeBps_) {
+    constructor(
+        IPoolManager pm,
+        ISwapRouterV3 v3Router_,
+        address weth_,
+        address treasury_,
+        uint16 feeBps_,
+        SyndicateRegistry registry_,
+        uint16 rebateBps_
+    ) {
         if (weth_ == address(0) || treasury_ == address(0) || feeBps_ > MAX_FEE_BPS) revert BadConfig();
+        // A rebate above the whole fee would pay out money the router never
+        // took. Note a rebate with no registry is simply never reachable.
+        if (rebateBps_ > BPS) revert BadConfig();
         poolManager = pm;
         v3Router = v3Router_;
         weth = weth_;
         treasury = treasury_;
         feeBps = feeBps_;
+        registry = registry_;
+        rebateBps = rebateBps_;
     }
 
     /// @dev Only the WETH contract pays this, on withdraw().
@@ -108,9 +139,10 @@ contract AggregatorRouter is IUnlockCallback, ReentrancyGuard {
     // Taking the input: either native ETH (wrapped here) or an ERC-20
     // ---------------------------------------------------------------------
 
-    /// @dev Pulls `amountIn` of `tokenIn` in, charges the fee, and returns what
-    ///      is left to trade. With native ETH the caller sends value and names
-    ///      WETH as the input.
+    /// @dev Pulls `amountIn` of `tokenIn` in and works out the fee, leaving it
+    ///      held here for `_settleFee` to divide once the caller knows both
+    ///      sides of the trade. With native ETH the caller sends value and
+    ///      names WETH as the input.
     function _takeInput(address tokenIn, uint256 amountIn) private returns (uint256 netIn, uint256 fee) {
         if (msg.value > 0) {
             if (tokenIn != weth) revert WrongInputForEth();
@@ -122,9 +154,48 @@ contract AggregatorRouter is IUnlockCallback, ReentrancyGuard {
         }
         if (amountIn == 0) revert NoInput();
         fee = (amountIn * feeBps) / BPS;
-        if (fee > 0) IERC20(tokenIn).safeTransfer(treasury, fee);
         netIn = amountIn - fee;
         if (netIn == 0) revert NoInput();
+    }
+
+    /// @dev Divide the fee: a share to the syndicate member whose coin this
+    ///      trade touched, the rest to the treasury.
+    ///
+    ///      Which coin counts is read from the pool, never from an argument.
+    ///      A caller who could name the coin would simply name a member coin
+    ///      on every unrelated trade and collect the rebate. The output side
+    ///      is checked first and then the input, so a buy and a sell of the
+    ///      same coin both pay its launchpad.
+    function _settleFee(address tokenIn, uint256 fee, address tokenOut) private {
+        if (fee == 0) return;
+        uint256 toTreasury = fee;
+        if (address(registry) != address(0) && rebateBps > 0) {
+            address coin = tokenOut;
+            address beneficiary = registry.beneficiaryFor(coin);
+            if (beneficiary == address(0)) {
+                coin = tokenIn;
+                beneficiary = registry.beneficiaryFor(coin);
+            }
+            if (beneficiary != address(0)) {
+                uint256 rebate = (fee * rebateBps) / BPS;
+                if (rebate > 0) {
+                    owed[beneficiary][tokenIn] += rebate;
+                    toTreasury = fee - rebate;
+                    emit RebateAccrued(beneficiary, tokenIn, coin, rebate);
+                }
+            }
+        }
+        if (toTreasury > 0) IERC20(tokenIn).safeTransfer(treasury, toTreasury);
+    }
+
+    /// @notice Take what the syndicate owes you. Pull, not push: a trade must
+    ///         never fail because a member's treasury cannot receive.
+    function claimRebate(address token) external nonReentrant returns (uint256 amount) {
+        amount = owed[msg.sender][token];
+        if (amount == 0) revert NothingOwed();
+        owed[msg.sender][token] = 0;
+        IERC20(token).safeTransfer(msg.sender, amount);
+        emit RebateClaimed(msg.sender, token, amount);
     }
 
     /// @dev Hands the proceeds to the recipient, unwrapping to native ETH when
@@ -167,6 +238,7 @@ contract AggregatorRouter is IUnlockCallback, ReentrancyGuard {
         address tokenIn = Currency.unwrap(zeroForOne ? key.currency0 : key.currency1);
         address tokenOut = Currency.unwrap(zeroForOne ? key.currency1 : key.currency0);
         (uint256 netIn, uint256 fee) = _takeInput(tokenIn, amountIn);
+        _settleFee(tokenIn, fee, tokenOut);
 
         bytes memory res = poolManager.unlock(abi.encode(V4Swap(key, zeroForOne, netIn, hookData)));
         amountOut = abi.decode(res, (uint256));
@@ -199,9 +271,9 @@ contract AggregatorRouter is IUnlockCallback, ReentrancyGuard {
 
     function _resolve(Currency currency, int128 amount) private {
         if (amount < 0) {
-            uint256 owed = uint256(uint128(-amount));
+            uint256 due = uint256(uint128(-amount));
             poolManager.sync(currency);
-            IERC20(Currency.unwrap(currency)).safeTransfer(address(poolManager), owed);
+            IERC20(Currency.unwrap(currency)).safeTransfer(address(poolManager), due);
             poolManager.settle();
         } else if (amount > 0) {
             poolManager.take(currency, address(this), uint256(uint128(amount)));
@@ -225,6 +297,7 @@ contract AggregatorRouter is IUnlockCallback, ReentrancyGuard {
         address tokenIn = address(bytes20(path[:20]));
         address tokenOut = address(bytes20(path[path.length - 20:]));
         (uint256 netIn, uint256 fee) = _takeInput(tokenIn, amountIn);
+        _settleFee(tokenIn, fee, tokenOut);
 
         IERC20(tokenIn).forceApprove(address(v3Router), netIn);
         // The router pays this contract, not the recipient, so the output can

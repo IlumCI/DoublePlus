@@ -220,6 +220,47 @@ we have never heard of is tradeable the day it ships.
 The aggregator also answers how crowded each chain is, which is what the foundry's selection loop
 divides its fee income by. Read `aggregator/README.md` for what that measure can and cannot see.
 
+#### The syndicate: making a tenant's exit cost something
+
+The tenant section below says a brand cannot escape the protocol cut without losing our keepers,
+index and routing. In the contracts that was false. A tenant gets its own factory, its own hook and
+its own router; the split is enforced only by where fees happen to be addressed, and nothing stopped
+them deploying the same stack alone. The moat was a claim.
+
+Hilferding describes what a real one is. A cartel resting on terms is weak — "A mere price agreement
+will only be effective in periods of prosperity" — and the durable ones move their members' selling
+into "a central sales agency of the cartel", so that "A member enterprise which leaves the cartel has
+to renew relations with its customers, re-establish its sales outlets", and "such attempts may well
+fail, or succeed only at considerable cost." The binding is the channel: the cartel binds members
+"not only by the terms of the agreement."
+
+`AggregatorRouter` is that channel and `SyndicateRegistry` is the membership roll. Volume routed
+through the router on a member launchpad's coin pays that launchpad `REBATE_BPS` of the router's fee
+(default 30% of 1%) — **including volume the member never brought**, because the terminal's own users
+trade whatever is listed. Deregistering a launchpad stops that stream for every coin it ever
+launched.
+
+Three properties that make it hold rather than merely look like it holds:
+
+- **The beneficiary is read live, through the coin's factory.** A snapshot taken at registration
+  would keep paying a departed tenant forever on everything they had already launched, which is no
+  exit cost at all.
+- **The coin is taken from the pool, never from an argument.** A caller who could name the coin
+  would name a member's on every unrelated trade and collect the rebate.
+- **Rebates accrue and are pulled.** A member treasury that reverts must never be able to fail a
+  stranger's trade.
+
+Nothing is ever clawed back: a departing member keeps what it already earned and claims it normally.
+The cost is the future, not a seizure.
+
+**What this is not.** It binds only in proportion to the volume we actually route, so it is a moat
+that grows with the aggregator rather than one that exists on deployment day. It cannot stop anyone
+deploying their own stack. It makes staying strictly better than leaving, which is the whole of what
+Hilferding claims for a syndicate, and it is worth being clear that is the ceiling.
+
+The treasury keeper registers graduated coins automatically when the stack is a member, because a
+registry nobody populates pays nobody.
+
 ### Tenant stacks (other brands on the venture contracts)
 
 A tenant gets its own full venture stack (hook, factory, router, updates) whose
