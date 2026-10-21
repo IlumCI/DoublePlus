@@ -18,6 +18,7 @@ import { Wallpaper } from "./longhorn/Wallpaper";
 import { useVentures } from "./useVentures";
 import { diffWatched, notify } from "./alerts";
 import { useUi } from "../store";
+import { hasConsoleSession } from "./console";
 import "./venture.css";
 import "./longhorn.css";
 
@@ -33,6 +34,9 @@ const Flywheel = lazy(() => import("./Flywheel").then((m) => ({ default: m.Flywh
 const Stats = lazy(() => import("./Stats").then((m) => ({ default: m.Stats })));
 const Docs = lazy(() => import("./Docs").then((m) => ({ default: m.Docs })));
 const Legal = lazy(() => import("./Legal"));
+// The operator's launch console. Its own chunk, which only an operator ever
+// downloads: there is no link to it unless this browser has signed in.
+const Console = lazy(() => import("./Console").then((m) => ({ default: m.Console })));
 
 /** Shown in the window body while a page chunk loads. */
 function PageLoading() {
@@ -46,6 +50,12 @@ const NAV: [string, string][] = [
   ["/stats", "Stats"],
   ["/docs", "How it works"],
 ];
+
+/** The console is reachable by URL for anyone, and the worker turns away every
+ *  wallet that is not an operator. It is only *listed* once this browser has
+ *  held a console session, so a visitor is never shown a door that will not
+ *  open for them. Read once at mount: signing in navigates there anyway. */
+const CONSOLE_LISTED = hasConsoleSession();
 
 /** doubleplus: day-zero funding for startups and research projects. */
 export function VentureApp() {
@@ -72,6 +82,7 @@ function usePlace(ventures: Venture[] | null): [string, string][] {
     return [["Coins", "/"], [v ? `$${v.symbol}` : "Coin", pathname]];
   }
   if (pathname === "/launch") return [["Launch a coin", "/launch"]];
+  if (pathname === "/console") return [["Launch console", "/console"]];
   const hit = NAV.find(([to]) => to === pathname);
   return [hit ? [hit[1], hit[0]] : ["Coins", "/"]];
 }
@@ -153,6 +164,7 @@ function Shell() {
                 <Route path="/rewards" element={<Flywheel />} />
                 <Route path="/stats" element={<Stats />} />
                 <Route path="/docs" element={<Docs />} />
+                <Route path="/console" element={<Console />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
               </Suspense>
@@ -318,6 +330,9 @@ function StartMenu() {
           {NAV.map(([to, label]) => (
             <Link key={to} role="menuitem" to={to} viewTransition><b>{label}</b></Link>
           ))}
+          {CONSOLE_LISTED && (
+            <Link role="menuitem" to="/console" viewTransition><b>Launch console</b></Link>
+          )}
         </div>
         <div className="lh-sm-side">
           <a role="menuitem" href={BRAND.twitter} target="_blank" rel="noreferrer">@{BRAND.twitterHandle}</a>

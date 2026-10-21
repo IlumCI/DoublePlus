@@ -39,20 +39,62 @@ async function hmac(secret: string, data: string): Promise<string> {
   return b64url(new Uint8Array(await crypto.subtle.sign("HMAC", key, enc.encode(data))));
 }
 
-/** `address.expiry.mac`: stateless, so the worker needs no session table. */
-export async function issueSession(secret: string, address: string, nowSecs: number): Promise<{ token: string; expires: number }> {
-  const expires = nowSecs + SESSION_SECS;
-  const payload = `${address.toLowerCase()}.${expires}`;
-  return { token: `${payload}.${await hmac(secret, payload)}`, expires };
+/** The exact text the launch console asks a wallet to sign.
+ *
+ *  A separate message because it authorises something else entirely. Someone
+ *  who signed in to talk on a coin page consented to talking, and that
+ *  signature must not also buy them the right to spend ETH on launches, so the
+ *  text says what the session is for and the session is scoped to match. */
+export function consoleAuthMessage(address: string, issuedAt: string, nonce: string): string {
+  return [
+    "doubleplus.fun wants you to sign in to the launch console.",
+    "",
+    `Wallet: ${address.toLowerCase()}`,
+    `Issued at: ${issuedAt}`,
+    `Nonce: ${nonce}`,
+    "",
+    "Signing in lets this wallet design and launch coins on this launchpad,",
+    "which spends the operator's ETH on opening buys.",
+    "This signature cannot move funds by itself.",
+  ].join("\n");
 }
 
-/** The address a session token was issued to, or null if forged or expired. */
-export async function readSession(secret: string, token: string, nowSecs: number): Promise<`0x${string}` | null> {
+/** Session scopes. A token issued for one is not valid for the other, because
+ *  the scope is folded into what the mac signs. */
+export type SessionScope = "chat" | "console";
+
+/** `address.expiry.mac`: stateless, so the worker needs no session table.
+ *
+ *  The scope is signed rather than carried, so the token shape is unchanged
+ *  and a chat session simply fails to read as a console one. */
+export async function issueSession(
+  secret: string,
+  address: string,
+  nowSecs: number,
+  scope: SessionScope = "chat",
+): Promise<{ token: string; expires: number }> {
+  const expires = nowSecs + SESSION_SECS;
+  const payload = `${address.toLowerCase()}.${expires}`;
+  return { token: `${payload}.${await hmac(secret, signed(scope, payload))}`, expires };
+}
+
+/** Chat keeps the bare payload, so sessions issued before scopes existed still
+ *  read. Anything else is prefixed and cannot be confused with it. */
+const signed = (scope: SessionScope, payload: string) => (scope === "chat" ? payload : `${scope}:${payload}`);
+
+/** The address a session token was issued to for this scope, or null if
+ *  forged, expired, or issued for something else. */
+export async function readSession(
+  secret: string,
+  token: string,
+  nowSecs: number,
+  scope: SessionScope = "chat",
+): Promise<`0x${string}` | null> {
   const parts = token.split(".");
   if (parts.length !== 3) return null;
   const [address, exp, mac] = parts;
   if (!isAddr(address) || !/^\d+$/.test(exp) || Number(exp) < nowSecs) return null;
-  const want = await hmac(secret, `${address}.${exp}`);
+  const want = await hmac(secret, signed(scope, `${address}.${exp}`));
   // Constant-time compare: equal length is guaranteed for a well-formed mac.
   if (want.length !== mac.length) return null;
   let diff = 0;

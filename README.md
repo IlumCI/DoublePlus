@@ -335,6 +335,53 @@ The deploy script applies `GRADUATION_RAISE_ETH` and `CREATION_FEE_ETH` through
 
 After deploying, regenerate `web/.env.venture.example` from the new JSON.
 
+### The launch console (Lucreocracy, in the tenant's own site)
+
+A tenant with a stack has a factory and no coins in it. Lucreocracy is the
+supply: brief in, coin out — research, design, validate, launch, with selection
+on measured fee income. It used to be a command line, which meant **we** had to
+run every launch, and our own working day was the ceiling on a tenant's volume.
+It is a service now, and `/console` in the venture flavor is the page that
+drives it, so the tenant works the ground and the splitter still collects.
+
+Three hops, each holding one thing:
+
+| | Holds | Gives out |
+| --- | --- | --- |
+| `web/src/venture/Console.tsx` | nothing | a wallet signature |
+| `api/src/lucre.ts` (worker) | `LUCRE_TOKEN` | one narrow call per request |
+| Lucreocracy service | the operator key | a launch, within the grant's budget |
+
+The browser never holds the service token. A visitor's authority is a wallet
+signature checked against `LUCRE_OPERATORS`, and the text they sign says it
+authorises launches that spend ETH — a coin-chat sign-in is a different session
+scope and will not open this door. The allowlist is rechecked on every call, so
+removing a wallet takes effect at once instead of when its session expires.
+
+What a browser may ask for is an allowlist too: the brief, the profile, the
+opening buy and the launch terms. Unknown fields are dropped rather than
+forwarded, so a field the service gains later cannot be reached from a browser
+the day it ships.
+
+Worker settings (`api/wrangler.toml`, token as a secret):
+
+| | |
+| --- | --- |
+| `LUCRE_URL` | the service for this launchpad. Unset means the console is closed |
+| `LUCRE_TOKEN` | that tenant's grant token. `npx wrangler secret put` |
+| `LUCRE_OPERATORS` | wallets that may drive it |
+| `LUCRE_ALLOW_LIVE` | `1` lets the console ask for a real launch; off by default |
+
+None of those decide how much may be spent. The service's per-grant budget
+does, and it is the backstop under all of this: an allowlisted wallet whose
+session is stolen can still only spend what that grant allows. The console
+shows the remaining allowance at the top of the page rather than burying it,
+because it is the number that decides whether the next launch happens.
+
+The console is reachable by URL for anyone and listed in the start menu only
+once a browser has held a console session, so a visitor is never shown a door
+that will not open for them.
+
 ### Robinhood family (production flavors)
 
 One script per generation, same shape: `deploy-rh-final.ts`, `deploy-flywheel.ts`,

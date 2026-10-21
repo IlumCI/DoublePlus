@@ -4,6 +4,7 @@ import {
   authMessage, carriesDecoy, cleanBody, cooldownSecs, DECOY_KEY, isAddr, isTrap, ISSUED_SKEW_SECS, issueSession,
   MIN_SECRET_CHARS, NONCE, readJson, readSession,
 } from "./lib";
+import { consoleAuth, proxy, type LucreEnv } from "./lucre";
 
 /**
  * doubleplus.fun API: token comment threads.
@@ -26,7 +27,7 @@ import {
 
 interface RateLimiter { limit(o: { key: string }): Promise<{ success: boolean }> }
 
-export interface Env {
+export interface Env extends LucreEnv {
   SUPABASE_URL: string;
   SUPABASE_SERVICE_KEY: string;
   SESSION_SECRET: string;
@@ -37,6 +38,7 @@ export interface Env {
   RL_READ: RateLimiter;
   RL_WRITE: RateLimiter;
   RL_AUTH: RateLimiter;
+  RL_LAUNCH: RateLimiter;
 }
 
 const FACTORY_ABI = parseAbi([
@@ -281,6 +283,32 @@ async function route(env: Env, c: Ctx): Promise<Response> {
   // sign-in and posting rather than run that way.
   if ((url.pathname === "/auth" || req.method === "POST") && (env.SESSION_SECRET ?? "").length < MIN_SECRET_CHARS) {
     throw new Error("SESSION_SECRET is missing or too short");
+  }
+
+  // The launch console. Its own sign-in scope, its own operator allowlist, and
+  // the only place the Lucreocracy service token is held.
+  if (url.pathname === "/lucre/auth" && req.method === "POST") {
+    const r = await consoleAuth(req, env, now(), async (sig) => {
+      const key = `sig:${keccak256(sig)}`;
+      try {
+        if (await env.GUARD.get(key)) return true;
+        await env.GUARD.put(key, "1", { expirationTtl: ISSUED_SKEW_SECS * 3 });
+      } catch { /* KV unavailable: the timestamp window stands alone */ }
+      return false;
+    });
+    if (r.status >= 400) record(env, c, "console_auth_refused", { status: r.status });
+    return json(r.body, r.status, { ...h, "Cache-Control": "no-store" });
+  }
+  if (url.pathname.startsWith("/lucre/")) {
+    // A launch is far dearer than a comment, so it gets its own budget.
+    const key = (await readSession(env.SESSION_SECRET, c.req.headers.get("Authorization")?.replace(/^Bearer\s+/i, "") ?? "", now(), "console")) ?? c.ip;
+    if (req.method === "POST" && !(await env.RL_LAUNCH.limit({ key: `lucre:${key}` })).success) {
+      return json({ error: "slow down" }, 429, { ...h, "Retry-After": "60" });
+    }
+    const r = await proxy({ req, env, path: url.pathname.slice("/lucre".length), nowSecs: now() });
+    c.event = "console";
+    c.detail = { as: r.as, status: r.status, path: url.pathname };
+    return json(r.body, r.status, { ...h, "Cache-Control": "no-store" });
   }
 
   if (url.pathname === "/auth" && req.method === "POST") return auth(env, c, h);
