@@ -145,7 +145,11 @@ async function main() {
 
   mkdirSync(MANIFEST_DIR, { recursive: true });
   const indexPath = join(MANIFEST_DIR, "index.json");
-  const index = existsSync(indexPath) ? JSON.parse(readFileSync(indexPath, "utf8")) : { epoch: 0, lastBlock: Number(dep.startBlock ?? 0) };
+  const fresh = { epoch: 0, lastBlock: Number(dep.startBlock ?? 0), chainId: Number(dep.chainId) };
+  let index = existsSync(indexPath) ? JSON.parse(readFileSync(indexPath, "utf8")) : fresh;
+  // A cursor from another chain (testnet's block numbers run ahead of
+  // mainnet's) would skip every trade up to that block: start over.
+  if (Number(index.chainId) !== Number(dep.chainId)) index = fresh;
   const epoch = index.epoch + 1;
   const pendingPath = join(MANIFEST_DIR, `epoch-${epoch}.pending.json`);
 
@@ -157,7 +161,7 @@ async function main() {
     plan = await buildPlan(epoch, index.lastBlock + 1, await provider.getBlockNumber());
     if (!plan) {
       console.log("no routed volume this epoch; advancing cursor only");
-      if (!DRY_RUN) write(indexPath, { epoch, lastBlock: (await provider.getBlockNumber()) });
+      if (!DRY_RUN) write(indexPath, { epoch, lastBlock: (await provider.getBlockNumber()), chainId: Number(dep.chainId) });
       return;
     }
     if (DRY_RUN) {
@@ -172,7 +176,7 @@ async function main() {
 
   const { toBlock } = plan;
   write(join(MANIFEST_DIR, `epoch-${epoch}.json`), { ...plan, dryRun: false, generatedAt: new Date().toISOString() });
-  write(indexPath, { epoch, lastBlock: toBlock });
+  write(indexPath, { epoch, lastBlock: toBlock, chainId: Number(dep.chainId) });
   unlinkSync(pendingPath);
   console.log(`epoch ${epoch} published: ${plan.ventures.length} burns, ${plan.rebates.length} rebates, ${plan.makers.length} maker rewards`);
 }
@@ -270,7 +274,15 @@ async function buildPlan(epoch, fromBlock, toBlock) {
   }
 
   // 3b) ETH rebates to the top-10 traders, pro-rata by volume.
-  const topTraders = [...byTrader.entries()].sort((a, b) => (b[1] > a[1] ? 1 : -1)).slice(0, 10);
+  // Wallets only: the router takes any trader address, so a contract that
+  // refuses ETH could be ranked in and stall every run on its payment. The
+  // keeper's own buyback volume doesn't rank either.
+  const topTraders = [];
+  for (const [t, v] of [...byTrader.entries()].sort((a, b) => (b[1] > a[1] ? 1 : -1))) {
+    if (topTraders.length === 10) break;
+    if (t.toLowerCase() === wallet.address.toLowerCase() || (await provider.getCode(t)) !== "0x") continue;
+    topTraders.push([t, v]);
+  }
   const traderVolume = topTraders.reduce((a, [, v]) => a + v, 0n);
   const rebates = topTraders.map(([trader, vol]) => {
     let amount = traderVolume === 0n ? 0n : (rebateBudget * vol) / traderVolume;
@@ -353,8 +365,17 @@ async function execute(plan, save) {
   for (const [list, who] of (plan.rebatesIn && plan.rebatesIn !== "ETH" ? [[plan.makers, "maker"]] : [[plan.rebates, "trader"], [plan.makers, "maker"]])) {
     for (const entry of list) {
       const amount = BigInt(entry.amountWei);
-      if (amount === 0n || (await alreadyDone(entry.tx, `${who} ${entry[who]}`))) continue;
-      await send(entry, "tx", save, wallet.sendTransaction({ to: entry[who], value: amount }));
+      if (amount === 0n || entry.failed || (await alreadyDone(entry.tx, `${who} ${entry[who]}`))) continue;
+      // One payment that fails is marked and skipped, so a resumed run moves
+      // past it instead of dying on the same entry every time.
+      try {
+        await send(entry, "tx", save, wallet.sendTransaction({ to: entry[who], value: amount, gasLimit: 50_000n }));
+      } catch (e) {
+        entry.failed = String(e?.shortMessage ?? e?.message ?? e).slice(0, 160);
+        entry.tx = null;
+        save();
+        console.log(`${who} ${entry[who]} not paid: ${entry.failed}`);
+      }
     }
   }
 }

@@ -92,7 +92,14 @@ jobs:
           git add web/public/rewards/venture || true
           if ! git diff --cached --quiet; then
             git commit -m "keeper: publish venture flywheel epoch manifest"
-            git push
+            # The manifest is the record of what was paid: a push lost to a
+            # race with another push would make the next run pay it again.
+            for i in 1 2 3 4 5; do
+              git pull --rebase && git push && exit 0
+              sleep $((i * 10))
+            done
+            echo "::error::manifest push failed; the next run would repay this epoch"
+            exit 1
           else
             echo "no manifest changes"
           fi
