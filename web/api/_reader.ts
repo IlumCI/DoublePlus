@@ -50,9 +50,29 @@ export function sendJson(res: any, data: unknown, sMaxAge: number, swr: number):
 }
 
 export function fail(res: any, err: unknown): void {
+  // The detail stays in the function log: viem errors carry the RPC URL,
+  // which for a keyed provider is the key.
+  console.error(err);
   res.statusCode = 500;
   res.setHeader("content-type", "application/json; charset=utf-8");
   // Never cache errors, so one blip doesn't get pinned at the edge.
   res.setHeader("cache-control", "no-store");
-  res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+  res.end('{"error":"unavailable"}');
+}
+
+export function badRequest(res: any, msg: string): void {
+  res.statusCode = 400;
+  res.setHeader("content-type", "application/json; charset=utf-8");
+  res.setHeader("cache-control", "no-store");
+  res.end(JSON.stringify({ error: msg }));
+}
+
+/** A 0x address, or null. */
+export const addressParam = (v: string | null): `0x${string}` | null =>
+  v && /^0x[0-9a-fA-F]{40}$/.test(v) ? (v as `0x${string}`) : null;
+
+/** A whole number in [1, max]; anything else is the default. */
+export function limitParam(v: string | null, def: number, max: number): number {
+  const n = Number(v);
+  return Number.isInteger(n) && n >= 1 ? Math.min(n, max) : def;
 }
