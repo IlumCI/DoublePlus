@@ -52,7 +52,10 @@ export function TradePanel({ v, trades, ethUsd }: { v: VentureT; trades: PoolTra
   // The router returns what a trade would produce, so the quote and the
   // slippage floor are both real rather than decorative.
   useEffect(() => {
-    if (parsed === 0n) { setQuote(null); return; }
+    // Dropped first: minOut comes from the quote, and one priced for the last
+    // amount or side would set the wrong floor if sent before this one lands.
+    setQuote(null);
+    if (parsed === 0n) return;
     let live = true;
     setQuoting(true);
     const id = setTimeout(() => {
@@ -226,7 +229,7 @@ export function TradePanel({ v, trades, ethUsd }: { v: VentureT; trades: PoolTra
             : <>you receive ≈ <b>{fmtEth(quote, 6)} ETH</b><Impact pct={priceImpactPct("sell", parsed, quote, v.priceWei, tax + VENTURE.platformFeeBps)} /></>}
         </p>
         <button className={`dp-tb-go ${side === "buy" ? "dp-buy" : "dp-sell"}`}
-          disabled={busy || shortOnEth || shortOnTokens || (isConnected && (parsed === 0n || quote === null))} onClick={go}>
+          disabled={busy || (isConnected && quoting) || shortOnEth || shortOnTokens || (isConnected && (parsed === 0n || quote === null))} onClick={go}>
           {busy ? "Confirm in wallet…"
             : !isConnected ? "Connect wallet"
             : shortOnEth ? "Not enough ETH"

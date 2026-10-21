@@ -324,11 +324,15 @@ export const pad32 = (v: bigint): Hex => `0x${v.toString(16).padStart(64, "0")}`
 
 /** Check a transaction against the chain, then send it. One that would fail
  *  throws here with the contract's reason (errorText turns it into words)
- *  instead of reaching the wallet as an impossible gas estimate. */
+ *  instead of reaching the wallet as an impossible gas estimate. The wallet is
+ *  moved to Robinhood Chain first, and the send names that chain, so a wallet
+ *  left on another network (where these addresses hold no code and would
+ *  swallow the ETH) is refused instead of signing there. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function sendTx(wc: WalletClient, req: any): Promise<Hex> {
+  if ((await wc.getChainId()) !== chain.id) await wc.switchChain({ id: chain.id });
   await venturePc.simulateContract({ ...req, account: wc.account });
-  return wc.writeContract(req);
+  return wc.writeContract({ ...req, chain });
 }
 
 export interface VentureMeta {
