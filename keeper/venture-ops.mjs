@@ -37,6 +37,8 @@
 //   DRY_RUN             set to log intended actions without sending txs
 //   MAX_SPEND_ETH       (default 0.01) gas this run may spend before it stops;
 //                       bounds what a flood of spam coins can cost the treasury
+//   MAX_DAILY_SPEND_ETH (default 0.02) gas all runs in a rolling 24h may spend;
+//                       enforced by the Worker, which remembers earlier runs
 //   DELIVER_GAS_MULT    (default 4) a payout is only pushed when it is worth at
 //                       least this many times the gas it costs to push
 import { cfg, loadDeployment } from "./venture-config.mjs";

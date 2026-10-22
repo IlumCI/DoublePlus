@@ -8,24 +8,36 @@ export class SpendCap extends Error {}
 /** One keeper pass. cfg is readConfig()'s result, dep the deployment JSON.
  *  Throws if the RPC serves a different chain than dep; otherwise returns
  *  the run's summary, whose solvency.ok is false if the factory owes more
- *  than it holds. */
-export async function runOps({ cfg, dep, depPath }) {
+ *  than it holds.
+ *
+ *  memory carries what one run leaves the next (the Worker keeps it in its
+ *  Durable Object): spentTodayWei in (what earlier runs spent in the last
+ *  24h), backoff in and out (what failed and when to try it again), and
+ *  spentWei out, kept current after every tx so a run that throws still
+ *  reports what it spent. */
+export async function runOps({ cfg, dep, depPath, memory = {} }) {
   const { DRY_RUN, envEth, envInt, envWei, KEY, LOG_CHUNK, RPC } = cfg;
   const MIN_DELIVER = envWei("MIN_DELIVER", 1_000_000_000_000n);
   const RECENTER_SPACINGS = envInt("RECENTER_SPACINGS", 10, 1, 10_000);
   const SPACING = 60; // the factory's pools all use tickSpacing 60
   const CONFIRMATIONS = envInt("CONFIRMATIONS", 3, 0, 64);
   const MAX_SPEND_WEI = envEth("MAX_SPEND_ETH", "0.01");
+// Runs every minute would make the per-run cap worth 14 ETH a day. Only the
+// Worker knows what earlier runs spent; the Node entry is the manual
+// fallback, one run at a time, under the per-run cap alone.
+const MAX_DAILY_SPEND_WEI = envEth("MAX_DAILY_SPEND_ETH", "0.02");
+const dayLeft = MAX_DAILY_SPEND_WEI - (memory.spentTodayWei ?? 0n);
+const runCap = dayLeft < MAX_SPEND_WEI ? dayLeft : MAX_SPEND_WEI;
   const DELIVER_GAS_MULT = BigInt(envInt("DELIVER_GAS_MULT", 4, 1, 1000));
   // Gas one holder adds to a claimForMany batch, measured on testnet, with room.
   const GAS_PER_DELIVERY = 60_000n;
 
   // Every tx goes through send(): it counts what the run has spent and refuses
-  // to go past MAX_SPEND_WEI, so spam can cost a run at most that much.
+  // to go past runCap, so spam can cost a run (and a day) at most that much.
   const stats = { payoutsConverted: 0, limitFilled: 0, sent: 0, spentWei: 0n, graduated: 0, aborted: 0, skippedEmptyAborts: 0, refunded: 0, delivered: 0, recentered: 0, potsPaid: 0, stoppedAtCap: false, failed: 0 };
   async function send(label, fn) {
     if (DRY_RUN) return;
-    if (stats.spentWei >= MAX_SPEND_WEI) { stats.stoppedAtCap = true; throw new SpendCap(label); }
+    if (stats.spentWei >= runCap) { stats.stoppedAtCap = true; throw new SpendCap(label); }
     const cost = (rc) => (rc?.gasUsed ?? 0n) * (rc?.gasPrice ?? rc?.effectiveGasPrice ?? 0n);
     let rc;
     try {
@@ -34,11 +46,54 @@ export async function runOps({ cfg, dep, depPath }) {
       // A reverted tx still burned gas: count it, or anyone whose order or
       // payout reverts on chain (after passing the simulation) could drain the
       // keeper a run at a time without ever reaching the cap.
-      if (e?.receipt) { stats.sent++; stats.spentWei += cost(e.receipt); }
+      if (e?.receipt) { stats.sent++; stats.spentWei += cost(e.receipt); memory.spentWei = stats.spentWei; }
       throw e;
     }
     stats.sent++;
     stats.spentWei += cost(rc);
+    memory.spentWei = stats.spentWei;
+    return rc;
+  }
+
+  // Anything that failed on chain, or was sent and still isn't done, waits
+  // before it's tried again: 10 minutes, doubling up to a day. Without this a
+  // refund to a contract that rejects ETH, or an order that passes simulation
+  // and reverts on chain, would cost gas every minute until the wallet ran dry.
+  const backoff = memory.backoff ?? (memory.backoff = {});
+  const clock = () => Math.floor(Date.now() / 1000);
+  for (const [k, v] of Object.entries(backoff)) if (v.until < clock() - 7 * 86_400) delete backoff[k];
+  const waiting = (key) => (backoff[key]?.until ?? 0) > clock();
+  const failed = (key) => {
+    if (DRY_RUN) return;
+    const n = (backoff[key]?.n ?? 0) + 1;
+    backoff[key] = { n, until: clock() + Math.min(600 * 2 ** (n - 1), 86_400) };
+  };
+  const cleared = (key) => { delete backoff[key]; };
+
+  /** send() for one keyed action: skipped while it waits, back on the wait
+   *  list if it fails. Returns false when skipped. */
+  async function attempt(key, label, fn) {
+    if (waiting(key)) return false;
+    try {
+      const rc = await send(label, fn);
+      cleared(key);
+      return rc ?? true;
+    } catch (e) {
+      if (!(e instanceof SpendCap)) failed(key);
+      throw e;
+    }
+  }
+
+  /** send() for a batch: afterwards, whoever it didn't reach waits. */
+  async function sendBatch(label, items, keyOf, fn, stillDue) {
+    let rc;
+    try {
+      rc = await send(label, fn);
+    } catch (e) {
+      if (!(e instanceof SpendCap)) for (const it of items) failed(keyOf(it));
+      throw e;
+    }
+    if (!DRY_RUN) for (const it of items) ((await stillDue(it).catch(() => true)) ? failed : cleared)(keyOf(it));
     return rc;
   }
 
@@ -132,6 +187,7 @@ export async function runOps({ cfg, dep, depPath }) {
     if (!limitOrders) return;
     const total = Number(await limitOrders.totalOrders());
     for (let id = 0; id < total; id++) {
+      if (waiting(`fill:${id}`)) continue;
       const o = await limitOrders.order(id);
       if (o.amountIn === 0n) continue;
       try {
@@ -140,7 +196,7 @@ export async function runOps({ cfg, dep, depPath }) {
       console.log(`fill limit order ${id} (${o.isBuy ? "buy" : "sell"} ${o.coin})`);
       // One order failing on chain must not stop the orders after it.
       try {
-        await send(`fill ${id}`, () => limitOrders.fill(id, { gasLimit: FILL_GAS }));
+        await attempt(`fill:${id}`, `fill ${id}`, () => limitOrders.fill(id, { gasLimit: FILL_GAS }));
         stats.limitFilled++;
       } catch (e) {
         if (e instanceof SpendCap) throw e;
@@ -155,8 +211,7 @@ export async function runOps({ cfg, dep, depPath }) {
     const quoted = await payouts.collect.staticCall(coin, holder, 0n, { gasLimit: COLLECT_GAS });
     if (quoted === 0n) return;
     const minOut = (quoted * (10_000n - PAYOUT_SLIPPAGE_BPS)) / 10_000n;
-    await send(`collect ${coin} ${holder}`, () => payouts.collect(coin, holder, minOut, { gasLimit: COLLECT_GAS }));
-    stats.payoutsConverted++;
+    if (await attempt(`collect:${coin}:${holder}`, `collect ${coin} ${holder}`, () => payouts.collect(coin, holder, minOut, { gasLimit: COLLECT_GAS }))) stats.payoutsConverted++;
   }
 
   /** Live wall set for a pool: LiquidityAdded(wall) minus WallRemoved, netted
@@ -209,9 +264,11 @@ export async function runOps({ cfg, dep, depPath }) {
     // for a tx that would revert; the next run catches it.
     const last = Number(await hook.lastSwapAt(poolId).catch(() => 0n));
     if (now < last + 60) { console.log(`recenter ${coin}: price still moving, later`); return; }
+    const key = `recenter:${coin}`;
+    if (waiting(key)) return;
+    try { await hook.recenter.staticCall(coin, bands); } catch { failed(key); return; }
     console.log(`recenter ${coin}: ${bands.length} wall band(s), tick ${tick}`);
-    await send(`recenter ${coin}`, () => hook.recenter(coin, bands));
-    stats.recentered++;
+    if (await attempt(key, `recenter ${coin}`, () => hook.recenter(coin, bands))) stats.recentered++;
   }
 
   /** Push refunds for an aborted raise to every backer the contract would pay:
@@ -228,13 +285,15 @@ export async function runOps({ cfg, dep, depPath }) {
     const due = [];
     for (const b of backers) {
       const [spent, bought, held] = await Promise.all([factory.spentWei(coin, b), factory.boughtTokens(coin, b), token.balanceOf(b)]);
-      if (spent >= minDeliver && held >= bought) due.push(b);
+      if (spent >= minDeliver && held >= bought && !waiting(`refund:${coin}:${b}`)) due.push(b);
     }
     if (due.length === 0) return;
     console.log(`push refunds on ${coin}: ${due.length} backer(s)`);
     for (let j = 0; j < due.length; j += 100) {
       const batch = due.slice(j, j + 100);
-      const rc = await send(`refundMany ${coin}`, () => factory.refundMany(coin, batch, { gasLimit: batchGas(120_000n, batch.length) }));
+      const rc = await sendBatch(`refundMany ${coin}`, batch, (b) => `refund:${coin}:${b}`,
+      () => factory.refundMany(coin, batch, { gasLimit: batchGas(120_000n, batch.length) }),
+      async (b) => (await factory.spentWei(coin, b)) > 0n);
       const paid = countEvents(rc, factory.target, REFUNDED);
       if (paid < batch.length) console.log(`  refunded ${paid}/${batch.length}; the rest can still claim on the site`);
       stats.refunded += paid;
@@ -245,9 +304,11 @@ export async function runOps({ cfg, dep, depPath }) {
   async function maybePayPot(coin, now) {
     const p = await hook.pot(coin);
     if (p.leader === ZERO || now < Number(p.deadline)) return;
+    const key = `pot:${coin}`;
+    if (waiting(key)) return;
+    try { await hook.claimPot.staticCall(coin); } catch { failed(key); return; }
     console.log(`pay pot on ${coin} to ${p.leader}`);
-    await send(`claimPot ${coin}`, () => hook.claimPot(coin));
-    stats.potsPaid++;
+    if (await attempt(key, `claimPot ${coin}`, () => hook.claimPot(coin))) stats.potsPaid++;
   }
 
   async function holdersOf(coin, toBlock) {
@@ -324,7 +385,7 @@ export async function runOps({ cfg, dep, depPath }) {
       if (!(e instanceof SpendCap)) console.log(`limit orders failed: ${String(e?.shortMessage ?? e?.message ?? e).slice(0, 160)}`);
     }
     const solvency = await checkSolvency(total, head);
-    const summary = { keeper: "venture-ops", solvency, chain: Number(dep.chainId), ventures: total, ...stats, spentWei: stats.spentWei.toString(), minDeliver: minDeliver.toString(), balanceWei: balance.toString() };
+    const summary = { keeper: "venture-ops", waiting: Object.keys(backoff).length, runCapWei: runCap.toString(), solvency, chain: Number(dep.chainId), ventures: total, ...stats, spentWei: stats.spentWei.toString(), minDeliver: minDeliver.toString(), balanceWei: balance.toString() };
     console.log(JSON.stringify(summary));
     return summary;
   }
@@ -370,16 +431,17 @@ export async function runOps({ cfg, dep, depPath }) {
       if (!st.finalized && !st.aborted) {
         const targetHit = st.raisedWei >= st.targetRaiseWei || st.remainingWhole === 0n;
         if (targetHit) {
+          if (waiting(`finalize:${coin}`)) return;
           console.log(`graduate ${coin} (raised ${ethers.formatEther(st.raisedWei)} ETH)`);
-          await send(`finalize ${coin}`, () => factory.finalize(coin));
-          stats.graduated++;
+          if (await attempt(`finalize:${coin}`, `finalize ${coin}`, () => factory.finalize(coin))) stats.graduated++;
         } else if (now >= Number(st.deadline)) {
           // Nobody's money is in a raise that raised nothing, so there is no
           // refund to open. Aborting it would only spend gas, which is exactly
           // what a flood of dead launches is for.
           if (st.raisedWei === 0n) { stats.skippedEmptyAborts++; return; }
+          if (waiting(`abort:${coin}`)) return;
           console.log(`abort ${coin} (deadline passed at ${ethers.formatEther(st.raisedWei)}/${ethers.formatEther(st.targetRaiseWei)} ETH)`);
-          await send(`abort ${coin}`, () => factory.abort(coin));
+          if (!(await attempt(`abort:${coin}`, `abort ${coin}`, () => factory.abort(coin)))) return;
           stats.aborted++;
           if (!DRY_RUN) await pushRefunds(coin, await provider.getBlockNumber(), minDeliver);
         }
@@ -412,7 +474,7 @@ export async function runOps({ cfg, dep, depPath }) {
       const agentPaid = [];
       for (const h of holders) {
         try {
-          if ((await token.pendingRewards(h)) < minDeliver) continue;
+          if (waiting(`deliver:${coin}:${h}`) || (await token.pendingRewards(h)) < minDeliver) continue;
           // Holders who picked a payout through VenturePayouts get it converted;
           // a plain claimFor would hand them the raw WETH instead.
           if (payouts && (await token.payoutAgent(h)).toLowerCase() === payouts.target.toLowerCase() && (await token.atAgentTier(h))) {
@@ -432,7 +494,9 @@ export async function runOps({ cfg, dep, depPath }) {
       console.log(`deliver dividends on ${coin}: ${due.length} holder(s)`);
       for (let j = 0; j < due.length; j += 100) {
         const batch = due.slice(j, j + 100);
-        const rc = await send(`claimForMany ${coin}`, () => token.claimForMany(batch, { gasLimit: batchGas(150_000n, batch.length) }));
+        const rc = await sendBatch(`claimForMany ${coin}`, batch, (h) => `deliver:${coin}:${h}`,
+      () => token.claimForMany(batch, { gasLimit: batchGas(150_000n, batch.length) }),
+      async (h) => (await token.pendingRewards(h)) >= minDeliver);
         const paid = countEvents(rc, coin, REWARDS_CLAIMED);
         if (paid < batch.length) console.log(`  delivered ${paid}/${batch.length}`);
         stats.delivered += paid;

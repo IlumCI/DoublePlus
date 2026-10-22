@@ -1,8 +1,9 @@
 // Cloudflare Worker that runs the venture ops keeper every minute (cron in
 // wrangler.toml). The run is venture-ops-core.mjs, the same one the Node
 // entry runs. A Durable Object holds a lease so a slow run is never joined by
-// the next minute's: two runs at once would race each other's nonces and send
-// the same fills and payouts twice.
+// the next minute's (two runs at once would race each other's nonces and send
+// the same fills and payouts twice), and remembers between runs what the last
+// 24h of runs spent and which actions failed and are waiting to be retried.
 import { DurableObject } from "cloudflare:workers";
 import { checkDeployment, readConfig } from "./venture-config-core.mjs";
 import { runOps } from "./venture-ops-core.mjs";
@@ -12,16 +13,23 @@ import dep from "./deployment.gen.json";
 // Longer than any run can last (the cron's wall clock stops at 15 min), so a
 // run that dies without releasing only holds the next ones off until then.
 const LEASE_MS = 15 * 60_000;
+const DAY_MS = 86_400_000;
 
 export class RunLock extends DurableObject {
   // A Durable Object handles one storage step at a time, so no other call
-  // lands between the read and the write.
+  // lands between the read and the write. Returns null while a run holds the
+  // lease, else what the run needs to know about earlier ones.
   async acquire(now) {
-    if (((await this.ctx.storage.get("until")) ?? 0) > now) return false;
+    if (((await this.ctx.storage.get("until")) ?? 0) > now) return null;
     await this.ctx.storage.put("until", now + LEASE_MS);
-    return true;
+    const spends = (await this.ctx.storage.get("spends")) ?? [];
+    const spentTodayWei = spends.filter(([at]) => at > now - DAY_MS).reduce((t, [, wei]) => t + BigInt(wei), 0n);
+    return { spentTodayWei: spentTodayWei.toString(), backoff: (await this.ctx.storage.get("backoff")) ?? {} };
   }
-  async release() {
+  async release(now, spentWei, backoff) {
+    const spends = ((await this.ctx.storage.get("spends")) ?? []).filter(([at]) => at > now - DAY_MS);
+    if (BigInt(spentWei) > 0n) spends.push([now, spentWei]);
+    await this.ctx.storage.put({ spends, backoff });
     await this.ctx.storage.delete("until");
   }
 }
@@ -29,19 +37,22 @@ export class RunLock extends DurableObject {
 export default {
   async scheduled(_event, env) {
     const lock = env.LOCK.get(env.LOCK.idFromName("venture-ops"));
-    if (!(await lock.acquire(Date.now()))) {
+    const held = await lock.acquire(Date.now());
+    if (!held) {
       console.log("previous run still going; skipped");
       return;
     }
+    const memory = { spentTodayWei: BigInt(held.spentTodayWei), backoff: held.backoff };
     try {
       const cfg = readConfig(env);
       const where = `bundled deployment (chain ${dep.chainId})`;
       checkDeployment(dep, cfg.CHAIN_ID, where);
-      const s = await runOps({ cfg, dep, depPath: where });
+      const s = await runOps({ cfg, dep, depPath: where, memory });
       // Thrown so the run shows as failed in the Workers dashboard.
       if (!s.solvency.ok) throw new Error(`CRITICAL factory insolvent: ${JSON.stringify(s.solvency)}`);
     } finally {
-      await lock.release();
+      // Recorded even when the run threw: what it spent before failing counts.
+      await lock.release(Date.now(), String(memory.spentWei ?? 0n), memory.backoff);
     }
   },
 };
