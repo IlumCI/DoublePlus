@@ -1,8 +1,9 @@
 name: Venture keepers (doubleplus)
 
 # Two keepers for the doubleplus startup launchpad:
-#   ops      — every 15 min: auto-graduate curves at target, auto-open refunds
-#              past deadline, push ETH/stock dividends into holder wallets.
+#   ops      — manual fallback only. It runs every minute on Cloudflare
+#              (keeper/worker.mjs, keeper/wrangler.toml): graduate curves at
+#              target, refund raises past deadline, push dividends, fill orders.
 #   flywheel — weekly: rank the epoch's routed volume, buy back & burn the
 #              top-3 ventures, rebate the top-10 traders, publish the epoch
 #              manifest to web/public/rewards/venture/.
@@ -13,13 +14,12 @@ name: Venture keepers (doubleplus)
 #   VENTURE_RPC_URL     keyed RPC (defaults to the public testnet endpoint)
 on:
   schedule:
-    - cron: "*/15 * * * *" # ops (GitHub cron is best-effort)
     - cron: "0 12 * * 1" # flywheel: Mondays 12:00 UTC
   workflow_dispatch:
     inputs:
       job:
         description: "which keeper to run (ops | flywheel)"
-        default: "ops"
+        default: "flywheel"
 
 # Least privilege: read-only unless a job asks for more (flywheel commits
 # its manifest, so it alone gets contents: write).
@@ -32,7 +32,7 @@ concurrency:
 
 jobs:
   ops:
-    if: github.event.schedule == '*/15 * * * *' || github.event.inputs.job == 'ops'
+    if: github.event.inputs.job == 'ops'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
