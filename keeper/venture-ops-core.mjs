@@ -177,12 +177,17 @@ const runCap = dayLeft < MAX_SPEND_WEI ? dayLeft : MAX_SPEND_WEI;
   // The backups serve logs 2k blocks at a time at best (Daybreak), so a run
   // that started on one reads history in small windows: slow, but it runs.
   const LOG_CHUNK = first > 0 ? Math.min(cfg.LOG_CHUNK, 2_000) : cfg.LOG_CHUNK;
-  const provider = new ethers.JsonRpcProvider(primaryUrl);
-  const backupProviders = backupUrls.map((u) => new ethers.JsonRpcProvider(u));
+  // The chain was just checked by the probe (and again in main), so the
+  // providers skip their own detection: a backup would otherwise poll its
+  // chain id all run long, logging every failure.
+  const net = ethers.Network.from(Number(dep.chainId));
+  const provider = new ethers.JsonRpcProvider(primaryUrl, net, { staticNetwork: net });
+  const backupProviders = backupUrls.map((u) => new ethers.JsonRpcProvider(u, net, { staticNetwork: net }));
   {
     const origSend = provider.send.bind(provider);
     const backups = backupProviders.map((p) => p.send.bind(p));
     const tries = backups.length ? 3 : 6;
+    let reported = false;
     provider.send = async (method, params) => {
       let last;
       for (let i = 0; i < tries; i++) {
@@ -195,6 +200,10 @@ const runCap = dayLeft < MAX_SPEND_WEI ? dayLeft : MAX_SPEND_WEI;
           last = e;
           if (i < tries - 1) await new Promise((r) => setTimeout(r, 500 * 2 ** i));
         }
+      }
+      if (!reported) {
+        reported = true;
+        console.log(`RPC ${primaryUrl} failing on ${method}: ${String(last?.shortMessage ?? last?.message ?? last).slice(0, 160)}; trying backups`);
       }
       for (const send of backups) {
         try { return await send(method, params); } catch (e) { last = e; }
