@@ -15,6 +15,7 @@ import { captureRef } from "./referral";
 import { FilterDefs } from "./ui";
 import { Sidebar } from "./longhorn/Sidebar";
 import { Wallpaper } from "./longhorn/Wallpaper";
+import markUrl from "./longhorn/mark.svg";
 import { useVentures } from "./useVentures";
 import { diffWatched, notify } from "./alerts";
 import { useUi } from "../store";
@@ -132,7 +133,7 @@ function Shell() {
       <div className={`lh-desk${maximized ? " is-max" : ""}`}>
         <div className={`lh-window${minimized ? " is-min" : ""}`} role="application" aria-label={`${title} - ${BRAND.name}`}>
           <div className="lh-title" onDoubleClick={toggleMax}>
-            <span className="lh-appicon" aria-hidden="true">++</span>
+            <AppIcon />
             <span className="lh-title-text">{title} - {BRAND.name}</span>
             <div className="lh-caps">
               <button className="lh-cap" onClick={() => setMinimized(true)} title="Minimise" aria-label="Minimise window"><i className="lh-ico-min" /></button>
@@ -172,6 +173,10 @@ function Shell() {
 }
 
 /** Close returns to the board; on the board itself there is nothing to close. */
+function AppIcon() {
+  return <span className="lh-appicon" aria-hidden="true"><img src={markUrl} alt="" /></span>;
+}
+
 function CloseCap() {
   const navigate = useNavigate();
   const onBoard = useLocation().pathname === "/";
@@ -294,7 +299,7 @@ function Taskbar({ title, minimized, onTask }: { title: string; minimized: boole
       </button>
       {open && <StartMenu />}
       <button className={`lh-taskbtn${minimized ? "" : " is-active"}`} onClick={onTask} title={minimized ? "Restore window" : "Minimise window"}>
-        <span className="lh-appicon" aria-hidden="true">++</span>{title}
+        <AppIcon />{title}
       </button>
       <nav className="lh-tasknav" aria-label="Pages">
         {NAV.slice(0, 4).map(([to, label]) => (
@@ -312,7 +317,7 @@ function Taskbar({ title, minimized, onTask }: { title: string; minimized: boole
 function StartMenu() {
   return (
     <div className="lh-startmenu" role="menu">
-      <div className="lh-sm-head"><span className="lh-appicon">++</span>{BRAND.name}{BRAND.tld}</div>
+      <div className="lh-sm-head"><AppIcon />{BRAND.name}{BRAND.tld}</div>
       <div className="lh-sm-cols">
         <div className="lh-sm-main">
           <Link role="menuitem" className="lh-sm-go" to="/launch" viewTransition>

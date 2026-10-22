@@ -121,6 +121,7 @@
   background: var(--gel-green); box-shadow: 0 0 0 1px rgb(0 0 0 / .5), inset 0 1px 0 rgb(255 255 255 / .5);
   text-shadow: 0 1px 1px rgb(0 0 0 / .4);
 }
+.lh-appicon img { width: 86%; height: auto; filter: drop-shadow(0 1px 0 rgb(0 0 0 / .35)); }
 .lh-caps { display: flex; gap: 2px; }
 .lh-cap {
   width: 27px; height: 20px; border-radius: 3px; display: grid; place-items: center;

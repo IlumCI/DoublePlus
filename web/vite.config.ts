@@ -10,7 +10,7 @@ import tailwindcss from "@tailwindcss/vite";
  * rewrites them in the emitted HTML so crawlers and the first paint carry the
  * right brand, not just the runtime override in main.tsx.
  */
-const FLAVOR_META: Record<string, { title: string; description: string; icon?: string; ogImage?: string }> = {
+const FLAVOR_META: Record<string, { title: string; description: string; icon?: string; touchIcon?: string; ogImage?: string }> = {
   hammr: {
     title: "hammr | every coin goes under the hammer",
     description:
@@ -20,7 +20,10 @@ const FLAVOR_META: Record<string, { title: string; description: string; icon?: s
     title: "doubleplus · coins on Robinhood Chain",
     description:
       "Launch and trade coins on Robinhood Chain. Each coin fills a bonding curve, then moves to a locked Uniswap pool. Raises that miss their target refund every buyer.",
-    ogImage: "/doubleplus-card.png",
+    icon: "/doubleplus-icon-64.png",
+    touchIcon: "/doubleplus-touch.png",
+    // X and Telegram only fetch absolute image URLs
+    ogImage: "https://doubleplus.fun/doubleplus-card.png",
   },
   steadypads: {
     title: "steadypads | the stable launchpad",
@@ -85,7 +88,7 @@ function brandHtml(): Plugin {
           .replace(
             "</head>",
             `  <link rel="icon" type="${type}" href="${meta.icon}" />\n` +
-              `  <link rel="apple-touch-icon" href="${meta.icon}" />\n  </head>`,
+              `  <link rel="apple-touch-icon" href="${meta.touchIcon ?? meta.icon}" />\n  </head>`,
           );
       }
       return out;
@@ -103,7 +106,7 @@ function brandHtml(): Plugin {
  */
 function ventureDist(): Plugin {
   const KEEP = [
-    /^index\.html$/, /^assets\//, /^favicon(-32)?\.png$/, /^apple-touch-icon\.png$/, /^doubleplus-card\.png$/,
+    /^index\.html$/, /^assets\//, /^doubleplus-(icon-64|touch|card)\.png$/,
     /^fonts\/dp\//, /^rewards\/venture\/(index|epoch-\d+)\.json$/, /^robots\.txt$/,
   ];
   let outDir = "dist";
