@@ -34,6 +34,10 @@ command = "cp ../contracts/deployments/venture-robinhood.json deployment.gen.jso
 [vars]
 CHAIN_ID = "4663"
 RPC_URL = "https://rpc.mainnet.chain.robinhood.com"
+# Gas is ~0.02 gwei here, so a keeper tx costs ~0.000004 ETH: these allow
+# ~125 txs a run and ~500 a day. Raise them as volume grows.
+MAX_SPEND_ETH = "0.0005"
+MAX_DAILY_SPEND_ETH = "0.002"
 
 # Local testing only (`npx wrangler dev --env testnet --test-scheduled`):
 # no cron, testnet contracts.
