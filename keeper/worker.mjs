@@ -3,16 +3,19 @@
 // entry runs. A Durable Object holds a lease so a slow run is never joined by
 // the next minute's (two runs at once would race each other's nonces and send
 // the same fills and payouts twice), and remembers between runs what the last
-// 24h of runs spent and which actions failed and are waiting to be retried.
+// 24h of runs spent, which actions failed and are waiting to be retried, and
+// the event history indexed so far (a run reads only the blocks since).
 import { DurableObject } from "cloudflare:workers";
 import { checkDeployment, readConfig } from "./venture-config-core.mjs";
 import { runOps } from "./venture-ops-core.mjs";
 // Copied in by wrangler.toml's build command for the environment's chain.
 import dep from "./deployment.gen.json";
 
-// Longer than any run can last (the cron's wall clock stops at 15 min), so a
-// run that dies without releasing only holds the next ones off until then.
-const LEASE_MS = 15 * 60_000;
+// A run stops starting work at RUN_MS, and the lease outlasts it, so a run
+// still going always holds the lease. A run killed mid-way (a redeploy does
+// that) holds the next ones off until LEASE_MS at most.
+const RUN_MS = 4 * 60_000;
+const LEASE_MS = 5 * 60_000;
 const DAY_MS = 86_400_000;
 
 export class RunLock extends DurableObject {
@@ -24,12 +27,21 @@ export class RunLock extends DurableObject {
     await this.ctx.storage.put("until", now + LEASE_MS);
     const spends = (await this.ctx.storage.get("spends")) ?? [];
     const spentTodayWei = spends.filter(([at]) => at > now - DAY_MS).reduce((t, [, wei]) => t + BigInt(wei), 0n);
-    return { spentTodayWei: spentTodayWei.toString(), backoff: (await this.ctx.storage.get("backoff")) ?? {} };
+    // The index is stored in parts (meta, one per coin, one per pool) so a run
+    // rewrites only what it changed.
+    const index = { meta: null, coins: {}, bands: {} };
+    for (const [k, v] of await this.ctx.storage.list({ prefix: "index:" })) {
+      const [, kind, id] = k.split(":");
+      if (kind === "meta") index.meta = v;
+      else if (kind === "coin") index.coins[id] = v;
+      else if (kind === "bands") index.bands[id] = v;
+    }
+    return { spentTodayWei: spentTodayWei.toString(), backoff: (await this.ctx.storage.get("backoff")) ?? {}, index };
   }
-  async release(now, spentWei, backoff) {
+  async release(now, spentWei, backoff, indexParts = {}) {
     const spends = ((await this.ctx.storage.get("spends")) ?? []).filter(([at]) => at > now - DAY_MS);
     if (BigInt(spentWei) > 0n) spends.push([now, spentWei]);
-    await this.ctx.storage.put({ spends, backoff });
+    await this.ctx.storage.put({ spends, backoff, ...indexParts });
     await this.ctx.storage.delete("until");
   }
 }
@@ -42,7 +54,7 @@ export default {
       console.log("previous run still going; skipped");
       return;
     }
-    const memory = { spentTodayWei: BigInt(held.spentTodayWei), backoff: held.backoff };
+    const memory = { spentTodayWei: BigInt(held.spentTodayWei), backoff: held.backoff, index: held.index, deadlineMs: Date.now() + RUN_MS };
     try {
       const cfg = readConfig(env);
       const where = `bundled deployment (chain ${dep.chainId})`;
@@ -52,7 +64,12 @@ export default {
       if (s.solvency.ok === false) throw new Error(`CRITICAL factory insolvent: ${JSON.stringify(s.solvency)}`);
     } finally {
       // Recorded even when the run threw: what it spent before failing counts.
-      await lock.release(Date.now(), String(memory.spentWei ?? 0n), memory.backoff);
+      const parts = {};
+      for (const key of memory.indexDirty ?? []) {
+        const [kind, id] = key.split(":");
+        parts[`index:${key}`] = kind === "meta" ? memory.index.meta : kind === "coin" ? memory.index.coins[id] : memory.index.bands[id];
+      }
+      await lock.release(Date.now(), String(memory.spentWei ?? 0n), memory.backoff, parts);
     }
   },
 };

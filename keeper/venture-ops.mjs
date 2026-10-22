@@ -32,7 +32,8 @@
 //   MIN_DELIVER         (default 1e12 wei of the reward token)
 //   RECENTER_SPACINGS   (default 10) recenter walls whose near edge drifted
 //                       more than this many tick-spacings from the price
-//   LOG_CHUNK           (default 500000) block span per getLogs page
+//   LOG_CHUNK           (default 100000) block span per getLogs page
+//   SYNC_MAX_BLOCKS     (default unbounded) blocks of history one run indexes
 //   CONFIRMATIONS       (default 3)
 //   DRY_RUN             set to log intended actions without sending txs
 //   MAX_SPEND_ETH       (default 0.01) gas this run may spend before it stops;

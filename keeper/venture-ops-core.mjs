@@ -12,9 +12,11 @@ export class SpendCap extends Error {}
  *
  *  memory carries what one run leaves the next (the Worker keeps it in its
  *  Durable Object): spentTodayWei in (what earlier runs spent in the last
- *  24h), backoff in and out (what failed and when to try it again), and
- *  spentWei out, kept current after every tx so a run that throws still
- *  reports what it spent. */
+ *  24h), backoff in and out (what failed and when to try it again), index in
+ *  and out (the event history the keeper has read, see syncIndex) with
+ *  indexDirty naming the parts this run changed, deadlineMs in (when the run
+ *  must wrap up), and spentWei out, kept current after every tx so a run
+ *  that throws still reports what it spent. */
 export async function runOps({ cfg, dep, depPath, memory = {} }) {
   const { DRY_RUN, envEth, envInt, envWei, KEY, RPC } = cfg;
   const MIN_DELIVER = envWei("MIN_DELIVER", 1_000_000_000_000n);
@@ -22,19 +24,26 @@ export async function runOps({ cfg, dep, depPath, memory = {} }) {
   const SPACING = 60; // the factory's pools all use tickSpacing 60
   const CONFIRMATIONS = envInt("CONFIRMATIONS", 3, 0, 64);
   const MAX_SPEND_WEI = envEth("MAX_SPEND_ETH", "0.01");
-// Runs every minute would make the per-run cap worth 14 ETH a day. Only the
-// Worker knows what earlier runs spent; the Node entry is the manual
-// fallback, one run at a time, under the per-run cap alone.
-const MAX_DAILY_SPEND_WEI = envEth("MAX_DAILY_SPEND_ETH", "0.02");
-const dayLeft = MAX_DAILY_SPEND_WEI - (memory.spentTodayWei ?? 0n);
-const runCap = dayLeft < MAX_SPEND_WEI ? dayLeft : MAX_SPEND_WEI;
+  // Runs every minute would make the per-run cap worth 14 ETH a day. Only the
+  // Worker knows what earlier runs spent; the Node entry is the manual
+  // fallback, one run at a time, under the per-run cap alone.
+  const MAX_DAILY_SPEND_WEI = envEth("MAX_DAILY_SPEND_ETH", "0.02");
+  const dayLeft = MAX_DAILY_SPEND_WEI - (memory.spentTodayWei ?? 0n);
+  const runCap = dayLeft < MAX_SPEND_WEI ? dayLeft : MAX_SPEND_WEI;
+  // Blocks of history one run may index (the rest waits for the next run), so
+  // catching up after a deploy is spread over runs instead of stalling one.
+  const SYNC_MAX_BLOCKS = envInt("SYNC_MAX_BLOCKS", 1_000_000_000, 1, 1_000_000_000);
+  // The Worker's lease outlives a run by a margin; past the deadline a run
+  // starts nothing new, so the lease never expires under a run still going.
+  const deadlineMs = memory.deadlineMs ?? Infinity;
+  const pastDeadline = () => Date.now() > deadlineMs;
   const DELIVER_GAS_MULT = BigInt(envInt("DELIVER_GAS_MULT", 4, 1, 1000));
   // Gas one holder adds to a claimForMany batch, measured on testnet, with room.
   const GAS_PER_DELIVERY = 60_000n;
 
   // Every tx goes through send(): it counts what the run has spent and refuses
   // to go past runCap, so spam can cost a run (and a day) at most that much.
-  const stats = { payoutsConverted: 0, limitFilled: 0, sent: 0, spentWei: 0n, graduated: 0, aborted: 0, skippedEmptyAborts: 0, refunded: 0, delivered: 0, recentered: 0, potsPaid: 0, stoppedAtCap: false, failed: 0 };
+  const stats = { stoppedAtDeadline: false, payoutsConverted: 0, limitFilled: 0, sent: 0, spentWei: 0n, graduated: 0, aborted: 0, skippedEmptyAborts: 0, refunded: 0, delivered: 0, recentered: 0, potsPaid: 0, stoppedAtCap: false, failed: 0 };
   async function send(label, fn) {
     if (DRY_RUN) return;
     if (stats.spentWei >= runCap) { stats.stoppedAtCap = true; throw new SpendCap(label); }
@@ -180,9 +189,18 @@ const runCap = dayLeft < MAX_SPEND_WEI ? dayLeft : MAX_SPEND_WEI;
   // The chain was just checked by the probe (and again in main), so the
   // providers skip their own detection: a backup would otherwise poll its
   // chain id all run long, logging every failure.
+  // Each request gives up after 20s (ethers waits 5 minutes by default) and
+  // retries a 429 once, so a throttled or hung endpoint is handed to the
+  // rotation below in seconds rather than holding the run.
   const net = ethers.Network.from(Number(dep.chainId));
-  const provider = new ethers.JsonRpcProvider(primaryUrl, net, { staticNetwork: net });
-  const backupProviders = backupUrls.map((u) => new ethers.JsonRpcProvider(u, net, { staticNetwork: net }));
+  const rpc = (u) => {
+    const r = new ethers.FetchRequest(u);
+    r.timeout = 20_000;
+    r.setThrottleParams({ maxAttempts: 2 });
+    return new ethers.JsonRpcProvider(r, net, { staticNetwork: net });
+  };
+  const provider = rpc(primaryUrl);
+  const backupProviders = backupUrls.map(rpc);
   {
     const origSend = provider.send.bind(provider);
     const backups = backupProviders.map((p) => p.send.bind(p));
@@ -218,6 +236,73 @@ const runCap = dayLeft < MAX_SPEND_WEI ? dayLeft : MAX_SPEND_WEI;
   const payouts = dep.contracts.payouts ? new ethers.Contract(dep.contracts.payouts, PAYOUTS_ABI, wallet) : null;
   const limitOrders = dep.contracts.limitOrders ? new ethers.Contract(dep.contracts.limitOrders, LIMIT_ABI, wallet) : null;
 
+  // The event history the keeper acts on: each coin's holder balances (from
+  // Transfer) and curve backers (CurveBuy), each pool's quote-wall bands
+  // (LiquidityAdded/WallRemoved), and the fees the factory has credited and
+  // paid out. Read forward from the last block indexed instead of from the
+  // deploy block every run: a run reads about a minute of blocks.
+  const index = memory.index ?? (memory.index = { meta: null, coins: {}, bands: {} });
+  const dirty = memory.indexDirty ?? (memory.indexDirty = new Set());
+  index.meta ??= { cursor: Number(dep.startBlock ?? 0) - 1, accrued: "0", withdrawn: "0" };
+  const coinIndex = (coin) => (index.coins[coin.toLowerCase()] ??= { bal: {}, backers: {} });
+
+  async function syncIndex(head, coins) {
+    const t = (c, ev) => c.interface.getEvent(ev).topicHash;
+    const T = {
+      buy: t(factory, "CurveBuy"), accrued: t(factory, "FeeAccrued"), withdrawn: t(factory, "FeesWithdrawn"),
+      add: t(hook, "LiquidityAdded"), remove: t(hook, "WallRemoved"),
+    };
+    const groups = [];
+    for (let i = 0; i < coins.length; i += 50) groups.push(coins.slice(i, i + 50));
+    const stop = Math.min(head, index.meta.cursor + SYNC_MAX_BLOCKS);
+    for (let a = index.meta.cursor + 1; a <= stop && !pastDeadline(); a += LOG_CHUNK) {
+      const b = Math.min(a + LOG_CHUNK - 1, stop);
+      // One topic per query (the RPC limits OR-lists), every query for the
+      // range answered before any is applied, so a failed range is redone whole.
+      const q = (address, topic) => provider.getLogs({ address, topics: [topic], fromBlock: a, toBlock: b });
+      const [buys, accrued, withdrawn, adds, removes, ...transfers] = await Promise.all([
+        q(dep.contracts.factory, T.buy), q(dep.contracts.factory, T.accrued), q(dep.contracts.factory, T.withdrawn),
+        q(dep.contracts.hook, T.add), q(dep.contracts.hook, T.remove),
+        ...groups.map((g) => q(g, TRANSFER_TOPIC)),
+      ]);
+      for (const l of buys) {
+        const { token, buyer } = factory.interface.parseLog(l).args;
+        coinIndex(token).backers[buyer] = 1;
+        dirty.add(`coin:${token.toLowerCase()}`);
+      }
+      let acc = BigInt(index.meta.accrued), wd = BigInt(index.meta.withdrawn);
+      for (const l of accrued) acc += BigInt(factory.interface.parseLog(l).args.amount);
+      for (const l of withdrawn) wd += BigInt(factory.interface.parseLog(l).args.amount);
+      index.meta.accrued = acc.toString();
+      index.meta.withdrawn = wd.toString();
+      for (const [logs, sign] of [[adds, 1n], [removes, -1n]]) {
+        for (const l of logs) {
+          const e = hook.interface.parseLog(l).args;
+          if (sign === 1n && !e.wall) continue;
+          const id = e.id.toLowerCase(), k = `${e.tickLower}:${e.tickUpper}`;
+          const bands = (index.bands[id] ??= {});
+          const liq = BigInt(bands[k] ?? 0) + sign * BigInt(e.liquidity);
+          if (liq > 0n) bands[k] = liq.toString(); else delete bands[k];
+          dirty.add(`bands:${id}`);
+        }
+      }
+      for (const l of transfers.flat()) {
+        const v = BigInt(l.data);
+        if (v === 0n) continue;
+        const bal = coinIndex(l.address).bal;
+        const move = (who, d) => {
+          const n = BigInt(bal[who] ?? 0) + d;
+          if (n > 0n) bal[who] = n.toString(); else delete bal[who];
+        };
+        move(ethers.getAddress("0x" + l.topics[1].slice(26)), -v);
+        move(ethers.getAddress("0x" + l.topics[2].slice(26)), v);
+        dirty.add(`coin:${l.address.toLowerCase()}`);
+      }
+      index.meta.cursor = b;
+      dirty.add("meta");
+    }
+  }
+
   /** Fill whatever open limit orders the pools can meet right now. A fill that
    *  would miss the owner's price reverts in simulation and is skipped. */
   async function fillLimitOrders() {
@@ -252,42 +337,17 @@ const runCap = dayLeft < MAX_SPEND_WEI ? dayLeft : MAX_SPEND_WEI;
   }
 
   /** Live wall set for a pool: LiquidityAdded(wall) minus WallRemoved, netted
-   *  per (lower, upper) band. */
-  async function wallBands(poolId, toBlock) {
-    const from = Number(dep.startBlock ?? 0);
-    const bands = new Map(); // "lower:upper" -> liquidity
-    const addTopic = hook.interface.getEvent("LiquidityAdded").topicHash;
-    const remTopic = hook.interface.getEvent("WallRemoved").topicHash;
-    for (let start = from; start <= toBlock; start += LOG_CHUNK) {
-      const end = Math.min(start + LOG_CHUNK - 1, toBlock);
-      // One query per event: the RPC allows a topic OR-list only 100k blocks
-      // per call, and adds and removals net the same in any order.
-      const q = (topic) => provider.getLogs({ address: dep.contracts.hook, topics: [topic, poolId], fromBlock: start, toBlock: end });
-      const logs = (await Promise.all([q(addTopic), q(remTopic)])).flat();
-      for (const l of logs) {
-        if (l.topics[0] === addTopic) {
-          const a = hook.interface.parseLog(l).args;
-          if (!a.wall) continue;
-          const k = `${a.tickLower}:${a.tickUpper}`;
-          bands.set(k, (bands.get(k) ?? 0n) + BigInt(a.liquidity));
-        } else {
-          const a = hook.interface.parseLog(l).args;
-          const k = `${a.tickLower}:${a.tickUpper}`;
-          bands.set(k, (bands.get(k) ?? 0n) - BigInt(a.liquidity));
-        }
-      }
-    }
-    return [...bands.entries()]
-      .filter(([, liq]) => liq > 0n)
-      .map(([k, liquidity]) => {
-        const [lower, upper] = k.split(":").map(Number);
-        return { lower, upper, liquidity };
-      });
+   *  per (lower, upper) band, from the index. */
+  function wallBands(poolId) {
+    return Object.entries(index.bands[poolId.toLowerCase()] ?? {}).map(([k, liquidity]) => {
+      const [lower, upper] = k.split(":").map(Number);
+      return { lower, upper, liquidity: BigInt(liquidity) };
+    });
   }
 
   /** Migrate stale quote walls back beside the price when they have drifted. */
-  async function maybeRecenter(coin, poolId, toBlock, now) {
-    const bands = await wallBands(poolId, toBlock);
+  async function maybeRecenter(coin, poolId, now) {
+    const bands = wallBands(poolId);
     if (bands.length === 0) return;
     const tick = Number(await hook.poolTick(coin));
     const maxDrift = RECENTER_SPACINGS * SPACING;
@@ -311,13 +371,8 @@ const runCap = dayLeft < MAX_SPEND_WEI ? dayLeft : MAX_SPEND_WEI;
   /** Push refunds for an aborted raise to every backer the contract would pay:
    *  ETH still escrowed for them, everything they bought still in their wallet,
    *  and worth more than the gas to send it. */
-  async function pushRefunds(coin, toBlock, minDeliver) {
-    const backers = new Set();
-    const from = Number(dep.startBlock ?? 0);
-    for (let start = from; start <= toBlock; start += LOG_CHUNK) {
-      const end = Math.min(start + LOG_CHUNK - 1, toBlock);
-      for (const l of await factory.queryFilter(factory.filters.CurveBuy(coin), start, end)) backers.add(l.args.buyer);
-    }
+  async function pushRefunds(coin, minDeliver) {
+    const backers = Object.keys(coinIndex(coin).backers);
     const token = new ethers.Contract(coin, TOKEN_ABI, wallet);
     const due = [];
     for (const b of backers) {
@@ -348,21 +403,8 @@ const runCap = dayLeft < MAX_SPEND_WEI ? dayLeft : MAX_SPEND_WEI;
     if (await attempt(key, `claimPot ${coin}`, () => hook.claimPot(coin))) stats.potsPaid++;
   }
 
-  async function holdersOf(coin, toBlock) {
-    const balances = new Map();
-    const from = Number(dep.startBlock ?? 0);
-    for (let start = from; start <= toBlock; start += LOG_CHUNK) {
-      const end = Math.min(start + LOG_CHUNK - 1, toBlock);
-      const logs = await provider.getLogs({ address: coin, topics: [TRANSFER_TOPIC], fromBlock: start, toBlock: end });
-      for (const l of logs) {
-        const fromA = ethers.getAddress("0x" + l.topics[1].slice(26));
-        const toA = ethers.getAddress("0x" + l.topics[2].slice(26));
-        const v = BigInt(l.data);
-        if (v === 0n) continue;
-        balances.set(fromA, (balances.get(fromA) ?? 0n) - v);
-        balances.set(toA, (balances.get(toA) ?? 0n) + v);
-      }
-    }
+  function holdersOf(coin) {
+    const balances = Object.entries(coinIndex(coin).bal);
     const system = new Set(
       // The order book and payout router only hold coins in passing; pushing
       // rewards to them would strand WETH they have no way to pass on.
@@ -370,8 +412,8 @@ const runCap = dayLeft < MAX_SPEND_WEI ? dayLeft : MAX_SPEND_WEI;
         dep.contracts.limitOrders ?? ZERO, dep.contracts.payouts ?? ZERO]
         .map((a) => a.toLowerCase()),
     );
-    return [...balances.entries()]
-      .filter(([a, b]) => b > 0n && !system.has(a.toLowerCase()))
+    return balances
+      .filter(([a, b]) => BigInt(b) > 0n && !system.has(a.toLowerCase()))
       .map(([a]) => a);
   }
 
@@ -404,10 +446,17 @@ const runCap = dayLeft < MAX_SPEND_WEI ? dayLeft : MAX_SPEND_WEI;
     const balance = await provider.getBalance(wallet.address);
     if (balance < MAX_SPEND_WEI) console.log(`WARNING keeper balance ${ethers.formatEther(balance)} ETH is below one run's cap`);
 
-    for (let i = 0; i < total; i++) {
-      const coin = await factory.allTokens(i);
+    const coins = await Promise.all(Array.from({ length: total }, (_, i) => factory.allTokens(i)));
+    try {
+      await syncIndex(head, coins);
+    } catch (e) {
+      // The coins below still run, on what has been indexed so far.
+      console.log(`index sync stopped at block ${index.meta.cursor}: ${String(e?.shortMessage ?? e?.message ?? e).slice(0, 160)}`);
+    }
+    for (const coin of coins) {
+      if (pastDeadline()) { stats.stoppedAtDeadline = true; break; }
       try {
-        await processCoin(coin, now, head, minDeliver);
+        await processCoin(coin, now, minDeliver);
       } catch (e) {
         if (e instanceof SpendCap) { console.log(`spend cap reached at ${e.message}; stopping this run`); break; }
         // One coin failing must not stop the rest: a single hostile or broken
@@ -417,14 +466,14 @@ const runCap = dayLeft < MAX_SPEND_WEI ? dayLeft : MAX_SPEND_WEI;
       }
     }
     try {
-      await fillLimitOrders();
+      if (!pastDeadline()) await fillLimitOrders();
     } catch (e) {
       if (!(e instanceof SpendCap)) console.log(`limit orders failed: ${String(e?.shortMessage ?? e?.message ?? e).slice(0, 160)}`);
     }
     // Unknown (ok: null) when the history can't be read, e.g. on a backup RPC
     // that refuses the range; only a shortfall actually seen fails the run.
-    const solvency = await checkSolvency(total, head).catch((e) => ({ ok: null, error: String(e?.shortMessage ?? e?.message ?? e).slice(0, 160) }));
-    const summary = { keeper: "venture-ops", waiting: Object.keys(backoff).length, runCapWei: runCap.toString(), solvency, chain: Number(dep.chainId), ventures: total, ...stats, spentWei: stats.spentWei.toString(), minDeliver: minDeliver.toString(), balanceWei: balance.toString() };
+    const solvency = await checkSolvency(coins, head).catch((e) => ({ ok: null, error: String(e?.shortMessage ?? e?.message ?? e).slice(0, 160) }));
+    const summary = { keeper: "venture-ops", indexedTo: index.meta.cursor, waiting: Object.keys(backoff).length, runCapWei: runCap.toString(), solvency, chain: Number(dep.chainId), ventures: total, ...stats, spentWei: stats.spentWei.toString(), minDeliver: minDeliver.toString(), balanceWei: balance.toString() };
     console.log(JSON.stringify(summary));
     return summary;
   }
@@ -436,24 +485,17 @@ const runCap = dayLeft < MAX_SPEND_WEI ? dayLeft : MAX_SPEND_WEI;
    * A shortfall means a bug or an exploit; the run then reports solvency.ok
    * false, and each entry turns that into a failed run.
    */
-  async function checkSolvency(total, head) {
+  async function checkSolvency(coins, head) {
+    // Fees owed come from the index, so they only add up once it has reached
+    // the head: until then a withdrawal it hasn't read yet would look like a
+    // shortfall.
+    if (index.meta.cursor < head) return { ok: null, error: `index catching up: block ${index.meta.cursor} of ${head}` };
     let escrow = 0n;
-    for (let i = 0; i < total; i++) {
-      const coin = await factory.allTokens(i);
-      const [st, t] = await Promise.all([factory.curveState(coin), factory.terms(coin)]);
+    for (const coin of coins) {
+      const [st, t] = await Promise.all([factory.curveState(coin, { blockTag: head }), factory.terms(coin, { blockTag: head })]);
       if (!st.finalized && !t.swept) escrow += st.raisedWei;
     }
-    let accrued = 0n, withdrawn = 0n;
-    const from = Number(dep.startBlock ?? 0);
-    for (let start = from; start <= head; start += LOG_CHUNK) {
-      const end = Math.min(start + LOG_CHUNK - 1, head);
-      const [a, w] = await Promise.all([
-        factory.queryFilter(factory.filters.FeeAccrued(), start, end),
-        factory.queryFilter(factory.filters.FeesWithdrawn(), start, end),
-      ]);
-      for (const l of a) accrued += BigInt(l.args.amount);
-      for (const l of w) withdrawn += BigInt(l.args.amount);
-    }
+    const accrued = BigInt(index.meta.accrued), withdrawn = BigInt(index.meta.withdrawn);
     const owed = escrow + (accrued - withdrawn);
     const balance = await provider.getBalance(dep.contracts.factory, head);
     const ok = balance >= owed;
@@ -463,7 +505,7 @@ const runCap = dayLeft < MAX_SPEND_WEI ? dayLeft : MAX_SPEND_WEI;
     return { ok, balanceWei: balance.toString(), owedWei: owed.toString(), escrowWei: escrow.toString(), feesOwedWei: (accrued - withdrawn).toString() };
   }
 
-  async function processCoin(coin, now, head, minDeliver) {
+  async function processCoin(coin, now, minDeliver) {
     {
       const st = await factory.curveState(coin);
 
@@ -482,13 +524,13 @@ const runCap = dayLeft < MAX_SPEND_WEI ? dayLeft : MAX_SPEND_WEI;
           console.log(`abort ${coin} (deadline passed at ${ethers.formatEther(st.raisedWei)}/${ethers.formatEther(st.targetRaiseWei)} ETH)`);
           if (!(await attempt(`abort:${coin}`, `abort ${coin}`, () => factory.abort(coin)))) return;
           stats.aborted++;
-          if (!DRY_RUN) await pushRefunds(coin, await provider.getBlockNumber(), minDeliver);
+          if (!DRY_RUN) await pushRefunds(coin, minDeliver);
         }
         return; // dividends only exist after graduation
       }
       if (!st.finalized) {
         // Aborted: refunds go out until the escrow is swept.
-        if (!(await factory.terms(coin)).swept) await pushRefunds(coin, head, minDeliver);
+        if (!(await factory.terms(coin)).swept) await pushRefunds(coin, minDeliver);
         return;
       }
 
@@ -502,13 +544,13 @@ const runCap = dayLeft < MAX_SPEND_WEI ? dayLeft : MAX_SPEND_WEI;
       // Keep the quote walls hugging the price.
       try {
         const listing = await factoryListings.listings(coin);
-        await maybeRecenter(coin, listing.poolId, head, now);
+        await maybeRecenter(coin, listing.poolId, now);
       } catch (e) {
         console.log(`recenter check failed for ${coin}: ${String(e?.message ?? e).slice(0, 120)}`);
       }
 
       const token = new ethers.Contract(coin, TOKEN_ABI, wallet);
-      const holders = await holdersOf(coin, head);
+      const holders = holdersOf(coin);
       const due = [];
       const agentPaid = [];
       for (const h of holders) {

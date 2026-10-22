@@ -44,7 +44,9 @@ export function readConfig(env) {
     DRY_RUN: raw("DRY_RUN") !== undefined,
     RPC: raw("RPC_URL") ?? "https://rpc.testnet.chain.robinhood.com",
     KEY: raw("KEEPER_PRIVATE_KEY") ?? fail("Set KEEPER_PRIVATE_KEY."),
-    LOG_CHUNK: envInt("LOG_CHUNK", 500_000, 1, 10_000_000),
+    // Robinhood's RPC allows 500k blocks for one address but 100k for several
+    // (the keeper's index reads every coin's transfers in one query).
+    LOG_CHUNK: envInt("LOG_CHUNK", 100_000, 1, 10_000_000),
     CHAIN_ID: envInt("CHAIN_ID", 46630, 1, Number.MAX_SAFE_INTEGER),
   };
 }

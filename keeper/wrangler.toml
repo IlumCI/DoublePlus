@@ -33,9 +33,14 @@ command = "cp ../contracts/deployments/venture-robinhood.json deployment.gen.jso
 
 [vars]
 CHAIN_ID = "4663"
-# Comma-separated: the first serves the long log ranges; the rest step in
-# for a call the first keeps failing.
-RPC_URL = "https://rpc.mainnet.chain.robinhood.com,https://robinhood.daybreak-rpc.network,https://robinhood.drpc.org"
+# Comma-separated, the first serving and the rest stepping in for a call it
+# keeps failing. Daybreak leads here: Robinhood's own RPC throttles (429)
+# Cloudflare's shared egress. Daybreak serves logs 2000 blocks a query, which
+# the index reads a minute (~360 blocks) of per run, catching up at most
+# SYNC_MAX_BLOCKS a run after a gap.
+RPC_URL = "https://robinhood.daybreak-rpc.network,https://rpc.mainnet.chain.robinhood.com,https://robinhood.drpc.org"
+LOG_CHUNK = "2000"
+SYNC_MAX_BLOCKS = "200000"
 # Gas is ~0.02 gwei here, so a keeper tx costs ~0.000004 ETH: these allow
 # ~125 txs a run and ~500 a day. Raise them as volume grows.
 MAX_SPEND_ETH = "0.0005"
