@@ -31,6 +31,16 @@ cat > "$tmp/banner.html" <<HTML
 HTML
 shoot "$tmp/banner.html" 1500 500 "$here/doubleplus-banner-x.png"
 
+# The logo on the banner's dark background, square, for anywhere a plain
+# image of it is wanted.
+cat > "$tmp/logo.html" <<HTML
+<html><body style="margin:0;width:1200px;height:1200px;$BG;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:56px;overflow:hidden">
+<img src="file://$here/doubleplus-mark.svg" style="width:780px;filter:drop-shadow(0 0 48px rgb(110 230 90 / .35))">
+<div style="font:700 92px 'Noto Sans';color:#fff;letter-spacing:-.01em">doubleplus<span style="color:#7fe08a">.fun</span></div>
+</body></html>
+HTML
+shoot "$tmp/logo.html" 1200 1200 "$here/doubleplus-logo-dark.png"
+
 rows=""
 for r in "Every coin starts|on a bonding curve that rises with each buy" "When the curve fills|it moves to a Uniswap pool, locked for good" "If a raise misses|every buyer gets their ETH back" "Creator's fee|0 to 4% per trade, fixed at launch"; do
   rows+="<tr style=\"border-top:1px solid #243560\"><td style=\"padding:9px 0;color:#8496c4;width:250px\">${r%%|*}</td><td style=\"color:#e8eeff\">${r#*|}</td></tr>"
