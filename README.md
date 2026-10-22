@@ -295,23 +295,6 @@ does not back that promise. Know which one you are deploying.
 The first row is the one to plan around: a single key carries drain authority over
 nearly the entire live footprint, and it cannot be rotated in place.
 
-### Credentials to rotate now that this repo is private
-
-These were committed while the repo was public and should be treated as burned:
-
-- `web/.env.arc.example:19`, `web/deploy/api-bridge-in/index.ts:27`,
-  `web/deploy/api-bridge-out/index.ts:25` — `?key=7629f78c…` is the `ACCESS_KEY`
-  on your own Tor RPC gateway (`gateway/server.mjs:121`). Anyone with the repo can
-  use your gateway's egress.
-- `web/deploy/api-rpc/index.mjs:6` — a bearer-token-in-path RPC at
-  `real-pump-soon-trust-me-bro-again.poptyedev.com`, hardcoded as the default
-  upstream. Third-party; you may not control rotation.
-- `VITE_WALLETCONNECT_PROJECT_ID=e1bda672…` in four files — public by design
-  (it ships in the bundle), but tied to your Cloud account.
-
-No private keys are committed anywhere. Every signing key is read from
-`process.env` or Actions secrets. That part is done correctly.
-
 ### Unattended surface
 
 `bridge/index.html` is a 62 KB standalone page outside the build system that moves
