@@ -178,9 +178,10 @@ const runCap = dayLeft < MAX_SPEND_WEI ? dayLeft : MAX_SPEND_WEI;
   // that started on one reads history in small windows: slow, but it runs.
   const LOG_CHUNK = first > 0 ? Math.min(cfg.LOG_CHUNK, 2_000) : cfg.LOG_CHUNK;
   const provider = new ethers.JsonRpcProvider(primaryUrl);
+  const backupProviders = backupUrls.map((u) => new ethers.JsonRpcProvider(u));
   {
     const origSend = provider.send.bind(provider);
-    const backups = backupUrls.map((u) => { const p = new ethers.JsonRpcProvider(u); return p.send.bind(p); });
+    const backups = backupProviders.map((p) => p.send.bind(p));
     const tries = backups.length ? 3 : 6;
     provider.send = async (method, params) => {
       let last;
@@ -533,5 +534,11 @@ const runCap = dayLeft < MAX_SPEND_WEI ? dayLeft : MAX_SPEND_WEI;
     }
   }
 
-  return main();
+  // Providers keep polling (and retrying an unreachable endpoint) until
+  // destroyed, which would hold a Node run open after it finished.
+  try {
+    return await main();
+  } finally {
+    for (const p of [provider, ...backupProviders]) p.destroy();
+  }
 }
