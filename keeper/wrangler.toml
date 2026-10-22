@@ -1,0 +1,47 @@
+# The venture ops keeper on Cloudflare Workers (needs the Workers Paid plan
+# for the CPU limit below). Deploy with `npx wrangler deploy` from keeper/,
+# after `npx wrangler secret put KEEPER_PRIVATE_KEY`. Logs: Workers & Pages ->
+# doubleplus-keeper -> Logs, or `npx wrangler tail`.
+name = "doubleplus-keeper"
+main = "worker.mjs"
+compatibility_date = "2026-09-01"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = false
+
+[triggers]
+crons = ["* * * * *"]
+
+# A run is mostly waiting on the RPC, which doesn't count, but parsing a long
+# Transfer history does.
+[limits]
+cpu_ms = 300000
+
+[observability]
+enabled = true
+
+[[durable_objects.bindings]]
+name = "LOCK"
+class_name = "RunLock"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RunLock"]
+
+# The deployment the Worker bundles; worker.mjs checks it matches CHAIN_ID.
+[build]
+command = "cp ../contracts/deployments/venture-robinhood.json deployment.gen.json"
+
+[vars]
+CHAIN_ID = "4663"
+RPC_URL = "https://rpc.mainnet.chain.robinhood.com"
+
+# Local testing only (`npx wrangler dev --env testnet --test-scheduled`):
+# no cron, testnet contracts.
+[env.testnet]
+name = "doubleplus-keeper-testnet"
+triggers = { crons = [] }
+durable_objects.bindings = [{ name = "LOCK", class_name = "RunLock" }]
+vars = { CHAIN_ID = "46630", RPC_URL = "https://rpc.testnet.chain.robinhood.com" }
+
+[env.testnet.build]
+command = "cp ../contracts/deployments/venture-testnet.json deployment.gen.json"
