@@ -8,7 +8,7 @@ export class SpendCap extends Error {}
 /** One keeper pass. cfg is readConfig()'s result, dep the deployment JSON.
  *  Throws if the RPC serves a different chain than dep; otherwise returns
  *  the run's summary, whose solvency.ok is false if the factory owes more
- *  than it holds.
+ *  than it holds (null if the history could not be read to tell).
  *
  *  memory carries what one run leaves the next (the Worker keeps it in its
  *  Durable Object): spentTodayWei in (what earlier runs spent in the last
@@ -16,7 +16,7 @@ export class SpendCap extends Error {}
  *  spentWei out, kept current after every tx so a run that throws still
  *  reports what it spent. */
 export async function runOps({ cfg, dep, depPath, memory = {} }) {
-  const { DRY_RUN, envEth, envInt, envWei, KEY, LOG_CHUNK, RPC } = cfg;
+  const { DRY_RUN, envEth, envInt, envWei, KEY, RPC } = cfg;
   const MIN_DELIVER = envWei("MIN_DELIVER", 1_000_000_000_000n);
   const RECENTER_SPACINGS = envInt("RECENTER_SPACINGS", 10, 1, 10_000);
   const SPACING = 60; // the factory's pools all use tickSpacing 60
@@ -159,19 +159,46 @@ const runCap = dayLeft < MAX_SPEND_WEI ? dayLeft : MAX_SPEND_WEI;
   ];
   const LISTINGS_ABI = ["function listings(address) view returns (address creator, address pair, uint16 taxBps, uint64 createdAt, bytes32 poolId)"];
 
-  const provider = new ethers.JsonRpcProvider(RPC);
+  // RPC_URL may list backups after the primary. The primary serves every
+  // call; a call it keeps failing on transiently is tried once on each
+  // backup before the run gives up on it. Backups may refuse the long log
+  // ranges the primary allows, so they only ever step in.
+  // A run starts on the first endpoint that answers, so a dead primary costs
+  // one probe instead of the run (ethers' own network check bypasses send).
+  const urls = RPC.split(",").map((u) => u.trim()).filter(Boolean);
+  const answers = (u) => fetch(u, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}', signal: AbortSignal.timeout(5_000),
+  }).then((r) => r.json()).then((j) => Number(j.result) === Number(dep.chainId)).catch(() => false);
+  let first = 0;
+  while (first < urls.length - 1 && !(await answers(urls[first]))) first++;
+  if (first > 0) console.log(`RPC ${urls[0]} not answering; starting on ${urls[first]}`);
+  const [primaryUrl, ...backupUrls] = [urls[first], ...urls.filter((_, i) => i !== first)];
+  // The backups serve logs 2k blocks at a time at best (Daybreak), so a run
+  // that started on one reads history in small windows: slow, but it runs.
+  const LOG_CHUNK = first > 0 ? Math.min(cfg.LOG_CHUNK, 2_000) : cfg.LOG_CHUNK;
+  const provider = new ethers.JsonRpcProvider(primaryUrl);
   {
     const origSend = provider.send.bind(provider);
+    const backups = backupUrls.map((u) => { const p = new ethers.JsonRpcProvider(u); return p.send.bind(p); });
+    const tries = backups.length ? 3 : 6;
     provider.send = async (method, params) => {
-      for (let i = 0; ; i++) {
+      let last;
+      for (let i = 0; i < tries; i++) {
         try { return await origSend(method, params); }
         catch (e) {
           const msg = String(e?.message ?? e);
-          const transient = /rate|limit|429|timeout|ETIMEDOUT|ECONNRESET|503|502/i.test(msg);
-          if (!transient || i >= 5) throw e;
-          await new Promise((r) => setTimeout(r, 500 * 2 ** i));
+          // Throttling, overload, or the endpoint unreachable: worth another try.
+          const transient = /rate|limit|429|timeout|ETIMEDOUT|ECONNRESET|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|fetch failed|network|socket|SERVER_ERROR|50[0234]/i.test(msg + (e?.code ?? ""));
+          if (!transient) throw e;
+          last = e;
+          if (i < tries - 1) await new Promise((r) => setTimeout(r, 500 * 2 ** i));
         }
       }
+      for (const send of backups) {
+        try { return await send(method, params); } catch (e) { last = e; }
+      }
+      throw last;
     };
   }
   const wallet = new ethers.Wallet(KEY, provider);
@@ -384,7 +411,9 @@ const runCap = dayLeft < MAX_SPEND_WEI ? dayLeft : MAX_SPEND_WEI;
     } catch (e) {
       if (!(e instanceof SpendCap)) console.log(`limit orders failed: ${String(e?.shortMessage ?? e?.message ?? e).slice(0, 160)}`);
     }
-    const solvency = await checkSolvency(total, head);
+    // Unknown (ok: null) when the history can't be read, e.g. on a backup RPC
+    // that refuses the range; only a shortfall actually seen fails the run.
+    const solvency = await checkSolvency(total, head).catch((e) => ({ ok: null, error: String(e?.shortMessage ?? e?.message ?? e).slice(0, 160) }));
     const summary = { keeper: "venture-ops", waiting: Object.keys(backoff).length, runCapWei: runCap.toString(), solvency, chain: Number(dep.chainId), ventures: total, ...stats, spentWei: stats.spentWei.toString(), minDeliver: minDeliver.toString(), balanceWei: balance.toString() };
     console.log(JSON.stringify(summary));
     return summary;

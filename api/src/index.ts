@@ -1,4 +1,4 @@
-import { createPublicClient, http, keccak256, parseAbi, verifyMessage, zeroAddress, type Address, type Hex } from "viem";
+import { createPublicClient, fallback, http, keccak256, parseAbi, verifyMessage, zeroAddress, type Address, type Hex } from "viem";
 
 import {
   authMessage, carriesDecoy, cleanBody, fromBrowser, ipKey, sigKey, cooldownSecs, DECOY_KEY, isAddr, isTrap, ISSUED_SKEW_SECS, issueSession,
@@ -185,7 +185,8 @@ async function post(env: Env, c: Ctx, h: Record<string, string>) {
   const cleaned = cleanBody(rawBody);
   if (!cleaned.ok) return json({ error: cleaned.error }, 400, h);
 
-  const pc = createPublicClient({ transport: http(env.RPC_URL) });
+  // RPC_URL may list backups, tried in order when one fails.
+  const pc = createPublicClient({ transport: fallback(env.RPC_URL.split(",").map((u) => http(u.trim(), { timeout: 5_000 }))) });
   const factory = env.FACTORY;
   if (!isAddr(factory)) throw new Error("FACTORY is not an address");
   const [listing, balance] = await Promise.all([

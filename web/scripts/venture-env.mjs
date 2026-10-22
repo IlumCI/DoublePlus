@@ -21,7 +21,11 @@ const NET = {
   },
   mainnet: {
     file: "venture-robinhood.json", chainId: 4663, name: "Robinhood Chain",
-    rpc: "https://rpc.mainnet.chain.robinhood.com", explorer: "https://robinhoodchain.blockscout.com",
+    // Robinhood's own RPC first: it alone serves the long log ranges history
+    // and the keeper read. The others carry balances, quotes and trades if
+    // it goes down (Daybreak serves logs 2k blocks at a time; dRPC's free
+    // plan serves none).
+    rpc: "https://rpc.mainnet.chain.robinhood.com,https://robinhood.daybreak-rpc.network,https://robinhood.drpc.org", explorer: "https://robinhoodchain.blockscout.com",
   },
 }[which];
 if (!NET) {

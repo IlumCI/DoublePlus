@@ -49,7 +49,7 @@ export default {
       checkDeployment(dep, cfg.CHAIN_ID, where);
       const s = await runOps({ cfg, dep, depPath: where, memory });
       // Thrown so the run shows as failed in the Workers dashboard.
-      if (!s.solvency.ok) throw new Error(`CRITICAL factory insolvent: ${JSON.stringify(s.solvency)}`);
+      if (s.solvency.ok === false) throw new Error(`CRITICAL factory insolvent: ${JSON.stringify(s.solvency)}`);
     } finally {
       // Recorded even when the run threw: what it spent before failing counts.
       await lock.release(Date.now(), String(memory.spentWei ?? 0n), memory.backoff);

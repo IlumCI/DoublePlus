@@ -49,5 +49,5 @@ import { runOps } from "./venture-ops-core.mjs";
 // insolvent factory exits 2, which fails the workflow and notifies the owner.
 const { dep, depPath } = loadDeployment();
 runOps({ cfg, dep, depPath })
-  .then((s) => { if (!s.solvency.ok) process.exitCode = 2; })
+  .then((s) => { if (s.solvency.ok === false) process.exitCode = 2; })
   .catch((e) => { console.error(e instanceof ConfigError ? e.message : e); process.exit(1); });
