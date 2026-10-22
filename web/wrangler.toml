@@ -1,0 +1,18 @@
+# doubleplus.fun: the venture build served as static assets from Cloudflare.
+# Deploy from web/ with `npx wrangler deploy` (the build reads .env.venture).
+# Headers come from dist/_headers, written by the build from vercel.json.
+name = "doubleplus-site"
+compatibility_date = "2026-09-01"
+workers_dev = false
+routes = [
+  { pattern = "doubleplus.fun", custom_domain = true },
+  { pattern = "www.doubleplus.fun", custom_domain = true },
+]
+
+[build]
+command = "VITE_BRAND=venture npx vite build --mode venture"
+
+[assets]
+directory = "./dist"
+# Client-side routes (/coin/0x…, /launch) get index.html.
+not_found_handling = "single-page-application"

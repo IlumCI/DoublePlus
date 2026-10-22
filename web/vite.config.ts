@@ -123,12 +123,26 @@ function ventureDist(): Plugin {
         const rel = path.relative(root, f).split(path.sep).join("/");
         if (!KEEP.some((re) => re.test(rel))) fs.rmSync(f);
       }
-      for (const d of walk(root).length ? fs.readdirSync(root) : []) {
-        const p = path.join(root, d);
-        if (fs.statSync(p).isDirectory() && fs.readdirSync(p).length === 0) fs.rmdirSync(p);
-      }
+      // Drop the folders pruning emptied, deepest first.
+      const prune = (dir: string): void => {
+        for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+          if (!e.isDirectory()) continue;
+          const p = path.join(dir, e.name);
+          prune(p);
+          if (fs.readdirSync(p).length === 0) fs.rmdirSync(p);
+        }
+      };
+      prune(root);
       fs.writeFileSync(path.join(root, "robots.txt"),
         "User-agent: *\nAllow: /\n");
+      // The venture site is served from Cloudflare (wrangler.toml here), which
+      // reads headers from _headers: carry vercel.json's over so both hosts
+      // send the same CSP and the same caching.
+      const vercel = JSON.parse(fs.readFileSync(path.join(__dirname, "vercel.json"), "utf8"));
+      fs.writeFileSync(path.join(root, "_headers"), vercel.headers
+        .map((h: { source: string; headers: { key: string; value: string }[] }) =>
+          `${h.source.replace("(.*)", "*")}\n${h.headers.map((x) => `  ${x.key}: ${x.value}`).join("\n")}\n`)
+        .join("\n"));
     },
   };
 }
