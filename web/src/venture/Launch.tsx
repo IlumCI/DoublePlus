@@ -9,7 +9,7 @@ import { fmtEth, fmtUsdV } from "./ui";
 import { Donut, Legend, SPLIT_COLORS, type Slice } from "./charts";
 import { usePageMeta } from "./seo";
 import { QUIVER_TOKEN_BYTECODE } from "./tokenBytecode";
-import { pairUsd } from "../lib/rh/routes";
+import { liveEthUsd } from "./ethUsd";
 
 import { errorText, useWallet } from "../lib/useWallet";
 import { useUi } from "../store";
@@ -73,9 +73,7 @@ export function LaunchVenture() {
 
   useEffect(() => {
     if (VENTURE.launchEthUsd8 > 0n) return setEthUsd(Number(VENTURE.launchEthUsd8) / 1e8);
-    pairUsd(VENTURE.weth, venturePc)
-      .then((v) => setEthUsd(v > 0 ? v : Number(VENTURE.ethUsd8Fallback) / 1e8))
-      .catch(() => setEthUsd(Number(VENTURE.ethUsd8Fallback) / 1e8));
+    liveEthUsd().then(setEthUsd);
   }, []);
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
@@ -146,21 +144,17 @@ export function LaunchVenture() {
     }
     setBusy(true);
     try {
-      // The price may still be loading if the form was filled fast, or the
-      // pool read may have failed: ask again (bounded), then the configured
-      // fallback. It only sizes the curve's $750 starting value, and the
-      // factory refuses anything outside its band, so a fallback is safe.
+      // The price sizes the curve's $750 starting value. It may still be
+      // loading if the form was filled fast, so ask again (each source times
+      // out in 4s). No live price means no launch: a stale one would open
+      // the curve at the wrong value.
       let usd = ethUsd;
       if (!(usd > 0)) {
-        usd = await Promise.race([
-          pairUsd(VENTURE.weth, venturePc).catch(() => 0),
-          new Promise<number>((r) => setTimeout(() => r(0), 5000)),
-        ]);
-        if (!(usd > 0)) usd = Number(VENTURE.ethUsd8Fallback) / 1e8;
+        usd = await liveEthUsd();
         if (usd > 0) setEthUsd(usd);
       }
       const ethUsd8 = BigInt(Math.round((Number.isFinite(usd) ? usd : 0) * 1e8));
-      if (ethUsd8 <= 0n) throw new Error("Couldn't read the ETH price. Try again in a moment.");
+      if (ethUsd8 <= 0n) throw new Error("Couldn't read the ETH price from Coinbase, Kraken or Blockscout. Try again in a moment.");
       // The factory only accepts an ETH/USD price inside its deployed band, so
       // a launcher cannot open their own curve near zero. Check before
       // signing so the founder gets a reason instead of a bare revert. A

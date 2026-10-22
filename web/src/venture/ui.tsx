@@ -1,3 +1,4 @@
+import { liveEthUsd } from "./ethUsd";
 import { useEffect, useState } from "react";
 
 import { TOTAL_SUPPLY, VENTURE, type Venture } from "./client";
@@ -49,38 +50,18 @@ export const pct = (num: bigint, den: bigint): number =>
 /** Fully-diluted value from the curve price — what a launchpad calls market cap. */
 const fdvWei = (v: Venture): bigint => v.priceWei * BigInt(TOTAL_SUPPLY);
 
-/** ETH/USD for headline numbers, resolved once per session. Testnet explorers
- *  cannot price their own WETH, so the env-configured fallback stands in. */
-let ethUsdCache = 0;
-let ethUsdInflight: Promise<number> | null = null;
-const ETH_USD_SANE: [number, number] = [100, 100_000];
-
-function resolveEthUsd(): Promise<number> {
-  if (ethUsdInflight) return ethUsdInflight;
-  ethUsdInflight = import("../lib/rh/routes")
-    .then(({ pairUsd }) => import("./client").then(({ venturePc }) => pairUsd(VENTURE.weth, venturePc)))
-    // A thin or mispriced pool (testnet's is) can quote ETH at millions of
-    // dollars; anything outside a sane band falls back to the configured price.
-    .then((v) => (v >= ETH_USD_SANE[0] && v <= ETH_USD_SANE[1] ? v : 0))
-    .catch(() => 0);
-  return ethUsdInflight;
-}
-
+/** ETH/USD for headline numbers, from live sources only (ethUsd.ts),
+ *  refreshed every minute. 0 until a source answers: figures then show in ETH
+ *  or "—" rather than at a made-up price. */
 export function useEthUsd(): number {
-  const configured = Number(VENTURE.ethUsd8Fallback) / 1e8;
-  // Same band for the configured price: a mis-scaled env value must not
-  // inflate every dollar figure on the site.
-  const fallback = configured >= ETH_USD_SANE[0] && configured <= ETH_USD_SANE[1] ? configured : 0;
-  const [usd, setUsd] = useState(() => ethUsdCache || fallback);
+  const [usd, setUsd] = useState(0);
   useEffect(() => {
-    if (ethUsdCache) return;
     let live = true;
-    resolveEthUsd().then((v) => {
-      if (v > 0) ethUsdCache = v;
-      if (live && v > 0) setUsd(v);
-    });
-    return () => { live = false; };
-  }, [fallback]);
+    const read = () => liveEthUsd().then((v) => { if (live && v > 0) setUsd(v); });
+    read();
+    const t = setInterval(read, 60_000);
+    return () => { live = false; clearInterval(t); };
+  }, []);
   return usd;
 }
 

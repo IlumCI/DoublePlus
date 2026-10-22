@@ -2,7 +2,8 @@ import { Link } from "react-router-dom";
 
 import { env } from "../../lib/env";
 import type { Venture } from "../client";
-import { pct, useEthUsd, useTick } from "../ui";
+import { fmtEth, pct, useTick } from "../ui";
+import { useVolume24 } from "../volume24";
 
 /** Next flywheel epoch: the keeper runs Mondays 12:00 UTC (.github/workflows/venture-keepers.yml). */
 function nextEpoch(now: number): number {
@@ -37,14 +38,14 @@ function Tile({ title, children, to }: { title: string; children: React.ReactNod
  */
 export function Sidebar({ ventures }: { ventures: Venture[] | null }) {
   const now = useTick();
-  const ethUsd = useEthUsd();
+  const volume24 = useVolume24();
   const live = (ventures ?? []).filter((v) => v.phase === "raising");
   const hot = [...live].sort((a, b) => pct(b.raisedWei, b.targetRaiseWei) - pct(a.raisedWei, a.targetRaiseWei)).slice(0, 4);
 
   return (
     <aside className="lh-sidebar" aria-label="Market sidebar">
       <Tile title="Market">
-        <div className="lh-kv"><span>ETH</span><b>{ethUsd > 0 ? `$${ethUsd.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "—"}</b></div>
+        <div className="lh-kv"><span>24h volume</span><b>{volume24 === null ? "—" : `${fmtEth(volume24, 3)} ETH`}</b></div>
         <div className="lh-kv"><span>Filling</span><b>{ventures ? live.length : "—"}</b></div>
         <div className="lh-kv"><span>Trading</span><b>{ventures ? ventures.filter((v) => v.phase === "graduated").length : "—"}</b></div>
         <div className="lh-sub"><i className="lh-dot" /> {env.chainName}</div>

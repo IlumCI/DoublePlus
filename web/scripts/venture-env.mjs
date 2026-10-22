@@ -60,13 +60,9 @@ const values = {
   VITE_WETH_ADDRESS: d.contracts.weth,
   VITE_PLATFORM_FEE_BPS: String(d.platformFeeBps),
   VITE_REF_SHARE_BPS: String(d.refShareBps),
-  // Live pricing first; the fallback stays set on mainnet too, so a failed
-  // price read can't block every launch. Keep it near the real price: it
-  // sizes a curve's starting value when live pricing is down.
   // Testnet launches are sized at a scaled ETH price, so a curve's $750
   // start costs ~0.0002 ETH instead of ~0.25; mainnet always reads it live.
   VITE_LAUNCH_ETH_USD_8: which === "testnet" ? "186500000000000" : "0",
-  ...(which === "mainnet" ? { VITE_ETH_USD_8_FALLBACK: process.env.ETH_USD_8_FALLBACK ?? "250000000000" } : {}),
 };
 
 function patchEnv(file) {

@@ -34,9 +34,6 @@ export const VENTURE = {
   router: envAddress(vite.VITE_VENTURE_ROUTER),
   weth: envAddress(vite.VITE_WETH_ADDRESS, "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73"),
   startBlock: envBigint(vite.VITE_VENTURE_START_BLOCK),
-  /** ETH/USD 8dp fallback for chains whose explorer can't price ETH (testnet).
-   *  The curve sizes its $750 start FDV from this when live pricing fails. */
-  ethUsd8Fallback: envBigint(vite.VITE_ETH_USD_8_FALLBACK),
   /** Testnet only: the ETH/USD price launches are sized at, scaled up so a
    *  curve's $750 start costs a faucet's worth of ETH. Zero = read it live. */
   launchEthUsd8: envBigint(vite.VITE_LAUNCH_ETH_USD_8),
