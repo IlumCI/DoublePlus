@@ -44,11 +44,13 @@
 //                       least this many times the gas it costs to push
 import { cfg, loadDeployment } from "./venture-config.mjs";
 import { ConfigError } from "./venture-config-core.mjs";
+import { readFileSync } from "node:fs";
 import { runOps } from "./venture-ops-core.mjs";
 
 // The run itself is in venture-ops-core.mjs (shared with the Worker). An
 // insolvent factory exits 2, which fails the workflow and notifies the owner.
 const { dep, depPath } = loadDeployment();
-runOps({ cfg, dep, depPath })
+const tokenSource = JSON.parse(readFileSync(new URL("token-source.json", import.meta.url), "utf8"));
+runOps({ cfg, dep, depPath, tokenSource })
   .then((s) => { if (s.solvency.ok === false) process.exitCode = 2; })
   .catch((e) => { console.error(e instanceof ConfigError ? e.message : e); process.exit(1); });

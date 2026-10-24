@@ -2,6 +2,7 @@
 // and the Cloudflare Worker (worker.mjs). Everything a run touches is built
 // inside runOps, so a warm Worker isolate starts each run from zero.
 import { ethers } from "ethers";
+import { verifyCoins } from "./sourcify.mjs";
 
 export class SpendCap extends Error {}
 
@@ -15,9 +16,11 @@ export class SpendCap extends Error {}
  *  24h), backoff in and out (what failed and when to try it again), index in
  *  and out (the event history the keeper has read, see syncIndex) with
  *  indexDirty naming the parts this run changed, deadlineMs in (when the run
- *  must wrap up), and spentWei out, kept current after every tx so a run
- *  that throws still reports what it spent. */
-export async function runOps({ cfg, dep, depPath, memory = {} }) {
+ *  must wrap up), sourcify in and out (which coins Sourcify has verified),
+ *  and spentWei out, kept current after every tx so a run that throws still
+ *  reports what it spent. tokenSource is token-source.json, or null to skip
+ *  source verification. */
+export async function runOps({ cfg, dep, depPath, memory = {}, tokenSource = null }) {
   const { DRY_RUN, envEth, envInt, envWei, KEY, RPC } = cfg;
   const MIN_DELIVER = envWei("MIN_DELIVER", 1_000_000_000_000n);
   const RECENTER_SPACINGS = envInt("RECENTER_SPACINGS", 10, 1, 10_000);
@@ -469,6 +472,12 @@ export async function runOps({ cfg, dep, depPath, memory = {} }) {
       if (!pastDeadline()) await fillLimitOrders();
     } catch (e) {
       if (!(e instanceof SpendCap)) console.log(`limit orders failed: ${String(e?.shortMessage ?? e?.message ?? e).slice(0, 160)}`);
+    }
+    // Source verification for new coins (see sourcify.mjs), kept in
+    // memory.sourcify between runs; a run without memory checks them afresh.
+    if (tokenSource && !pastDeadline()) {
+      stats.sourcified = await verifyCoins({ coins, chainId: Number(dep.chainId), source: tokenSource,
+        state: memory.sourcify ?? (memory.sourcify = {}), pastDeadline }).catch(() => 0);
     }
     // Unknown (ok: null) when the history can't be read, e.g. on a backup RPC
     // that refuses the range; only a shortfall actually seen fails the run.
