@@ -106,7 +106,7 @@ function brandHtml(): Plugin {
  */
 function ventureDist(): Plugin {
   const KEEP = [
-    /^index\.html$/, /^assets\//, /^doubleplus-(icon-64|touch|card)\.png$/,
+    /^index\.html$/, /^assets\//, /^doubleplus-(icon-64|touch|card|avatar)\.png$/,
     /^fonts\/dp\//, /^rewards\/venture\/(index|epoch-\d+)\.json$/, /^robots\.txt$/,
   ];
   let outDir = "dist";
