@@ -1,0 +1,105 @@
+<!doctype html>
+<!-- Referral explainer card for X (1600x900), in the launch video's look:
+     navy sky over a glossy black floor, glass panels standing on the horizon
+     with their reflections, gel-green figures, Selawik.
+     Render: node brand/referrals/render.mjs -->
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @font-face { font-family: Selawik; src: url(../fonts/selawk.ttf); font-weight: 400; }
+  @font-face { font-family: Selawik; src: url(../fonts/selawksb.ttf); font-weight: 600; }
+  @font-face { font-family: Selawik; src: url(../fonts/selawkb.ttf); font-weight: 700; }
+  :root {
+    --text: #e6ecfa; --dim: #a6b3d3; --faint: #8796bc; --line: #2c3f73;
+    --gel: linear-gradient(#9af06e 0%, #4fc236 48%, #36a024 52%, #5fd040 100%);
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { width: 1600px; height: 900px; overflow: hidden; background: #02040b; }
+  body { position: relative; font-family: Selawik, "Segoe UI", sans-serif; color: var(--text); }
+  .sky { position: absolute; inset: 0; background: radial-gradient(70% 60% at 50% 28%, #13265a 0%, #081129 45%, #02040b 100%); }
+  .floor { position: absolute; left: 0; right: 0; top: 640px; bottom: 0; background: linear-gradient(#0a1430 0%, #03060f 35%, #000 100%); }
+  .floor::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 150px; background: radial-gradient(60% 100% at 50% 0%, rgb(122 162 255 / .2), transparent 70%); }
+  .horizon { position: absolute; left: 0; right: 0; top: 639px; height: 2px;
+    background: linear-gradient(90deg, transparent, rgb(150 185 255 / .55) 30%, rgb(220 235 255 / .9) 50%, rgb(150 185 255 / .55) 70%, transparent); }
+  .streak { position: absolute; left: -200px; top: 150px; width: 2000px; height: 3px; transform: rotate(-4deg); opacity: .5; filter: blur(.4px);
+    background: linear-gradient(90deg, transparent, rgb(190 215 255 / .25) 20%, #fff 50%, rgb(190 215 255 / .25) 80%, transparent); }
+  .streak::after { content: ""; position: absolute; inset: -26px 0; filter: blur(18px);
+    background: linear-gradient(90deg, transparent, rgb(110 160 255 / .3) 35%, rgb(150 190 255 / .5) 50%, rgb(110 160 255 / .3) 65%, transparent); }
+
+  .brand { position: absolute; left: 64px; top: 52px; display: flex; align-items: center; gap: 16px; }
+  .brand img { height: 46px; }
+  .brand span { font-size: 26px; font-weight: 600; color: var(--dim); }
+
+  h1 { position: absolute; left: 0; right: 0; top: 118px; text-align: center; font-size: 84px; font-weight: 700; letter-spacing: -1px; }
+  .gel { background: var(--gel); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .sub { position: absolute; left: 0; right: 0; top: 226px; text-align: center; font-size: 30px; color: var(--dim); }
+
+  .row { position: absolute; left: 0; right: 0; top: 310px; display: flex; justify-content: center; align-items: flex-end; gap: 26px; }
+  .row.mirror { top: 641px; height: 330px; align-items: flex-start; transform: scaleY(-1); opacity: .2; filter: blur(1.5px); pointer-events: none;
+    -webkit-mask-image: linear-gradient(to top, #000 0%, transparent 60%); mask-image: linear-gradient(to top, #000 0%, transparent 60%); }
+  .panel { width: 400px; height: 330px; border-radius: 14px; position: relative; text-align: center; padding: 34px 26px 0;
+    background: linear-gradient(#1b2c5c 0%, #121d40 46%, #0d1633 100%);
+    border: 1px solid var(--line);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / .16), 0 20px 60px rgb(0 0 0 / .45); }
+  .panel::before { content: ""; position: absolute; inset: 0 0 50% 0; border-radius: 14px 14px 0 0;
+    background: linear-gradient(rgb(255 255 255 / .07), rgb(255 255 255 / 0)); }
+  .step { position: absolute; left: 18px; top: 16px; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center;
+    font-size: 22px; font-weight: 700; color: #04210c; background: var(--gel); box-shadow: inset 0 1px 0 rgb(255 255 255 / .5); }
+  .big { height: 128px; display: grid; place-items: center; font-size: 112px; font-weight: 700; line-height: 1; filter: drop-shadow(0 0 16px rgb(79 220 124 / .22)); }
+  
+  .title { margin-top: 26px; font-size: 38px; font-weight: 700; }
+  .note { margin-top: 10px; font-size: 24px; color: var(--dim); line-height: 1.3; }
+  .arrow { width: 54px; align-self: center; margin-bottom: 0; }
+  .row.mirror .arrow { visibility: hidden; }
+
+  .foot { position: absolute; left: 0; right: 0; bottom: 56px; text-align: center; font-size: 28px; color: var(--dim); }
+  .foot b { color: var(--text); font-weight: 600; }
+</style>
+</head>
+<body>
+  <div class="sky"></div>
+  <div class="floor"></div>
+  <div class="streak"></div>
+  <div class="horizon"></div>
+
+  <div class="brand"><img src="../doubleplus-mark.svg" alt=""><span>doubleplus.fun</span></div>
+
+  <h1>Bring a friend. <span class="gel">You both win.</span></h1>
+  <p class="sub">It's that simple.</p>
+
+  <div class="row" id="row">
+    <div class="panel">
+      <div class="step">1</div>
+      <div class="big">
+        <svg width="150" height="110" viewBox="0 0 150 110" fill="none">
+          <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9af06e"/><stop offset=".48" stop-color="#4fc236"/><stop offset=".52" stop-color="#36a024"/><stop offset="1" stop-color="#5fd040"/></linearGradient></defs>
+          <rect x="8" y="30" width="78" height="50" rx="25" stroke="url(#g)" stroke-width="14"/>
+          <rect x="64" y="30" width="78" height="50" rx="25" stroke="url(#g)" stroke-width="14"/>
+        </svg>
+      </div>
+      <div class="title">You share a link</div>
+      <div class="note">Find it on your Portfolio</div>
+    </div>
+    <svg class="arrow" viewBox="0 0 54 60"><path d="M10 8 L40 30 L10 52" stroke="#4fdc7c" stroke-width="9" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity=".85"/></svg>
+    <div class="panel">
+      <div class="step">2</div>
+      <div class="big gel">−10%</div>
+      <div class="title">Your friend saves</div>
+      <div class="note">10% off their fees, every trade</div>
+    </div>
+    <svg class="arrow" viewBox="0 0 54 60"><path d="M10 8 L40 30 L10 52" stroke="#4fdc7c" stroke-width="9" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity=".85"/></svg>
+    <div class="panel">
+      <div class="step">3</div>
+      <div class="big gel">+20%</div>
+      <div class="title">You get paid</div>
+      <div class="note">20% of their fees. Forever.</div>
+    </div>
+  </div>
+  <div class="row mirror" id="mirror"></div>
+
+  <p class="foot"><b>Every coin. Every trade.</b> &nbsp;Automatic.</p>
+
+  <script>document.getElementById("mirror").innerHTML = document.getElementById("row").innerHTML;</script>
+</body>
+</html>
