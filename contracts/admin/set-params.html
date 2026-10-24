@@ -1,0 +1,196 @@
+<!doctype html>
+<!-- Local admin page: VentureFactory.setParams on Robinhood Chain mainnet,
+     signed by the protocol admin's own wallet. No dependencies.
+     Serve:  cd contracts/admin && python3 -m http.server 8790
+     Open:   http://localhost:8790/set-params.html
+     (Wallet extensions don't inject into file:// pages.) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Factory setParams</title>
+<style>
+  :root { --bg: #070b18; --panel: #0f1730; --line: #223056; --text: #e6ecfa; --dim: #a6b3d3; --up: #4fdc7c; --down: #ff6b6b; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 "Segoe UI", system-ui, sans-serif; padding: 32px 16px; }
+  main { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .dim { color: var(--dim); }
+  .mono { font-family: Consolas, "Noto Sans Mono", monospace; font-size: 13px; word-break: break-all; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px; margin-top: 16px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  th { color: var(--dim); font-weight: 600; font-size: 13px; }
+  input { width: 100%; background: #0a1124; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; font: inherit; }
+  .changed td { color: var(--up); }
+  button { background: linear-gradient(#5fd040, #36a024); color: #04210c; border: 0; border-radius: 6px; padding: 10px 18px; font: 600 15px inherit; cursor: pointer; margin-right: 8px; }
+  button:disabled { opacity: .45; cursor: default; }
+  #log { white-space: pre-wrap; }
+  .ok { color: var(--up); } .bad { color: var(--down); }
+  a { color: #7aa2ff; }
+</style>
+</head>
+<body>
+<main>
+  <h1>VentureFactory · setParams</h1>
+  <div class="dim">Robinhood Chain mainnet (4663) · factory <span class="mono">0x60e0DD86327F1dA36565c79aAe9f87070415963b</span></div>
+
+  <section>
+    <button id="connect">Connect wallet</button>
+    <span id="who" class="mono dim">not connected</span>
+  </section>
+
+  <section>
+    <table>
+      <thead><tr><th>Parameter</th><th>On-chain now</th><th>New value</th></tr></thead>
+      <tbody>
+        <tr id="r-fee"><td>Creation fee (ETH)</td><td id="c-fee" class="mono">…</td><td><input id="n-fee"></td></tr>
+        <tr id="r-grad"><td>Graduation raise (ETH)</td><td id="c-grad" class="mono">…</td><td><input id="n-grad" value="1.8"></td></tr>
+        <tr id="r-sweep"><td>Sweep delay (days)</td><td id="c-sweep" class="mono">…</td><td><input id="n-sweep"></td></tr>
+        <tr id="r-share"><td>Creator curve share (%)</td><td id="c-share" class="mono">…</td><td><input id="n-share"></td></tr>
+      </tbody>
+    </table>
+    <p class="dim" id="limits">Limits: …</p>
+  </section>
+
+  <section>
+    <button id="send" disabled>Simulate &amp; send</button>
+    <div id="log" class="mono" style="margin-top:12px"></div>
+  </section>
+</main>
+
+<script>
+const FACTORY = "0x60e0DD86327F1dA36565c79aAe9f87070415963b";
+const CHAIN_ID = 4663n;
+// ?rpc= points reads and receipts at another node (a local fork, for testing).
+const RPC = new URLSearchParams(location.search).get("rpc") || "https://rpc.mainnet.chain.robinhood.com";
+const EXPLORER = "https://robinhoodchain.blockscout.com";
+const GAS = 60000n; // the chain's huge block gas limit breaks wallet estimates
+const SEL = {
+  setParams: "ab1bce49", creationFeeWei: "10f16473", graduationRaiseWei: "f856eca5",
+  sweepDelaySecs: "b8afa1cd", creatorCurveShareBps: "d8ef7073", minTargetWei: "edf9c555", protocolAdmin: "420f6861",
+};
+const $ = (id) => document.getElementById(id);
+const log = (msg, cls = "") => { const d = document.createElement("div"); d.className = cls; d.textContent = msg; $("log").appendChild(d); };
+const hex = (n) => "0x" + n.toString(16);
+const word = (n) => n.toString(16).padStart(64, "0");
+const toWei = (s) => {
+  const [i, f = ""] = String(s).trim().split(".");
+  if (!/^\d+$/.test(i || "0") || !/^\d*$/.test(f) || f.length > 18) throw new Error(`not an ETH amount: ${s}`);
+  return BigInt(i || "0") * 10n ** 18n + BigInt((f + "0".repeat(18)).slice(0, 18));
+};
+const fromWei = (w) => {
+  const s = w.toString().padStart(19, "0");
+  const f = s.slice(-18).replace(/0+$/, "");
+  return s.slice(0, -18) + (f ? "." + f : "");
+};
+
+let account = null, current = null;
+
+async function rpc(method, params) {
+  const r = await fetch(RPC, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) });
+  const j = await r.json();
+  if (j.error) throw new Error(j.error.message);
+  return j.result;
+}
+const read = async (name) => BigInt(await rpc("eth_call", [{ to: FACTORY, data: "0x" + SEL[name] }, "latest"]));
+
+async function loadCurrent() {
+  const [fee, grad, sweep, share, minT, admin] = await Promise.all(
+    ["creationFeeWei", "graduationRaiseWei", "sweepDelaySecs", "creatorCurveShareBps", "minTargetWei", "protocolAdmin"].map(read));
+  current = { fee, grad, sweep, share, minT, admin: "0x" + admin.toString(16).padStart(40, "0") };
+  $("c-fee").textContent = fromWei(fee);
+  $("c-grad").textContent = fromWei(grad);
+  $("c-sweep").textContent = String(sweep / 86400n);
+  $("c-share").textContent = String(Number(share) / 100);
+  if (!$("n-fee").value) $("n-fee").value = fromWei(fee);
+  if (!$("n-sweep").value) $("n-sweep").value = String(sweep / 86400n);
+  if (!$("n-share").value) $("n-share").value = String(Number(share) / 100);
+  $("limits").textContent = `Limits: graduation ${fromWei(minT)} to 1,000,000 ETH · creation fee ≤ 0.05 ETH · sweep ≥ 180 days · creator share ≤ 50%. Admin: ${current.admin}`;
+  markChanges();
+}
+
+function newValues() {
+  const fee = toWei($("n-fee").value);
+  const grad = toWei($("n-grad").value);
+  const days = $("n-sweep").value.trim();
+  const pct = $("n-share").value.trim();
+  if (!/^\d+$/.test(days)) throw new Error("sweep delay must be whole days");
+  if (!/^\d+(\.\d{1,2})?$/.test(pct)) throw new Error("creator share must be a percent with at most 2 decimals");
+  const sweep = BigInt(days) * 86400n;
+  const share = BigInt(Math.round(Number(pct) * 100));
+  if (grad < current.minT || grad > 1_000_000n * 10n ** 18n) throw new Error(`graduation must be ${fromWei(current.minT)} to 1,000,000 ETH`);
+  if (fee > 5n * 10n ** 16n) throw new Error("creation fee must be at most 0.05 ETH");
+  if (sweep < 180n * 86400n) throw new Error("sweep delay must be at least 180 days");
+  if (share > 5000n) throw new Error("creator share must be at most 50%");
+  return { fee, grad, sweep, share };
+}
+
+function markChanges() {
+  try {
+    const n = newValues();
+    $("r-fee").className = n.fee !== current.fee ? "changed" : "";
+    $("r-grad").className = n.grad !== current.grad ? "changed" : "";
+    $("r-sweep").className = n.sweep !== current.sweep ? "changed" : "";
+    $("r-share").className = n.share !== current.share ? "changed" : "";
+  } catch { /* shown on send */ }
+}
+for (const id of ["n-fee", "n-grad", "n-sweep", "n-share"]) $(id).addEventListener("input", markChanges);
+
+async function ensureChain() {
+  const id = BigInt(await ethereum.request({ method: "eth_chainId" }));
+  if (id === CHAIN_ID) return;
+  try {
+    await ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: hex(CHAIN_ID) }] });
+  } catch (e) {
+    if (e.code !== 4902) throw e;
+    await ethereum.request({ method: "wallet_addEthereumChain", params: [{
+      chainId: hex(CHAIN_ID), chainName: "Robinhood Chain", rpcUrls: [RPC], blockExplorerUrls: [EXPLORER],
+      nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+    }] });
+  }
+}
+
+$("connect").onclick = async () => {
+  if (!window.ethereum) { log("No wallet found in this browser.", "bad"); return; }
+  try {
+    [account] = await ethereum.request({ method: "eth_requestAccounts" });
+    await ensureChain();
+    const isAdmin = current && account.toLowerCase() === current.admin.toLowerCase();
+    $("who").textContent = `${account} ${isAdmin ? "· admin ✓" : "· NOT the admin"}`;
+    $("who").className = "mono " + (isAdmin ? "ok" : "bad");
+    $("send").disabled = !isAdmin;
+  } catch (e) { log(e.message || String(e), "bad"); }
+};
+
+$("send").onclick = async () => {
+  $("send").disabled = true;
+  try {
+    await ensureChain();
+    const n = newValues();
+    const data = "0x" + SEL.setParams + word(n.fee) + word(n.grad) + word(n.sweep) + word(n.share);
+    log(`calldata ${data}`);
+    // Simulate as the admin against the live chain before the wallet sees it.
+    await rpc("eth_call", [{ from: account, to: FACTORY, data }, "latest"]);
+    const gasPrice = BigInt(await rpc("eth_gasPrice", []));
+    log(`simulation ok · max cost ≈ ${fromWei(GAS * gasPrice)} ETH (gas limit ${GAS})`, "ok");
+    const hash = await ethereum.request({ method: "eth_sendTransaction", params: [{ from: account, to: FACTORY, data, value: "0x0", gas: hex(GAS) }] });
+    log(`sent ${hash}`);
+    const a = document.createElement("a"); a.href = `${EXPLORER}/tx/${hash}`; a.target = "_blank"; a.textContent = "view on Blockscout"; $("log").appendChild(a);
+    let rc = null;
+    while (!rc) { await new Promise((r) => setTimeout(r, 1500)); rc = await rpc("eth_getTransactionReceipt", [hash]); }
+    if (rc.status !== "0x1") throw new Error("transaction reverted on-chain");
+    log(`mined in block ${BigInt(rc.blockNumber)} · gas used ${BigInt(rc.gasUsed)}`, "ok");
+    await loadCurrent();
+    log(`now on-chain: graduation ${fromWei(current.grad)} ETH, creation fee ${fromWei(current.fee)} ETH, sweep ${current.sweep / 86400n} days, creator share ${Number(current.share) / 100}%`, "ok");
+  } catch (e) {
+    log(e.message || String(e), "bad");
+  } finally {
+    $("send").disabled = !account;
+  }
+};
+
+loadCurrent().catch((e) => log(`couldn't read the factory: ${e.message}`, "bad"));
+</script>
+</body>
+</html>
