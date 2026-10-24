@@ -85,11 +85,11 @@ Coins so far: **$DOUBLEPLUS** `0xc44cFd968A38C6B16A8Be4677bbB87d0eBB42add`, an o
    - Every coin is verified on Sourcify automatically.
    - Launches and graduations post to the Telegram channel, and to Discord once its webhook is set.
    - The sitemap gets coin pages indexed.
-2. **Free listings,** prepared in `docs/listings/`:
+2. **Free listings,** prepared in `docs/listings/`, all submitted by 2026-10-24:
    - DefiLlama adapter PR
    - Alchemy Dapp Store
    - awesome-robinhood-chain
-   - Robinhood's own ecosystem page, via DM to @RobinhoodCrypto (sent)
+   - Robinhood's own ecosystem page, via DM to @RobinhoodCrypto
 3. **X (@DoublePlusFund) is the main channel.**
    - The launch video is `~/Projects/doubleplus-video/promo/out/doubleplus-launch.mp4` (posted 2026-10-24).
    - Links go in replies, not the main post.
@@ -105,7 +105,7 @@ Coins so far: **$DOUBLEPLUS** `0xc44cFd968A38C6B16A8Be4677bbB87d0eBB42add`, an o
 
   It also measures volume only from the router's `Routed` events, which only graduated pools emit. Until a coin graduates it has nothing to pay, so turning it on comes after the first graduation. Decide with the user.
 - Lower `graduationRaiseWei` to 1–2 ETH so early coins can graduate. This is the bottleneck: pool fees, free DexScreener/GeckoTerminal listings and the flywheel all start at graduation, and none has happened yet (one `setParams` transaction from the treasury; affects new launches only).
-- Ideas not built yet: an "Add to wallet" button on coin pages, Blockscout token info for $DOUBLEPLUS (the creator wallet signs once), GeckoTerminal token info after graduation, auto-posting to X (check API pricing first).
+- Ideas not built yet: Blockscout token info for $DOUBLEPLUS (the creator wallet signs once), GeckoTerminal token info after graduation, auto-posting to X (check API pricing first).
 - `contracts/contracts/autotrader/` and the `hardhat.config.ts` change are the user's uncommitted work in progress; they aren't deployed and aren't part of DoublePlus. Don't commit them unless asked.
 
 ## Traps
