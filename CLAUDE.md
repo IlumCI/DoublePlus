@@ -49,7 +49,7 @@ Main addresses:
 | Keeper wallet | `0x89B69eeC7cE3a01C84a0f2Ef77B89A484ccf5456` |
 | Deployer | `0x201678B2840eB3EE5d097ff71f0412bCf847ba45` |
 
-`setParams` as set: creation fee 0.0003 ETH, graduation 4 ETH, sweep 365 days, creator curve share 20%.
+`setParams` as set: creation fee 0.0003 ETH, graduation 1.8 ETH (lowered from 4 on 2026-10-25, tx `0x281834c3…a35320`), sweep 365 days, creator curve share 20%. Change them with the local page `contracts/admin/set-params.html` (serve it with `python3 -m http.server 8790` from `contracts/admin/`, pick the admin wallet, send).
 
 Coins so far: **$DOUBLEPLUS** `0xc44cFd968A38C6B16A8Be4677bbB87d0eBB42add`, an open curve. The only backer is the user, so it isn't expected to graduate on its own.
 
@@ -57,7 +57,7 @@ Coins so far: **$DOUBLEPLUS** `0xc44cFd968A38C6B16A8Be4677bbB87d0eBB42add`, an o
 
 - **Every coin opens at a $750 market cap.** That's `START_MCAP_USD_8`, fixed in the contract. The price then rises in a straight line until the curve's target is reached.
 - **Graduation market cap** ≈ 2 × raise × ETH price ÷ 0.6, minus $750. The curve sells 60% of the 1B supply.
-- **Open curve:** no target set by the creator, no refunds. It graduates at `graduationRaiseWei` (4 ETH, adjustable, frozen into each coin at launch).
+- **Open curve:** no target set by the creator, no refunds. It graduates at `graduationRaiseWei` (1.8 ETH for coins launched since 2026-10-25, about a 6 ETH market cap; adjustable, frozen into each coin at launch, so $DOUBLEPLUS stays at 4 ETH).
 - **Target raise:** the creator sets the target, with a 1 ETH floor (`minTargetWei`). If it misses by the deadline (14 days at most), every backer is refunded. A bigger raise means a pool that opens at a higher market cap: this is the "invest into a project for it to rocket" mode.
 - **At graduation,** the coin gets a Uniswap v4 pool in the same transaction, and the liquidity is locked forever. There is no withdrawal path, and `venture.lock.test.ts` checks that.
 - **Anti-snipe:**
@@ -104,7 +104,6 @@ Coins so far: **$DOUBLEPLUS** `0xc44cFd968A38C6B16A8Be4677bbB87d0eBB42add`, an o
   - a funded wallet: it pays out of the keeper wallet, sized at 25% of estimated epoch revenue and capped at 0.5 ETH.
 
   It also measures volume only from the router's `Routed` events, which only graduated pools emit. Until a coin graduates it has nothing to pay, so turning it on comes after the first graduation. Decide with the user.
-- Lower `graduationRaiseWei` to 1–2 ETH so early coins can graduate. This is the bottleneck: pool fees, free DexScreener/GeckoTerminal listings and the flywheel all start at graduation, and none has happened yet (one `setParams` transaction from the treasury; affects new launches only).
 - Ideas not built yet: Blockscout token info for $DOUBLEPLUS (the creator wallet signs once), GeckoTerminal token info after graduation, auto-posting to X (check API pricing first).
 - `contracts/contracts/autotrader/` and the `hardhat.config.ts` change are the user's uncommitted work in progress; they aren't deployed and aren't part of DoublePlus. Don't commit them unless asked.
 
