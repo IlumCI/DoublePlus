@@ -9,7 +9,7 @@ import { PriceChart, TradeTape, usePoolTrades } from "../Chart";
 import { ShareBar } from "../share";
 import { Comments, COMMENTS_ENABLED } from "../comments";
 import { usePageMeta } from "../seo";
-import { ago, safeImageUrl, DexBadge, fmtMcap, Monogram, short, StatusBadge, useEthUsd } from "../ui";
+import { ago, CopyButton, safeImageUrl, DexBadge, fmtMcap, Monogram, short, StatusBadge, useEthUsd } from "../ui";
 import { FailPanel, GraduatePanel } from "./ClosedPanels";
 import { CurvePanel } from "./CurvePanel";
 import { AlertToggle, BoostButton, Socials, StatBar, YourBag } from "./Header";
@@ -106,7 +106,7 @@ function VentureBody({ v, fills, ethUsd }: { v: VentureT; fills: Fill[]; ethUsd:
           <h1>{v.name} <span className="dp-mono" style={{ fontSize: 14, color: "var(--dim)" }}>${v.symbol}</span></h1>
           {(v.meta.pitch || v.meta.description) && <p className="dp-oneliner">{v.meta.pitch || v.meta.description}</p>}
           <p className="dp-prov" style={{ margin: "4px 0 0" }}>
-            created by <b>{short(v.creator)}</b> · {ago(v.createdAt)} ago
+            CA <CopyButton value={v.address} label={`${short(v.address)} ⧉`} /> · created by <b>{short(v.creator)}</b> · {ago(v.createdAt)} ago
             {v.meta.sector ? <> · {v.meta.sector}</> : null} · <StatusBadge v={v} /> <DexBadge profile={dex} /> <AlertToggle v={v} /> <BoostButton v={v} />
           </p>
           <Socials meta={v.meta} dex={dex} />

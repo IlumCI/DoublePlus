@@ -18,7 +18,7 @@ export function ProjectPane({ v }: { v: VentureT }) {
   return (
     <div className="dp-story">
       {v.meta.description || v.meta.pitch
-        ? <p>{v.meta.description || v.meta.pitch}</p>
+        ? <p style={{ whiteSpace: "pre-line" }}>{v.meta.description || v.meta.pitch}</p>
         : <p className="dp-agate">No description.</p>}
     </div>
   );

@@ -74,3 +74,9 @@ describe("cleanText blank and stacked characters", () => {
     expect(cleanText("caf\u00e9 \u1ec7", 20)).toBe("caf\u00e9 \u1ec7");
   });
 });
+
+describe("terminal quote bars", () => {
+  it("drops the bar a terminal draws beside quoted text, keeping the lines", () => {
+    expect(cleanText("One.\n▎\n▎ Two.\n▎ • three", 4000, true)).toBe("One.\n\nTwo.\n• three");
+  });
+});

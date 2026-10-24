@@ -34,6 +34,9 @@ const STACKED_MARKS = /(\p{M}{2})\p{M}+/gu;
 export function cleanText(raw: unknown, max: number, multiline = false): string {
   if (typeof raw !== "string") return "";
   let t = raw.replace(INVISIBLE, "").replace(STACKED_MARKS, "$1");
+  // Quote bars a terminal draws beside quoted text ride along when it is
+  // copied, and the field can't be edited once it is on-chain.
+  if (multiline) t = t.replace(/^[ \t]*[\u2502\u2503\u258C-\u258F][ \t]?/gm, "");
   t = multiline ? t.replace(/\r\n?/g, "\n").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n") : t.replace(/\s+/g, " ");
   t = t.trim();
   const chars = [...t];
