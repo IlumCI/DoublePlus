@@ -18,7 +18,7 @@ keep it alive. It does not explain the contracts — read those in
 | --- | --- | --- | --- | --- |
 | `copair` | **hoodheist.fun** — production | Robinhood 4663 | `robinhood-flywheel.json` | Vercel cron `/api/keeper`, 10 min |
 | `base` | basedstonk.fun | Base 8453 | `base-stockfly-v3.json` | GH Actions `base-keeper.yml`, 30 min |
-| `venture` | **doubleplus.fun** — active development, mainnet launch pending | Robinhood **testnet** 46630 | `venture-testnet.json` | GH Actions `venture-keepers.yml`, 15 min + weekly |
+| `venture` | **doubleplus.fun** — live, the focus (see CLAUDE.md) | Robinhood 4663 | `venture-robinhood.json` | Cloudflare Worker `doubleplus-keeper`, every minute; weekly flywheel in `venture-keepers.yml` (not yet pointed at mainnet) |
 | `hammr` | hammr | Robinhood 4663 | `robinhood-hammr.json` | none |
 | `arc` | arcx.fun | Arc 5042 | `arc-v3-launchpad.json` | none (permissionless `harvestFees`) |
 | `steadypads` | steadypads.vercel.app | Stable 988 | `stable-launchpad.json` | none |
@@ -28,8 +28,8 @@ current front end: `robinhood-diamond`, `robinhood-hood`, `robinhood-earn`,
 `robinhood-rh-final`, `robinhood-rh-buyback`, `robinhood-rh-fork`, `quiver-v4`,
 `robinhood-launchpad`.
 
-**doubleplus has no mainnet deployment.** `venture-testnet.json` is the only
-venture artifact that exists.
+doubleplus is live on mainnet (`venture-robinhood.json`, since 2026-10-22);
+`venture-testnet.json` is the testnet copy. CLAUDE.md has its current state.
 
 ### Two things the files get wrong
 
@@ -159,7 +159,7 @@ the prediction held, and renounces factory ownership at the end.
 | `REF_SHARE_BPS` | 2000 (20% of the fee) | ≤ 5000 |
 | `CURVE_BUY_FEE_BPS` | 50 (0.5%) | ≤ 300 |
 | `CURVE_SELL_FEE_BPS` | 100 (1%) | ≤ 300 |
-| `MIN_TARGET_ETH` | **2** | ≤ 1,000,000 |
+| `MIN_TARGET_ETH` | **2** (mainnet deployed with 1) | ≤ 1,000,000 |
 | `GRADUATION_RAISE_ETH` | 4 (setParams) | ≥ `MIN_TARGET_ETH` |
 | `CREATION_FEE_ETH` | 0 (setParams) | — |
 | `ETH_USD_MIN` / `ETH_USD_MAX` | 1,000 / 10,000 on 4663; 1 / 10,000,000 on 46630 | min > 0, min ≤ max |
@@ -211,14 +211,15 @@ been deleted and the npm script repointed.)
 
 ## Keepers
 
-Four scheduled jobs. Three are on GitHub Actions, one on Vercel. **All of them
+Scheduled jobs on GitHub Actions, Vercel and Cloudflare. **All of them
 no-op silently when their key is unset** — check the run logs, not the exit code.
 
 | Job | Where | Schedule | Targets | Secret |
 | --- | --- | --- | --- | --- |
 | production keeper | Vercel cron | `*/10` | `robinhood-flywheel` (**live**) | `KEEPER_PK` |
-| `venture-keepers.yml` → ops | Actions | `*/15` | venture testnet | `VENTURE_KEEPER_PK` |
-| `venture-keepers.yml` → flywheel | Actions | Mon 12:00 UTC | venture testnet | `VENTURE_KEEPER_PK` |
+| venture ops (`keeper/worker.mjs`) | Cloudflare Worker `doubleplus-keeper` | every minute | `venture-robinhood` (**live**) | `KEEPER_PRIVATE_KEY` (Worker secret) |
+| `venture-keepers.yml` → ops | Actions | manual only | fallback for the Worker | `VENTURE_KEEPER_PK` |
+| `venture-keepers.yml` → flywheel | Actions | Mon 12:00 UTC | testnet until `VENTURE_CHAIN_ID`/`VENTURE_RPC_URL` are set | `VENTURE_KEEPER_PK` (unset) |
 | `base-keeper.yml` | Actions | `*/30` | `base-stockfly-v3` | `KEEPER_PRIVATE_KEY` |
 | `keeper.yml` | Actions | **manual only** | `quiver-v4` (abandoned) | `KEEPER_PRIVATE_KEY` |
 
@@ -252,7 +253,7 @@ callable only by `protocolAdmin`:
 - `graduationRaiseWei` — bounded `[minTargetWei, 1_000_000 ether]`. Read at launch
   and frozen per listing, so **a live raise never has its finish line moved**.
 - `sweepDelaySecs` — ≥ 180 days, currently 365.
-- `creatorCurveShareBps` — ≤ 5000, currently 1000.
+- `creatorCurveShareBps` — ≤ 5000, 2000 on mainnet.
 - `creationFeeWei` — no constructor default, so it is **0 on every fresh deploy**.
 
 `pause()` / `resume()` stop new launches only; live curves and pools are untouched.
@@ -287,6 +288,7 @@ does not back that promise. Know which one you are deploying.
 | Key | Holds | Rotation |
 | --- | --- | --- |
 | `0x5DdDEa56…2f4A0b` | admin / treasury / feeRecipient in **16 of 25** deployment artifacts, across chains 4663, 8453, 5042 and 988 | immutable on most contracts — rotation means redeploying |
+| `0x16d762c8…F9Fbf2` | venture **mainnet** admin + treasury (the user's wallet) | immutable |
 | `0x1B97531b…45Acce` | venture testnet admin + treasury | immutable |
 | `0xd6F0e894…29c8ac` | deployer of record | freely rotatable, zero privileges |
 | `0xe5b498a0…2552208` | bridge relayer, both legs | immutable in the payout contracts |
@@ -365,7 +367,7 @@ if it passes when it should fail, the whole suite is meaningless.
   creation fee. Re-run it as the last step of every deploy.
 - **Two factories are at the bytecode limit.** `HammrFactory` is 24,524 of 24,576
   — 52 bytes spare — and `HoodFactory` has 381. Neither can be modified again,
-  only redeployed. `VentureFactory` is at 23,795 and still growing; check the
+  only redeployed. `VentureFactory` is at 24,395 (181 spare); check the
   size before adding to it.
 - **Nine `*.fork.test.ts` files and fourteen scripts mined CREATE2 salts against
   a stale `QuiverToken` ABI** after the constructor gained two dividend
