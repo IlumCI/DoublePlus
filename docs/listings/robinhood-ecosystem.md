@@ -16,7 +16,7 @@
 - Category: Trading
 - One line: Launch a coin on a bonding curve that graduates to a Uniswap v4 pool with locked liquidity.
 - Longer description: Anyone launches a coin on a bonding curve, either an open curve or a raise with a target that refunds if missed. When the curve fills, the coin gets a Uniswap v4 pool in the same transaction, with its liquidity locked forever. Creators earn up to 4% of every trade. Holders earn dividends with tiers up to 10x, and from 5x they can be paid in tokenized stocks. Early snipers pay a fee into a buy wall. Limit orders, a last-buyer pot and on-coin chat are built in.
-- Logo: /home/lummy/Projects/DoublePlus/brand/doubleplus-logo-dark.png (1200x1200); square icon /home/lummy/Projects/DoublePlus/brand/doubleplus-avatar.png (400x400); vector /home/lummy/Projects/DoublePlus/brand/doubleplus-icon-square.svg
+- Logo: https://doubleplus.fun/doubleplus-logo.png (1200x1200); small square: https://doubleplus.fun/doubleplus-avatar.png (400x400)
 - Contracts (Robinhood Chain, chain id 4663):
   - Factory: 0x60e0DD86327F1dA36565c79aAe9f87070415963b
   - Uniswap v4 hook: 0x99a402348944ADC92A77471d63Bf93370A652044
@@ -43,7 +43,7 @@
 | Free, paid, or open-source | Free |
 | 1-sentence description (50-100 chars) | Coin launchpad on Robinhood Chain with bonding curves and locked Uniswap v4 pools. (82 chars) |
 | 3-5 sentences (50-100 words) | DoublePlus lets anyone launch a coin on a bonding curve, either an open curve or a raise with a target that refunds if missed. When the curve fills, the coin gets a Uniswap v4 pool in the same transaction, with its liquidity locked forever. Creators earn up to 4% of every trade, and holders earn dividends with tiers up to 10x, paid in tokenized stocks from 5x. Early snipers pay a fee into a buy wall. Limit orders, a last-buyer pot and on-coin chat are built in. (88 words) |
-| Logo URL (direct link, 400x400 PNG) | Needs a public URL. doubleplus-avatar.png is already 400x400: host it on doubleplus.fun (e.g. https://doubleplus.fun/doubleplus-avatar.png) and paste that link. |
+| Logo URL (direct link, 400x400 PNG) | https://doubleplus.fun/doubleplus-avatar.png |
 
 ### 2. awesome-robinhood-chain (community list on GitHub, regenerated weekly)
 - Repo: https://github.com/KeelLabsYield/awesome-robinhood-chain

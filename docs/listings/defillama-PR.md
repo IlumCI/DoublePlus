@@ -21,7 +21,7 @@ None
 https://doubleplus.fun
 
 ##### Logo (High resolution, will be shown with rounded borders):
-(attach doubleplus-logo-dark.png, 1200x1200 PNG)
+https://doubleplus.fun/doubleplus-logo.png (1200x1200 PNG)
 
 ##### Current TVL:
 About $2 (one coin, still on its bonding curve)
