@@ -11,7 +11,7 @@ import { dailyDividendsWei, tierIndex, tierRows } from "../tiers";
 import { fmtEth, fmtTok, fmtUsdV } from "../ui";
 import { useWallet, errorText } from "../../lib/useWallet";
 import { useUi } from "../../store";
-import { Impact, ReferralBanner } from "./shared";
+import { Impact, bindReferral } from "./shared";
 
 // Any plain address can price a sell before a wallet connects.
 const QUOTE_WALLET = "0x000000000000000000000000000000000000dEaD" as const;
@@ -89,6 +89,7 @@ export function TradePanel({ v, trades, ethUsd }: { v: VentureT; trades: PoolTra
     if (!wc || parsed === 0n) return;
     setBusy(true);
     try {
+      await bindReferral(wc, pushToast);
       let hash: `0x${string}`;
       if (side === "buy") {
         hash = await sendTx(wc, { address: VENTURE.router, abi: routerAbi, functionName: "buy", args: [v.address, "0x", minOut], value: parsed, chain: wc.chain, account: wc.account });
@@ -153,6 +154,7 @@ export function TradePanel({ v, trades, ethUsd }: { v: VentureT; trades: PoolTra
     if (!wc || limitMinOut === 0n) return;
     setBusy(true);
     try {
+      await bindReferral(wc, pushToast);
       if (side === "sell") {
         const allowance = await venturePc.readContract({ address: v.address, abi: ercAbi, functionName: "allowance", args: [wc.account.address, VENTURE.limitOrders] });
         if (allowance < parsed) {
@@ -179,7 +181,6 @@ export function TradePanel({ v, trades, ethUsd }: { v: VentureT; trades: PoolTra
         <button className={`dp-sell ${side === "sell" ? "on" : ""}`} onClick={() => { setSide("sell"); setAmt(""); }}>Sell</button>
       </div>
       <div className="dp-tb-body">
-        <ReferralBanner />
         {hasLimit && (
           <div className="dp-tb-mode">
             <button className={!limit ? "on" : ""} onClick={() => setLimit(false)}>market</button>

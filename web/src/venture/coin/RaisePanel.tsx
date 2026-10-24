@@ -8,7 +8,7 @@ import { Countdown, fmtEth, fmtTok, fmtUsdV, pct, useEthUsd, useTick } from "../
 import { useWallet, errorText } from "../../lib/useWallet";
 import { useUi } from "../../store";
 import { chainNowSecs } from "../clock";
-import { GRADUATED_TOPIC, GRADUATING_BUY_GAS, Impact, LAUNCH_WINDOW_SECS, ReferralBanner } from "./shared";
+import { GRADUATED_TOPIC, GRADUATING_BUY_GAS, Impact, LAUNCH_WINDOW_SECS, bindReferral } from "./shared";
 
 /** The raise box: back this project on the curve. */
 export function RaisePanel({ v }: { v: VentureT }) {
@@ -98,6 +98,7 @@ export function RaisePanel({ v }: { v: VentureT }) {
       // Only gas used is charged.
       const left = v.targetRaiseWei > v.raisedWei ? v.targetRaiseWei - v.raisedWei : 0n;
       const mayFill = funded >= 50 || parsed * 2n >= left;
+      await bindReferral(wc, pushToast);
       const hash = await sendTx(wc, {
         address: VENTURE.factory, abi: factoryAbi, functionName: "buy",
         args: [v.address, (tokensOut * 10n ** 18n * BigInt(10_000 - slipBps)) / 10_000n], value: parsed,
@@ -118,6 +119,7 @@ export function RaisePanel({ v }: { v: VentureT }) {
     if (!wc || sellWhole === 0n) return;
     setBusy(true);
     try {
+      await bindReferral(wc, pushToast);
       const need = sellWhole * 10n ** 18n;
       const allowance = (await venturePc.readContract({ address: v.address, abi: ercAbi, functionName: "allowance", args: [wc.account.address, VENTURE.factory] }));
       if (allowance < need) {
@@ -146,7 +148,6 @@ export function RaisePanel({ v }: { v: VentureT }) {
         <button className={`dp-sell ${side === "sell" ? "on" : ""}`} onClick={() => setSide("sell")}>Sell</button>
       </div>
       <div className="dp-tb-body">
-        <ReferralBanner />
         {side === "buy" ? (
           <>
             <div className="dp-tb-amt">

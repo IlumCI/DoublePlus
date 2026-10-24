@@ -1,53 +1,31 @@
-import { useEffect, useState } from "react";
-import { useWalletClient } from "wagmi";
-import { toEventSelector } from "viem";
+import { toEventSelector, zeroAddress, type WalletClient } from "viem";
 
 import { confirmTx, hookAbi, VENTURE, venturePc, sendTx } from "../client";
 import { storedRef } from "../referral";
 import { short } from "../ui";
-import { useWallet, errorText } from "../../lib/useWallet";
-import { useUi } from "../../store";
+import type { Toast } from "../../store";
 
 
-/** One-tap referral binding: shown when a ?ref= link was followed and the
- *  connected wallet has not bound a referrer yet. */
-export function ReferralBanner() {
-  const { address: me, isConnected } = useWallet();
-  const { data: wc } = useWalletClient();
-  const pushToast = useUi((s) => s.pushToast);
-  const [bound, setBound] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+const DECLINED = "venture.ref.declined";
+
+/** Bind the referrer from a followed ?ref= link, inside the wallet's first
+ *  trade. The hook only takes the binding from the wallet itself, so it is one
+ *  extra confirmation before that trade, never a separate step to find. Does
+ *  nothing once bound, without a stored link, or after a decline this session;
+ *  never throws, so the trade goes ahead either way. */
+export async function bindReferral(wc: WalletClient, pushToast: (t: Omit<Toast, "id">) => void): Promise<void> {
   const ref = storedRef();
-
-  useEffect(() => {
-    if (!me) return;
-    venturePc.readContract({ address: VENTURE.hook, abi: hookAbi, functionName: "referrerOf", args: [me] })
-      .then((r) => setBound(String(r))).catch(() => undefined);
-  }, [me, busy]);
-
-  if (!isConnected || !ref || !me || ref.toLowerCase() === me.toLowerCase()) return null;
-  if (!bound || bound !== "0x0000000000000000000000000000000000000000") return null;
-
-  const activate = async () => {
-    if (!wc) return;
-    setBusy(true);
-    try {
-      const hash = await sendTx(wc, { address: VENTURE.hook, abi: hookAbi, functionName: "setReferrer", args: [ref], chain: wc.chain, account: wc.account });
-      await confirmTx(hash);
-      pushToast({ kind: "success", title: "Linked. Your fees are 10% lower now.", txHash: hash });
-    } catch (e) {
-      pushToast({ kind: "error", title: "Linking failed", body: errorText(e) });
-    } finally { setBusy(false); }
-  };
-
-  return (
-    <div className="dp-chit" style={{ margin: "0 14px 12px", borderColor: "var(--up-dim)" }}>
-      You came from {short(ref)}'s link. Link up and you pay 10% less in fees; it takes one small transaction.{" "}
-      <button style={{ background: "none", border: "none", color: "var(--up)", padding: 0, font: "inherit" }} disabled={busy} onClick={activate}>
-        {busy ? "Confirm in wallet…" : "Link up"}
-      </button>
-    </div>
-  );
+  const me = wc.account?.address;
+  if (!ref || !me || ref.toLowerCase() === me.toLowerCase()) return;
+  try { if (sessionStorage.getItem(DECLINED)) return; } catch { /* storage unavailable */ }
+  try {
+    const bound = await venturePc.readContract({ address: VENTURE.hook, abi: hookAbi, functionName: "referrerOf", args: [me] });
+    if (bound !== zeroAddress) return;
+    pushToast({ kind: "info", title: `Linking ${short(ref)}'s referral: 10% off your fees` });
+    await confirmTx(await sendTx(wc, { address: VENTURE.hook, abi: hookAbi, functionName: "setReferrer", args: [ref], chain: wc.chain, account: wc.account }));
+  } catch {
+    try { sessionStorage.setItem(DECLINED, "1"); } catch { /* storage unavailable */ }
+  }
 }
 
 /** Price impact beside a quote: quiet when small, plain words when large. */

@@ -59,3 +59,11 @@ the referrer exactly 0.000018 ETH); the Portfolio against that fork.
   `FeeAccrued` too); coin payouts listed by ticker with a link; "N linked" from
   `ReferrerBound`; link to the home page; isolated error handling.
 - Copy in Portfolio and How it works says where each kind of earning lands.
+- **Linking is automatic.** The "Link up" banner is gone. A wallet that arrived
+  through a `?ref=` link and has no referrer binds it inside its first trade
+  (curve buy or sell, pool buy or sell, limit order): one extra confirmation,
+  about 0.000001 ETH of gas, then the trade, which already gets the discount.
+  A decline isn't asked again that session, and the trade goes ahead either
+  way. It can't be signature-free: `setReferrer` only binds `msg.sender`.
+  Tested on a fork: following a link and pressing Buy bound the referrer and
+  credited them 0.000018 ETH on a 0.01 ETH buy.
