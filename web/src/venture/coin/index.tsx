@@ -125,7 +125,8 @@ function VentureBody({ v, fills, ethUsd }: { v: VentureT; fills: Fill[]; ethUsd:
       <div className="dp-coingrid">
         {/* LEFT: the market, then everything that justifies it */}
         <div className="dp-coinmain">
-          {v.phase === "graduated" ? <PriceChart v={v} trades={trades} /> : <CurvePanel v={v} />}
+          {v.phase === "graduated" || (v.mode === 1 && v.phase === "raising")
+            ? <PriceChart v={v} trades={trades} /> : <CurvePanel v={v} />}
 
           <div className="dp-tabbar">
             {TABS.map(([k, label]) => (

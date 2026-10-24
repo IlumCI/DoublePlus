@@ -300,6 +300,9 @@ const poolSwapEvent = parseAbiItem(
 export const boughtEvent = parseAbiItem(
   "event CurveBuy(address indexed token, address indexed buyer, uint256 ethIn, uint256 tokensOut, uint128 priceWei)",
 );
+const curveSellEvent = parseAbiItem(
+  "event CurveSell(address indexed token, address indexed seller, uint256 ethOut, uint256 tokensIn, uint128 priceWei, uint256 feeWei)",
+);
 
 const rpcUrls = env.rpcUrl.split(",").map((u) => u.trim()).filter(Boolean);
 export const venturePc = createPublicClient({
@@ -630,6 +633,39 @@ export async function loadPoolTrades(v: Venture): Promise<PoolTrade[]> {
       txHash: l.transactionHash,
     };
   });
+}
+
+/** Trades on the bonding curve, in the pool tape's shape so one chart draws
+ *  both. CurveBuy carries the price before the buy and CurveSell the price
+ *  after the sell; a buy's price is moved along the curve by what it bought,
+ *  so every point is the price the trade left behind. */
+export async function loadCurveTrades(v: Venture): Promise<PoolTrade[]> {
+  const latest = await venturePc.getBlockNumber();
+  const range = { address: VENTURE.factory, args: { token: v.address }, fromBlock: VENTURE.startBlock, toBlock: latest, strict: true } as const;
+  const [buys, sells] = await Promise.all([
+    venturePc.getLogs({ ...range, event: boughtEvent }),
+    venturePc.getLogs({ ...range, event: curveSellEvent }),
+  ]);
+  const logs = [
+    ...buys.map((l) => ({ l, isBuy: true, coin: l.args.tokensOut, pair: l.args.ethIn,
+      price: BigInt(l.args.priceWei) + (v.slopeQ * (l.args.tokensOut / 10n ** 18n)) / 10n ** 18n })),
+    ...sells.map((l) => ({ l, isBuy: false, coin: l.args.tokensIn, pair: l.args.ethOut, price: BigInt(l.args.priceWei) })),
+  ].sort((a, b) => Number(a.l.blockNumber - b.l.blockNumber) || a.l.logIndex - b.l.logIndex);
+  if (logs.length === 0) return [];
+  const firstB = Number(logs[0].l.blockNumber), lastB = Number(logs[logs.length - 1].l.blockNumber);
+  // Anchored on the first and last trade, interpolated between, as the pool
+  // tape is: two block reads instead of one per trade.
+  const [first, last] = await Promise.all([
+    venturePc.getBlock({ blockNumber: BigInt(firstB) }),
+    venturePc.getBlock({ blockNumber: BigInt(lastB) }),
+  ]);
+  const perBlock = lastB > firstB ? Number(last.timestamp - first.timestamp) / (lastB - firstB) : 1;
+  return logs.map(({ l, isBuy, coin, pair, price }) => ({
+    isBuy, coinAmount: coin, pairAmount: pair, priceWei: price,
+    blockNumber: Number(l.blockNumber),
+    ts: Number(first.timestamp) + Math.round((Number(l.blockNumber) - firstB) * perBlock),
+    txHash: l.transactionHash,
+  }));
 }
 
 /** All updates a founder posted for a venture, oldest first. */

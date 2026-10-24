@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CandleType, PolygonType, dispose, init, registerLocale, type Chart as KChart, type KLineData } from "klinecharts";
 
-import { loadPoolTrades, TOTAL_SUPPLY, type PoolTrade, type Venture } from "./client";
-import { fmtTok, fmtValue, short, useEthUsd } from "./ui";
+import { loadCurveTrades, loadPoolTrades, TOTAL_SUPPLY, type PoolTrade, type Venture } from "./client";
+import { fmtEth, fmtTok, fmtValue, pct, short, useEthUsd } from "./ui";
 import { pickInterval } from "./format";
 import { env } from "../lib/env";
 
@@ -21,13 +21,16 @@ const INTERVALS = [
 const UP = "#a5dbb2";
 const DOWN = "#ee8a80";
 
-/** Pool swap log → bars. No indexer, no backend: the chain is the chart. */
+/** Pool swap log → bars, after the curve trades that came before it (and,
+ *  on an open curve, the curve trades alone). No indexer, no backend: the
+ *  chain is the chart. */
 export function usePoolTrades(v: Venture): PoolTrade[] {
   const [trades, setTrades] = useState<PoolTrade[]>([]);
   useEffect(() => {
-    if (v.phase !== "graduated") return;
+    if (v.phase !== "graduated" && !(v.mode === 1 && v.phase === "raising")) return;
     let live = true;
-    const refresh = () => loadPoolTrades(v).then((t) => live && setTrades(t)).catch(() => undefined);
+    const refresh = () => Promise.all([loadCurveTrades(v), loadPoolTrades(v)])
+      .then(([c, p]) => live && setTrades([...c, ...p])).catch(() => undefined);
     refresh();
     const id = setInterval(refresh, 15_000);
     return () => { live = false; clearInterval(id); };
@@ -173,7 +176,11 @@ export function PriceChart({ v, trades }: { v: Venture; trades: PoolTrade[] }) {
   return (
     <div className="dp-panel dp-chartpanel">
       <div className="dp-phead">
-        <span>${v.symbol} · {ethUsd > 0 ? "market cap, USD" : "price, ETH"}</span>
+        <span>
+          ${v.symbol} · {ethUsd > 0 ? "market cap, USD" : "price, ETH"}
+          {/* Still on the curve: how far it is from its pool. */}
+          {v.phase !== "graduated" && <> · {pct(v.raisedWei, v.targetRaiseWei).toFixed(0)}% filled · {fmtEth(v.targetRaiseWei > v.raisedWei ? v.targetRaiseWei - v.raisedWei : 0n, 3)} ETH to go</>}
+        </span>
         <span className="dp-tfchips">
           {INTERVALS.map((iv) => (
             <button key={iv.label} className={interval_.label === iv.label ? "on" : ""} onClick={() => setInterval_(iv)}>
