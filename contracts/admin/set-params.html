@@ -21,6 +21,7 @@
   table { width: 100%; border-collapse: collapse; }
   th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: middle; }
   th { color: var(--dim); font-weight: 600; font-size: 13px; }
+  select { background: #0a1124; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 8px 9px; font: inherit; }
   input { width: 100%; background: #0a1124; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; font: inherit; }
   .changed td { color: var(--up); }
   button { background: linear-gradient(#5fd040, #36a024); color: #04210c; border: 0; border-radius: 6px; padding: 10px 18px; font: 600 15px inherit; cursor: pointer; margin-right: 8px; }
@@ -36,7 +37,9 @@
   <div class="dim">Robinhood Chain mainnet (4663) · factory <span class="mono">0x60e0DD86327F1dA36565c79aAe9f87070415963b</span></div>
 
   <section>
-    <button id="connect">Connect wallet</button>
+    <label class="dim" for="wallet">Wallet</label>
+    <select id="wallet" style="margin:0 10px 0 6px"></select>
+    <button id="connect">Connect</button>
     <span id="who" class="mono dim">not connected</span>
   </section>
 
@@ -85,7 +88,31 @@ const fromWei = (w) => {
   return s.slice(0, -18) + (f ? "." + f : "");
 };
 
-let account = null, current = null;
+let account = null, current = null, wallet = null;
+
+// Every installed wallet announces itself (EIP-6963), so the one that grabbed
+// window.ethereum doesn't get to decide. window.ethereum stays as a fallback
+// for wallets that don't announce.
+const wallets = new Map();
+function renderWallets() {
+  const sel = $("wallet"), keep = sel.value;
+  sel.innerHTML = "";
+  for (const [id, w] of wallets) { const o = document.createElement("option"); o.value = id; o.textContent = w.name; sel.appendChild(o); }
+  if (!wallets.size) { const o = document.createElement("option"); o.textContent = "no wallet found"; o.value = ""; sel.appendChild(o); }
+  if (keep && wallets.has(keep)) sel.value = keep;
+}
+window.addEventListener("eip6963:announceProvider", (e) => {
+  const { info, provider } = e.detail;
+  wallets.set(info.uuid, { name: info.name, provider });
+  wallets.delete("injected");
+  renderWallets();
+});
+window.dispatchEvent(new Event("eip6963:requestProvider"));
+setTimeout(() => {
+  if (!wallets.size && window.ethereum) { wallets.set("injected", { name: "Browser wallet", provider: window.ethereum }); renderWallets(); }
+}, 500);
+renderWallets();
+$("wallet").onchange = () => { account = null; wallet = null; $("who").textContent = "not connected"; $("who").className = "mono dim"; $("send").disabled = true; };
 
 async function rpc(method, params) {
   const r = await fetch(RPC, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) });
@@ -138,13 +165,13 @@ function markChanges() {
 for (const id of ["n-fee", "n-grad", "n-sweep", "n-share"]) $(id).addEventListener("input", markChanges);
 
 async function ensureChain() {
-  const id = BigInt(await ethereum.request({ method: "eth_chainId" }));
+  const id = BigInt(await wallet.request({ method: "eth_chainId" }));
   if (id === CHAIN_ID) return;
   try {
-    await ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: hex(CHAIN_ID) }] });
+    await wallet.request({ method: "wallet_switchEthereumChain", params: [{ chainId: hex(CHAIN_ID) }] });
   } catch (e) {
     if (e.code !== 4902) throw e;
-    await ethereum.request({ method: "wallet_addEthereumChain", params: [{
+    await wallet.request({ method: "wallet_addEthereumChain", params: [{
       chainId: hex(CHAIN_ID), chainName: "Robinhood Chain", rpcUrls: [RPC], blockExplorerUrls: [EXPLORER],
       nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
     }] });
@@ -152,9 +179,11 @@ async function ensureChain() {
 }
 
 $("connect").onclick = async () => {
-  if (!window.ethereum) { log("No wallet found in this browser.", "bad"); return; }
+  const picked = wallets.get($("wallet").value);
+  if (!picked) { log("No wallet found in this browser.", "bad"); return; }
   try {
-    [account] = await ethereum.request({ method: "eth_requestAccounts" });
+    wallet = picked.provider;
+    [account] = await wallet.request({ method: "eth_requestAccounts" });
     await ensureChain();
     const isAdmin = current && account.toLowerCase() === current.admin.toLowerCase();
     $("who").textContent = `${account} ${isAdmin ? "· admin ✓" : "· NOT the admin"}`;
@@ -174,7 +203,7 @@ $("send").onclick = async () => {
     await rpc("eth_call", [{ from: account, to: FACTORY, data }, "latest"]);
     const gasPrice = BigInt(await rpc("eth_gasPrice", []));
     log(`simulation ok · max cost ≈ ${fromWei(GAS * gasPrice)} ETH (gas limit ${GAS})`, "ok");
-    const hash = await ethereum.request({ method: "eth_sendTransaction", params: [{ from: account, to: FACTORY, data, value: "0x0", gas: hex(GAS) }] });
+    const hash = await wallet.request({ method: "eth_sendTransaction", params: [{ from: account, to: FACTORY, data, value: "0x0", gas: hex(GAS) }] });
     log(`sent ${hash}`);
     const a = document.createElement("a"); a.href = `${EXPLORER}/tx/${hash}`; a.target = "_blank"; a.textContent = "view on Blockscout"; $("log").appendChild(a);
     let rc = null;
