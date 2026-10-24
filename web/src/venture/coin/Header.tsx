@@ -12,6 +12,8 @@ import { BuySellStrength, Delta, fmtEth, fmtUsdPrice, fmtUsdV, StatCell, useTick
 import { errorText, useWallet } from "../../lib/useWallet";
 import { useUi } from "../../store";
 import { chainNowSecs } from "../clock";
+import { chain } from "../../lib/env";
+import { BRAND } from "../../lib/brand";
 
 
 /** Pre-graduation: the curve itself is the chart. */
@@ -180,6 +182,39 @@ export function BoostButton({ v }: { v: VentureT }) {
       )}
     </span>
   );
+}
+
+/** The coin's logo as a public URL a wallet can fetch: an inline (data URI)
+ *  logo is served by the site Worker at /og/<address>.<ext>. */
+function walletLogo(v: VentureT): string | undefined {
+  const logo = v.meta.logo ?? "";
+  const m = /^data:image\/(png|jpe?g|webp|gif);base64,/i.exec(logo);
+  if (m) return `${BRAND.url}/og/${v.address}.${m[1].toLowerCase().replace("jpeg", "jpg")}`;
+  return /^https:\/\/[^\s"'<>]+$/i.test(logo) ? logo : undefined;
+}
+
+/** Put the coin in the connected wallet's token list (EIP-747). */
+export function AddToWallet({ v }: { v: VentureT }) {
+  const { isConnected, connectFirst } = useWallet();
+  const { data: wc } = useWalletClient();
+  const pushToast = useUi((st) => st.pushToast);
+  if (v.phase === "failed") return null;
+  const go = async () => {
+    if (!isConnected) return connectFirst();
+    if (!wc) return;
+    try {
+      if ((await wc.getChainId()) !== chain.id) await wc.switchChain({ id: chain.id });
+      const added = await wc.watchAsset({
+        type: "ERC20",
+        // MetaMask refuses symbols over 11 characters.
+        options: { address: v.address, symbol: v.symbol.slice(0, 11), decimals: 18, image: walletLogo(v) },
+      });
+      if (added) pushToast({ kind: "success", title: `$${v.symbol} added to your wallet` });
+    } catch (e) {
+      pushToast({ kind: "error", title: "Couldn't add to wallet", body: errorText(e) });
+    }
+  };
+  return <button className="dp-bell" onClick={go}>Add to wallet</button>;
 }
 
 /** Watch a coin: an alert when it is nearly full, graduates, or opens

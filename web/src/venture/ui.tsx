@@ -1,7 +1,7 @@
 import { liveEthUsd } from "./ethUsd";
 import { useEffect, useState } from "react";
 
-import { TOTAL_SUPPLY, VENTURE, type Venture } from "./client";
+import { TOTAL_SUPPLY, type Venture } from "./client";
 import type { DexProfile } from "../lib/dexscreener";
 import { fmtUsdPrice } from "./format";
 
