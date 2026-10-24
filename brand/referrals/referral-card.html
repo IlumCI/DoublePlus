@@ -27,34 +27,27 @@
   .streak::after { content: ""; position: absolute; inset: -26px 0; filter: blur(18px);
     background: linear-gradient(90deg, transparent, rgb(110 160 255 / .3) 35%, rgb(150 190 255 / .5) 50%, rgb(110 160 255 / .3) 65%, transparent); }
 
-  .brand { position: absolute; left: 64px; top: 52px; display: flex; align-items: center; gap: 16px; }
-  .brand img { height: 46px; }
-  .brand span { font-size: 26px; font-weight: 600; color: var(--dim); }
-
-  h1 { position: absolute; left: 0; right: 0; top: 118px; text-align: center; font-size: 84px; font-weight: 700; letter-spacing: -1px; }
+  h1 { position: absolute; left: 0; right: 0; top: 46px; text-align: center; font-size: 98px; font-weight: 700; letter-spacing: -1.5px; line-height: 1.05; }
   .gel { background: var(--gel); -webkit-background-clip: text; background-clip: text; color: transparent; }
-  .sub { position: absolute; left: 0; right: 0; top: 226px; text-align: center; font-size: 30px; color: var(--dim); }
 
-  .row { position: absolute; left: 0; right: 0; top: 310px; display: flex; justify-content: center; align-items: flex-end; gap: 26px; }
-  .row.mirror { top: 641px; height: 330px; align-items: flex-start; transform: scaleY(-1); opacity: .2; filter: blur(1.5px); pointer-events: none;
-    -webkit-mask-image: linear-gradient(to top, #000 0%, transparent 60%); mask-image: linear-gradient(to top, #000 0%, transparent 60%); }
-  .panel { width: 400px; height: 330px; border-radius: 14px; position: relative; text-align: center; padding: 34px 26px 0;
+  .row { position: absolute; left: 0; right: 0; top: 200px; display: flex; justify-content: center; align-items: flex-end; gap: 32px; }
+  .row.mirror { top: 641px; height: 440px; align-items: flex-start; transform: scaleY(-1); opacity: .13; filter: blur(2px); pointer-events: none;
+    -webkit-mask-image: linear-gradient(to top, #000 0%, transparent 50%); mask-image: linear-gradient(to top, #000 0%, transparent 50%); }
+  .panel { width: 488px; height: 440px; border-radius: 16px; position: relative; text-align: center; padding: 92px 20px 0;
     background: linear-gradient(#1b2c5c 0%, #121d40 46%, #0d1633 100%);
     border: 1px solid var(--line);
     box-shadow: inset 0 1px 0 rgb(255 255 255 / .16); }
-  .panel::before { content: ""; position: absolute; inset: 0 0 50% 0; border-radius: 14px 14px 0 0;
+  .panel::before { content: ""; position: absolute; inset: 0 0 50% 0; border-radius: 16px 16px 0 0;
     background: linear-gradient(rgb(255 255 255 / .07), rgb(255 255 255 / 0)); }
-  .step { position: absolute; left: 18px; top: 16px; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center;
-    font-size: 22px; font-weight: 700; color: #04210c; background: var(--gel); box-shadow: inset 0 1px 0 rgb(255 255 255 / .5); }
-  .big { height: 128px; display: grid; place-items: center; font-size: 112px; font-weight: 700; line-height: 1; filter: drop-shadow(0 0 16px rgb(79 220 124 / .22)); }
-  
-  .title { margin-top: 26px; font-size: 38px; font-weight: 700; }
-  .note { margin-top: 10px; font-size: 24px; color: var(--dim); line-height: 1.3; }
-  .arrow { width: 54px; align-self: center; margin-bottom: 0; }
-  .row.mirror .arrow { visibility: hidden; }
+  .step { position: absolute; left: 20px; top: 20px; width: 60px; height: 60px; border-radius: 50%; display: grid; place-items: center;
+    font-size: 36px; font-weight: 700; color: #04210c; background: var(--gel); box-shadow: inset 0 1px 0 rgb(255 255 255 / .5); }
+  .big { height: 150px; display: grid; place-items: center; font-size: 150px; font-weight: 700; line-height: 1; letter-spacing: -3px; filter: drop-shadow(0 0 16px rgb(79 220 124 / .22)); }
+  .title { margin-top: 24px; font-size: 56px; font-weight: 700; letter-spacing: -.5px; }
+  .note { margin-top: 6px; font-size: 40px; color: var(--dim); }
 
-  .foot { position: absolute; left: 0; right: 0; bottom: 56px; text-align: center; font-size: 28px; color: var(--dim); }
-  .foot b { color: var(--text); font-weight: 600; }
+  .foot { position: absolute; left: 0; right: 0; bottom: 44px; display: flex; justify-content: center; align-items: center; gap: 22px; }
+  .foot img { height: 64px; }
+  .foot span { font-size: 52px; font-weight: 700; }
 </style>
 </head>
 <body>
@@ -63,42 +56,37 @@
   <div class="streak"></div>
   <div class="horizon"></div>
 
-  <div class="brand"><img src="../doubleplus-mark.svg" alt=""><span>doubleplus.fun</span></div>
-
   <h1>Bring a friend. <span class="gel">You both win.</span></h1>
-  <p class="sub">It's that simple.</p>
 
   <div class="row" id="row">
     <div class="panel">
       <div class="step">1</div>
       <div class="big">
-        <svg width="150" height="110" viewBox="0 0 150 110" fill="none">
+        <svg width="210" height="134" viewBox="0 0 150 110" fill="none">
           <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9af06e"/><stop offset=".48" stop-color="#4fc236"/><stop offset=".52" stop-color="#36a024"/><stop offset="1" stop-color="#5fd040"/></linearGradient></defs>
           <rect x="8" y="30" width="78" height="50" rx="25" stroke="url(#g)" stroke-width="14"/>
           <rect x="64" y="30" width="78" height="50" rx="25" stroke="url(#g)" stroke-width="14"/>
         </svg>
       </div>
-      <div class="title">You share a link</div>
-      <div class="note">Find it on your Portfolio</div>
+      <div class="title">Share your link</div>
+      <div class="note">from your Portfolio</div>
     </div>
-    <svg class="arrow" viewBox="0 0 54 60"><path d="M10 8 L40 30 L10 52" stroke="#4fdc7c" stroke-width="9" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity=".85"/></svg>
     <div class="panel">
       <div class="step">2</div>
       <div class="big gel">−10%</div>
-      <div class="title">Your friend saves</div>
-      <div class="note">10% off their fees, every trade</div>
+      <div class="title">They pay less</div>
+      <div class="note">on every fee</div>
     </div>
-    <svg class="arrow" viewBox="0 0 54 60"><path d="M10 8 L40 30 L10 52" stroke="#4fdc7c" stroke-width="9" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity=".85"/></svg>
     <div class="panel">
       <div class="step">3</div>
       <div class="big gel">+20%</div>
       <div class="title">You get paid</div>
-      <div class="note">20% of their fees. Forever.</div>
+      <div class="note">of their fees, forever</div>
     </div>
   </div>
   <div class="row mirror" id="mirror"></div>
 
-  <p class="foot"><b>Every coin. Every trade.</b> &nbsp;Automatic.</p>
+  <div class="foot"><img src="../doubleplus-mark.svg" alt=""><span>doubleplus.fun</span></div>
 
   <script>document.getElementById("mirror").innerHTML = document.getElementById("row").innerHTML;</script>
 </body>
