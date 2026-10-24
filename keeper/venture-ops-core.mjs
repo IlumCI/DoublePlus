@@ -2,6 +2,7 @@
 // and the Cloudflare Worker (worker.mjs). Everything a run touches is built
 // inside runOps, so a warm Worker isolate starts each run from zero.
 import { ethers } from "ethers";
+import { postFeed } from "./feed.mjs";
 import { verifyCoins } from "./sourcify.mjs";
 
 export class SpendCap extends Error {}
@@ -19,8 +20,9 @@ export class SpendCap extends Error {}
  *  must wrap up), sourcify in and out (which coins Sourcify has verified),
  *  and spentWei out, kept current after every tx so a run that throws still
  *  reports what it spent. tokenSource is token-source.json, or null to skip
- *  source verification. */
-export async function runOps({ cfg, dep, depPath, memory = {}, tokenSource = null }) {
+ *  source verification. feed ({ telegramToken, telegramChat, discordWebhook })
+ *  turns on the launch feed, whose progress is memory.feed. */
+export async function runOps({ cfg, dep, depPath, memory = {}, tokenSource = null, feed = null }) {
   const { DRY_RUN, envEth, envInt, envWei, KEY, RPC } = cfg;
   const MIN_DELIVER = envWei("MIN_DELIVER", 1_000_000_000_000n);
   const RECENTER_SPACINGS = envInt("RECENTER_SPACINGS", 10, 1, 10_000);
@@ -478,6 +480,12 @@ export async function runOps({ cfg, dep, depPath, memory = {}, tokenSource = nul
     if (tokenSource && !pastDeadline()) {
       stats.sourcified = await verifyCoins({ coins, chainId: Number(dep.chainId), source: tokenSource,
         state: memory.sourcify ?? (memory.sourcify = {}), pastDeadline }).catch(() => 0);
+    }
+    // The launch feed (see feed.mjs), kept in memory.feed between runs. Only
+    // a caller that keeps memory passes feed, or every run would re-post.
+    if (feed && !pastDeadline()) {
+      stats.posted = await postFeed({ coins, factory, ethers, provider, feed,
+        state: memory.feed ?? (memory.feed = {}), pastDeadline }).catch((e) => { console.log(`feed: ${String(e?.message ?? e).slice(0, 160)}`); return 0; });
     }
     // Unknown (ok: null) when the history can't be read, e.g. on a backup RPC
     // that refuses the range; only a shortfall actually seen fails the run.

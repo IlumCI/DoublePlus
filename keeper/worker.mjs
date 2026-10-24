@@ -39,12 +39,12 @@ export class RunLock extends DurableObject {
       else if (kind === "bands") index.bands[id] = v;
     }
     return { spentTodayWei: spentTodayWei.toString(), backoff: (await this.ctx.storage.get("backoff")) ?? {}, index,
-      sourcify: (await this.ctx.storage.get("sourcify")) ?? {} };
+      sourcify: (await this.ctx.storage.get("sourcify")) ?? {}, feed: (await this.ctx.storage.get("feed")) ?? {} };
   }
-  async release(now, spentWei, backoff, indexParts = {}, sourcify = {}) {
+  async release(now, spentWei, backoff, indexParts = {}, sourcify = {}, feed = {}) {
     const spends = ((await this.ctx.storage.get("spends")) ?? []).filter(([at]) => at > now - DAY_MS);
     if (BigInt(spentWei) > 0n) spends.push([now, spentWei]);
-    await this.ctx.storage.put({ spends, backoff, sourcify, ...indexParts });
+    await this.ctx.storage.put({ spends, backoff, sourcify, feed, ...indexParts });
     await this.ctx.storage.delete("until");
   }
 }
@@ -57,12 +57,14 @@ export default {
       console.log("previous run still going; skipped");
       return;
     }
-    const memory = { spentTodayWei: BigInt(held.spentTodayWei), backoff: held.backoff, index: held.index, sourcify: held.sourcify, deadlineMs: Date.now() + RUN_MS };
+    const memory = { spentTodayWei: BigInt(held.spentTodayWei), backoff: held.backoff, index: held.index, sourcify: held.sourcify, feed: held.feed, deadlineMs: Date.now() + RUN_MS };
     try {
       const cfg = readConfig(env);
       const where = `bundled deployment (chain ${dep.chainId})`;
       checkDeployment(dep, cfg.CHAIN_ID, where);
-      const s = await runOps({ cfg, dep, depPath: where, memory, tokenSource });
+      // Secrets (wrangler secret put): each feed destination is off until set.
+      const feed = { telegramToken: env.TELEGRAM_BOT_TOKEN, telegramChat: env.TELEGRAM_CHAT_ID, discordWebhook: env.DISCORD_WEBHOOK_URL };
+      const s = await runOps({ cfg, dep, depPath: where, memory, tokenSource, feed });
       // Thrown so the run shows as failed in the Workers dashboard.
       if (s.solvency.ok === false) throw new Error(`CRITICAL factory insolvent: ${JSON.stringify(s.solvency)}`);
     } finally {
@@ -72,7 +74,7 @@ export default {
         const [kind, id] = key.split(":");
         parts[`index:${key}`] = kind === "meta" ? memory.index.meta : kind === "coin" ? memory.index.coins[id] : memory.index.bands[id];
       }
-      await lock.release(Date.now(), String(memory.spentWei ?? 0n), memory.backoff, parts, memory.sourcify);
+      await lock.release(Date.now(), String(memory.spentWei ?? 0n), memory.backoff, parts, memory.sourcify, memory.feed);
     }
   },
 };
