@@ -70,8 +70,12 @@ Coins so far: **$DOUBLEPLUS** `0xc44cFd968A38C6B16A8Be4677bbB87d0eBB42add`, an o
 ## How the business makes money
 
 - **Platform fee:** 0.75% of every pool trade, in the hook. Of that, 20% goes to the trader's referrer (if they have one), 20% to the coin's last-buyer pot, and the rest to the treasury.
-- **Curve fees:** 1% on buys and 1% on sells. On open curves the creator gets 20% and the treasury the rest. These collect in the factory until the treasury calls `withdrawFees()`.
+- **Curve fees:** 1% on buys and 1% on sells. The trader's referrer takes 20% first, then on open curves the creator gets 20%, and the treasury the rest. These collect in the factory until the treasury calls `withdrawFees()`.
+- **Referee discount:** a trader with a referrer pays 10% less of both the platform fee and the curve fees.
 - **Creation fee:** 0.0003 ETH per launch.
+- **Boosts:** paid placement at 0.001 ETH an hour (`VentureBoosts`, price fixed at deploy), paid straight to the treasury.
+- **Unclaimed refunds:** ETH a failed raise's backers leave unclaimed for 365 days can be swept to the treasury (`sweepUnclaimed`).
+- **Not revenue:** the sniper fee goes entirely into the coin's market-making wall, and a target raise's founder cut (up to 30% of the raise) goes to the creator.
 - **Running costs:** the $5/month Workers plan, keeper gas (capped as above, about 0.000004 ETH per transaction), and the domain. Nothing else is paid.
 
 ## Growth plan (as agreed)
@@ -97,10 +101,10 @@ Coins so far: **$DOUBLEPLUS** `0xc44cFd968A38C6B16A8Be4677bbB87d0eBB42add`, an o
 - **The weekly flywheel isn't running on mainnet.** This is the epoch buyback of the top 3 coins and the trader rebates in `.github/workflows/venture-keepers.yml`. The workflow defaults to testnet and the repo has no `VENTURE_KEEPER_PK`, yet the site's sidebar advertises a weekly payout. Turning it on needs:
   - the secret;
   - the `VENTURE_CHAIN_ID=4663` variable and a mainnet `VENTURE_RPC_URL`;
-  - a funded wallet.
+  - a funded wallet: it pays out of the keeper wallet, sized at 25% of estimated epoch revenue and capped at 0.5 ETH.
 
-  Decide with the user.
-- Optional: lower `graduationRaiseWei` to 1–2 ETH so early coins can graduate (one `setParams` transaction from the treasury; affects new launches only).
+  It also measures volume only from the router's `Routed` events, which only graduated pools emit. Until a coin graduates it has nothing to pay, so turning it on comes after the first graduation. Decide with the user.
+- Lower `graduationRaiseWei` to 1–2 ETH so early coins can graduate. This is the bottleneck: pool fees, free DexScreener/GeckoTerminal listings and the flywheel all start at graduation, and none has happened yet (one `setParams` transaction from the treasury; affects new launches only).
 - Ideas not built yet: an "Add to wallet" button on coin pages, Blockscout token info for $DOUBLEPLUS (the creator wallet signs once), GeckoTerminal token info after graduation, auto-posting to X (check API pricing first).
 - `contracts/contracts/autotrader/` and the `hardhat.config.ts` change are the user's uncommitted work in progress; they aren't deployed and aren't part of DoublePlus. Don't commit them unless asked.
 

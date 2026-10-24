@@ -112,7 +112,7 @@ no serverless functions do not need `assemble.sh`.
 ## Deploying contracts
 
 Hardhat only. No Foundry. Solidity 0.8.26, `viaIR`, `runs: 400`, with
-`VentureFactory.sol` overridden to `runs: 1` — it sits at 23,795 of the 24,576
+`VentureFactory.sol` overridden to `runs: 1` — it sits at 24,395 of the 24,576
 byte limit, so **any addition to it must be size-checked before it can ship**.
 
 Network config is env-driven; the single `robinhood` network entry serves both
@@ -155,9 +155,9 @@ the prediction held, and renounces factory ownership at the end.
 
 | Env | Default | Bound |
 | --- | --- | --- |
-| `PLATFORM_FEE_BPS` | 55 (0.55%) | 50–100 |
+| `PLATFORM_FEE_BPS` | 55 (0.55%; mainnet deployed with 75) | 50–100 |
 | `REF_SHARE_BPS` | 2000 (20% of the fee) | ≤ 5000 |
-| `CURVE_BUY_FEE_BPS` | 50 (0.5%) | ≤ 300 |
+| `CURVE_BUY_FEE_BPS` | 50 (0.5%; mainnet deployed with 100) | ≤ 300 |
 | `CURVE_SELL_FEE_BPS` | 100 (1%) | ≤ 300 |
 | `MIN_TARGET_ETH` | **2** (mainnet deployed with 1) | ≤ 1,000,000 |
 | `GRADUATION_RAISE_ETH` | 4 (setParams) | ≥ `MIN_TARGET_ETH` |
