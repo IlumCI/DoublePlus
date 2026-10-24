@@ -290,6 +290,15 @@ const updatePostedEvent = parseAbiItem(
 const referralPaidEvent = parseAbiItem(
   "event ReferralPaid(address indexed trader, address indexed referrer, address currency, uint256 amount)",
 );
+const feeAccruedEvent = parseAbiItem(
+  "event FeeAccrued(address indexed token, address indexed recipient, uint256 amount)",
+);
+const referrerBoundEvent = parseAbiItem(
+  "event ReferrerBound(address indexed user, address indexed referrer)",
+);
+const treasuryAbi = [
+  { type: "function", name: "platformTreasury", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
+] as const;
 export const routedEvent = parseAbiItem(
   "event Routed(address indexed trader, address indexed coin, bool isBuy, uint256 ethIn, uint256 ethOut)",
 );
@@ -683,18 +692,47 @@ export async function loadUpdates(token: Address): Promise<{ author: Address; te
   }));
 }
 
-/** Lifetime referral earnings credited to `referrer`, by currency address. */
-export async function loadReferralEarnings(referrer: Address): Promise<Map<string, bigint>> {
+export interface ReferralEarnings {
+  /** Paid by the hook inside pool trades, by currency: WETH on sells, the
+   *  coin itself on buys. */
+  pool: Map<string, bigint>;
+  /** Referral shares of curve fees, credited in the factory and withdrawn
+   *  with withdrawFees(). */
+  curveWei: bigint;
+  /** Wallets that bound this referrer. */
+  linked: number;
+}
+
+/** Lifetime referral earnings credited to `referrer`. The factory's
+ *  FeeAccrued doesn't say why it paid, but on a coin someone else created the
+ *  only thing it credits a non-treasury wallet is a referral share (the
+ *  creator share and founder cut go to the creator), so those are counted. */
+export async function loadReferralEarnings(referrer: Address): Promise<ReferralEarnings> {
   const latest = await venturePc.getBlockNumber();
-  const logs = await venturePc.getLogs({
-    address: VENTURE.hook, event: referralPaidEvent, args: { referrer }, fromBlock: VENTURE.startBlock, toBlock: latest, strict: true,
-  });
-  const sums = new Map<string, bigint>();
-  for (const l of logs) {
+  const range = { fromBlock: VENTURE.startBlock, toBlock: latest, strict: true } as const;
+  const [paid, accrued, bound, treasury] = await Promise.all([
+    venturePc.getLogs({ address: VENTURE.hook, event: referralPaidEvent, args: { referrer }, ...range }),
+    venturePc.getLogs({ address: VENTURE.factory, event: feeAccruedEvent, args: { recipient: referrer }, ...range }),
+    venturePc.getLogs({ address: VENTURE.hook, event: referrerBoundEvent, args: { referrer }, ...range }),
+    venturePc.readContract({ address: VENTURE.hook, abi: treasuryAbi, functionName: "platformTreasury" }),
+  ]);
+  const pool = new Map<string, bigint>();
+  for (const l of paid) {
     const c = l.args.currency.toLowerCase();
-    sums.set(c, (sums.get(c) ?? 0n) + l.args.amount);
+    pool.set(c, (pool.get(c) ?? 0n) + l.args.amount);
   }
-  return sums;
+  let curveWei = 0n;
+  if (referrer.toLowerCase() !== treasury.toLowerCase()) {
+    const coins = [...new Set(accrued.map((l) => l.args.token.toLowerCase() as Address))];
+    const creators = new Map<string, string>(await Promise.all(coins.map(async (t) => {
+      const l = await venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "listings", args: [t] });
+      return [t, l[0].toLowerCase()] as const;
+    })));
+    for (const l of accrued) {
+      if (creators.get(l.args.token.toLowerCase()) !== referrer.toLowerCase()) curveWei += l.args.amount;
+    }
+  }
+  return { pool, curveWei, linked: bound.length };
 }
 
 /** Wait for a transaction and insist it succeeded. waitForTransactionReceipt

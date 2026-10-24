@@ -23,9 +23,9 @@ export function storedRef(): Address | null {
   }
 }
 
-/** The share link for the current page, crediting `me`. */
-export function refLink(me: Address): string {
-  const url = new URL(location.href);
+/** A share link crediting `me`: the current page unless `base` is given. */
+export function refLink(me: Address, base: string = location.href): string {
+  const url = new URL(base);
   url.searchParams.set("ref", me);
   return url.toString();
 }

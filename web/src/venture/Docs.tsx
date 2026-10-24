@@ -110,7 +110,8 @@ export function Docs() {
           <H id="referrals">Referrals and weekly payouts</H>
           <p>
             If someone links up through your link, they pay 10% less in fees, and you get {refShare} of the
-            platform fee on every trade they make, paid in the same transaction. Each Monday, part of the platform's income buys and burns the
+            fees on every trade they make, on every coin. Pool trades pay you in the same transaction, in WETH on
+            sells and in the coin on buys; curve trades add to Ready to withdraw on your Portfolio. Each Monday, part of the platform's income buys and burns the
             most-traded coins and goes back to the most active traders. The <Link to="/rewards" viewTransition>Rewards</Link> page
             lists every payout.
           </p>

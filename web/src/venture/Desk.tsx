@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useWalletClient } from "wagmi";
 
-import { confirmTx,
+import { confirmTx, type ReferralEarnings,
   ercAbi, factoryAbi, loadReferralEarnings, updatesAbi, VENTURE, venturePc, vestingAbi, sendTx } from "./client";
 import { loadPortfolio, type Holding } from "./portfolio";
 import { fmtEth, fmtTok, pct, short } from "./ui";
@@ -19,7 +19,7 @@ export function Desk() {
   const { data: wc } = useWalletClient();
   const pushToast = useUi((s) => s.pushToast);
   const [rows, setRows] = useState<Holding[] | null>(null);
-  const [refEarned, setRefEarned] = useState<Map<string, bigint>>(new Map());
+  const [ref, setRef] = useState<ReferralEarnings>({ pool: new Map(), curveWei: 0n, linked: 0 });
   // ETH credited to this wallet inside the factory: a founder's cut of a
   // graduated raise, referral shares of curve fees, and an Open-mode creator's
   // share of curve fees. Nothing pushes it; it waits for withdrawFees().
@@ -35,11 +35,11 @@ export function Desk() {
         const sellBps = Number(await venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "curveSellFeeBps" }).catch(() => 100));
         const p = await loadPortfolio(me, sellBps);
         if (live) { setRows(p.rows); setFactoryOwed(p.factoryOwed); }
-        const earned = await loadReferralEarnings(me);
-        if (live) setRefEarned(earned);
       } catch {
         if (live) setRows([]);
       }
+      // Its own catch: a failed log query must not blank the holdings above.
+      loadReferralEarnings(me).then((r) => { if (live) setRef(r); }).catch(() => undefined);
     };
     refresh();
     const id = setInterval(refresh, 20_000);
@@ -138,8 +138,8 @@ export function Desk() {
   };
 
   const totalPending = (rows ?? []).reduce((a, r) => a + r.pending, 0n);
-  const wethEarned = refEarned.get(VENTURE.weth.toLowerCase()) ?? 0n;
-  const otherEarned = [...refEarned.entries()].filter(([c]) => c !== VENTURE.weth.toLowerCase());
+  const wethEarned = (ref.pool.get(VENTURE.weth.toLowerCase()) ?? 0n) + ref.curveWei;
+  const otherEarned = [...ref.pool.entries()].filter(([c]) => c !== VENTURE.weth.toLowerCase()) as [`0x${string}`, bigint][];
   const founderRows = (rows ?? []).filter((r) => r.v.creator.toLowerCase() === me.toLowerCase());
 
   return (
@@ -214,22 +214,22 @@ export function Desk() {
 
         <div>
           <div className="dp-form-sheet">
-            <p className="dp-sec">Your referral link</p>
+            <p className="dp-sec">Your referral link{ref.linked > 0 && <span className="dp-agate"> · {ref.linked} linked</span>}</p>
             <p className="dp-agate" style={{ marginBottom: 8 }}>
               People who link up through this link pay 10% less in fees. You get {VENTURE.refShareBps / 100}% of the
-              platform fee on their trades, paid in the same transaction.
+              fees on their trades, on every coin: pool trades pay you in the same transaction, curve trades add to Ready to withdraw.
             </p>
             <div className="dp-chit">
               <button className="dp-mono" style={{ background: "none", border: "none", padding: 0, color: "var(--up)", fontSize: 11, textAlign: "left", wordBreak: "break-all" }}
-                onClick={() => navigator.clipboard?.writeText(refLink(me)).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); })}>
-                {copied ? "Copied" : refLink(me)}
+                onClick={() => navigator.clipboard?.writeText(refLink(me, `${location.origin}/`)).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); })}>
+                {copied ? "Copied" : refLink(me, `${location.origin}/`)}
               </button>
             </div>
             {otherEarned.length > 0 && (
               <table className="dp-docket" style={{ marginTop: 12 }}>
-                <thead><tr><th>Pair currency</th><th className="dp-num">Earned</th></tr></thead>
+                <thead><tr><th>Paid in coins</th><th className="dp-num">Earned</th></tr></thead>
                 <tbody>{otherEarned.map(([c, amt]) => (
-                  <tr key={c}><td className="dp-mono">{short(c)}</td><td className="dp-num">{fmtEth(amt, 6)}</td></tr>
+                  <tr key={c}><td><CoinLink address={c} /></td><td className="dp-num">{fmtTok(amt)}</td></tr>
                 ))}</tbody>
               </table>
             )}
@@ -266,4 +266,15 @@ export function Desk() {
       </div>
     </div>
   );
+}
+
+/** A coin named by its ticker, linking to its page. */
+function CoinLink({ address }: { address: `0x${string}` }) {
+  const [sym, setSym] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    venturePc.readContract({ address, abi: ercAbi, functionName: "symbol" }).then((x) => { if (live) setSym(x); }).catch(() => undefined);
+    return () => { live = false; };
+  }, [address]);
+  return <Link className="dp-row-link dp-mono" to={`/venture/${address}`} viewTransition>{sym ? `$${sym}` : short(address)}</Link>;
 }
