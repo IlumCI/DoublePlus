@@ -134,7 +134,9 @@ function ventureDist(): Plugin {
       };
       prune(root);
       fs.writeFileSync(path.join(root, "robots.txt"),
-        "User-agent: *\nAllow: /\n");
+        "User-agent: *\nAllow: /\n" +
+        // The venture site's Worker serves a sitemap of every coin page.
+        (process.env.VITE_BRAND === "venture" ? "\nSitemap: https://doubleplus.fun/sitemap.xml\n" : ""));
       // The venture site is served from Cloudflare (wrangler.toml here), which
       // reads headers from _headers: carry vercel.json's over so both hosts
       // send the same CSP and the same caching.
