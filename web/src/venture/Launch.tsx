@@ -410,7 +410,7 @@ export function LaunchVenture() {
                     <div className="dp-field"><label htmlFor="v-name">Name</label>
                       <input id="v-name" value={form.name} onChange={set("name")} placeholder="Openkernel" maxLength={32} required /></div>
                     <div className="dp-field"><label htmlFor="v-sym">Ticker</label>
-                      <input id="v-sym" value={form.symbol} onChange={set("symbol")} placeholder="KERN" maxLength={8}
+                      <input id="v-sym" value={form.symbol} onChange={set("symbol")} placeholder="KERN" maxLength={10}
                         style={{ textTransform: "uppercase" }} required /></div>
                   </div>
                   <p className="dp-hint">Square works best. It's stored on-chain with the coin.</p>
