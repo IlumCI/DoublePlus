@@ -51,13 +51,13 @@ Adapter: https://gecko.doubleplus.fun (GeckoTerminal Integration API Standards v
 - Swaps come from the factory's CurveBuy and CurveSell events. The 1% curve fee is reported as feesIn on buys and feesOut on sells; amounts and reserves are decimalized and exact.
 - Reserves are the ETH held by the curve and the coins left on it, rebuilt from each event with the curve's immutable price parameters.
 - At graduation the adapter emits an exit that empties the curve pair; trading continues in the coin's Uniswap v4 pool (hook 0x99a402348944ADC92A77471d63Bf93370A652044), which you index as Uniswap V4 (Robinhood).
-- /events accepts up to 100,000 blocks per request. Start block 94774769.
+- /events accepts up to 10,000 blocks per request (please set the block chunk size to 10,000). Start block 94774769.
 ```
 
 ## How the adapter was tested (2026-10-25)
 
 - Live mainnet, via `wrangler dev`: replayed every factory event since the start
-  block (29 calls of 100k blocks). The 10 $DOUBLEPLUS trades came back with
+  block (then 100k-block calls; the live Worker takes up to 10k per call, since its RPC caps log queries at 2,000 blocks and it splits them). The 10 $DOUBLEPLUS trades came back with
   unique (block, txnIndex, eventIndex), exactly one asset in and one out each,
   and a positive price. The final price matched `curveState` exactly; the ETH
   reserve matched to within 7 wei, which is the factory's 1-wei round-up per buy.

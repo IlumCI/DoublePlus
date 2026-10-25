@@ -23,7 +23,7 @@ const START_BLOCK = 94774769;
 const CURVE_SUPPLY_WHOLE = 600_000_000n;
 const CURVE_FEE_BPS = 100;
 const DEX_KEY = "doubleplus";
-const MAX_SPAN = 100_000; // blocks per /events request
+const MAX_SPAN = 10_000; // blocks per /events request
 const SAFETY_BLOCKS = 2; // /latest-block trails the head by this much
 const E18 = 10n ** 18n;
 
@@ -50,19 +50,44 @@ const json = (body, status = 200) => new Response(JSON.stringify(body), { status
 // ---------------------------------------------------------------- RPC
 
 let rpcId = 0;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+/** One JSON-RPC call to one endpoint, retried briefly when it's throttled. */
+async function rpcAt(url, method, params) {
+  for (let attempt = 0; ; attempt++) {
+    const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: ++rpcId, method, params }) });
+    if (r.status === 429 && attempt < 2) { await sleep(400 * (attempt + 1)); continue; }
+    if (!r.ok) throw new Error(`${url} HTTP ${r.status}`);
+    const j = await r.json();
+    if (j.error) throw new Error(`${url} ${j.error.message}`);
+    return j.result;
+  }
+}
 async function rpc(env, method, params) {
   const urls = String(env.RPC_URL).split(",").map((u) => u.trim()).filter(Boolean);
   let last;
   for (const url of urls) {
-    try {
-      const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: ++rpcId, method, params }) });
-      if (!r.ok) { last = new Error(`${url} HTTP ${r.status}`); continue; }
-      const j = await r.json();
-      if (j.error) { last = new Error(`${url} ${j.error.message}`); continue; }
-      return j.result;
-    } catch (e) { last = e; }
+    try { return await rpcAt(url, method, params); } catch (e) { last = e; }
   }
   throw last ?? new Error("no RPC");
+}
+
+/** eth_getLogs over [from, to], tried provider by provider, each within its
+ *  own block-range cap (LOG_RPC: "url|maxBlocks,url|maxBlocks,…"). */
+async function getLogs(env, address, from, to) {
+  const providers = String(env.LOG_RPC).split(",").map((p) => p.trim()).filter(Boolean)
+    .map((p) => { const [url, max] = p.split("|"); return { url, max: Number(max) || 2000 }; });
+  let last;
+  for (const { url, max } of providers) {
+    try {
+      const out = [];
+      for (let a = from; a <= to; a += max) {
+        const b = Math.min(a + max - 1, to);
+        out.push(...(await rpcAt(url, "eth_getLogs", [{ address, fromBlock: "0x" + a.toString(16), toBlock: "0x" + b.toString(16) }])));
+      }
+      return out;
+    } catch (e) { last = e; }
+  }
+  throw last ?? new Error("no log RPC");
 }
 const call = (env, to, data) => rpc(env, "eth_call", [{ to, data }, "latest"]);
 
@@ -201,7 +226,7 @@ async function pair(env, id) {
 }
 
 async function events(env, from, to) {
-  const logs = await rpc(env, "eth_getLogs", [{ address: FACTORY, fromBlock: "0x" + from.toString(16), toBlock: "0x" + to.toString(16) }]);
+  const logs = await getLogs(env, FACTORY, from, to);
   const wanted = new Set([CURVE_BUY, CURVE_SELL, FEE_ACCRUED, GRADUATED]);
   const rel = logs.filter((l) => wanted.has(l.topics[0]) && !l.removed);
   rel.sort((a, b) => Number(BigInt(a.blockNumber) - BigInt(b.blockNumber)) || Number(BigInt(a.logIndex) - BigInt(b.logIndex)));
