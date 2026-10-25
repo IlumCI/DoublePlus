@@ -1,0 +1,12 @@
+# GeckoTerminal adapter for DoublePlus curves (see worker.mjs).
+# Deploy from gecko/: ../api/node_modules/.bin/wrangler deploy
+name = "doubleplus-gecko"
+main = "worker.mjs"
+compatibility_date = "2026-09-01"
+
+routes = [{ pattern = "gecko.doubleplus.fun", custom_domain = true }]
+workers_dev = false
+
+[vars]
+# Comma-separated, tried in order. Robinhood's own RPC throttles Cloudflare, so Daybreak first.
+RPC_URL = "https://robinhood.daybreak-rpc.network,https://rpc.mainnet.chain.robinhood.com,https://robinhood.drpc.org"
