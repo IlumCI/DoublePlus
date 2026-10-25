@@ -23,6 +23,8 @@ async function deployAll(admin: any, treasury: any) {
 
   const vestingDeployer = await (await ethers.getContractFactory("VestingDeployer")).deploy();
   await vestingDeployer.waitForDeployment();
+  const desk = await (await ethers.getContractFactory("VentureCurveDesk")).deploy(WETH);
+  await desk.waitForDeployment();
 
   // hook deploy is a plain tx (CREATE2 via c2), then tokenDeployer and the
   // factory are the next two creates from the admin signer.
@@ -31,8 +33,8 @@ async function deployAll(admin: any, treasury: any) {
 
   const Hook = await ethers.getContractFactory("VentureFeeHook");
   const hookArgs = ethers.AbiCoder.defaultAbiCoder().encode(
-    ["address", "address", "address", "uint16", "uint16", "uint16", "uint64", "uint256"],
-    [POOL_MANAGER, treasury.address, predictedFactory, 100, 2000, 2000, 3600, ethers.parseEther("0.001")],
+    ["address", "address", "address", "uint16", "uint16", "uint16", "uint64", "uint256", "address"],
+    [POOL_MANAGER, treasury.address, predictedFactory, 100, 2000, 2000, 3600, ethers.parseEther("0.001"), await desk.getAddress()],
   );
   const hookInit = ethers.concat([Hook.bytecode, hookArgs]);
   const hookHash = ethers.keccak256(hookInit);
@@ -53,7 +55,7 @@ async function deployAll(admin: any, treasury: any) {
     admin.address, admin.address, POOL_MANAGER, hookAddr, WETH, V3_ROUTER,
     await vestingDeployer.getAddress(), await tokenDeployer.getAddress(),
      50, 100, 1n, TEST_VANITY, // mark off: no salt grind against a forked chain
-    ETH_USD_MIN_8, ETH_USD_MAX_8, ethers.ZeroAddress,
+    ETH_USD_MIN_8, ETH_USD_MAX_8, ethers.ZeroAddress, await desk.getAddress(),
   );
   await factory.waitForDeployment();
   expect(await factory.getAddress()).to.equal(predictedFactory);
@@ -64,7 +66,8 @@ async function deployAll(admin: any, treasury: any) {
   await router.waitForDeployment();
   const updates = await (await ethers.getContractFactory("VentureUpdates")).deploy(await factory.getAddress());
   await updates.waitForDeployment();
-  return { hook, factory, tokenDeployer, router, updates };
+  await (await desk.init(await factory.getAddress(), hookAddr, await router.getAddress())).wait();
+  return { hook, factory, tokenDeployer, router, updates, desk };
 }
 
 async function launch(factory: any, tokenDeployer: any, signer: any, pair: string, over: Record<string, any> = {}) {
@@ -212,6 +215,63 @@ describe("Venture bonding-curve launchpad (fork)", function () {
     expect(await erc.balanceOf(founder.address)).to.be.greaterThanOrEqual(claimable);
   });
 
+  it("charges the founder tax on the curve, and fires a raise's buyback in the pool after graduation", async () => {
+    const [admin, founder, backer, whale, keeper, treasury] = await ethers.getSigners();
+    const { factory, tokenDeployer, desk } = await deployAll(admin, treasury);
+    const coin = await launch(factory, tokenDeployer, founder, WETH);
+    const erc = await ethers.getContractAt("QuiverToken", coin);
+    const weth = await ethers.getContractAt("QuiverToken", WETH);
+
+    // On the curve: the 2% buy tax pays the founder's dev share and holder
+    // dividends at once; liquidity and market-making load the buyback.
+    const devBefore = await weth.balanceOf(founder.address);
+    await (await factory.connect(backer).buy(coin, 0, { value: ethers.parseEther("0.5") })).wait();
+    const tax = (ethers.parseEther("0.5") * 200n) / 10_000n;
+    expect((await weth.balanceOf(founder.address)) - devBefore).to.equal(tax / 4n);
+    expect(await erc.totalRewardsDistributed()).to.equal(tax / 4n);
+    expect(await desk.buybackOf(coin)).to.equal(tax - 2n * (tax / 4n));
+    await expect(desk.fire(coin, 0)).to.be.revertedWithCustomError(desk, "RaiseOpen");
+
+    await (await factory.connect(whale).buy(coin, 0, { value: ethers.parseEther("2") })).wait();
+    expect((await factory.curveState(coin)).finalized).to.equal(true);
+
+    // After graduation the buyback buys in the pool and burns it.
+    await network.provider.send("evm_increaseTime", [20]); // past the sniper window
+    await network.provider.send("evm_mine");
+    const loaded = await desk.buybackOf(coin);
+    const supply = await erc.totalSupply();
+    await (await desk.connect(keeper).fire(coin, 0)).wait();
+    expect(await desk.buybackOf(coin)).to.equal(0n);
+    expect(await erc.totalSupply()).to.be.lessThan(supply);
+    expect(await erc.balanceOf(await desk.getAddress())).to.equal(0n);
+    expect(loaded).to.be.greaterThan(0n);
+  });
+
+  it("a buyback that fills an open curve graduates it and keeps the change", async () => {
+    const [admin, founder, backer, , keeper, treasury] = await ethers.getSigners();
+    const { factory, tokenDeployer, desk } = await deployAll(admin, treasury);
+    const grad = ethers.parseEther("0.5");
+    await (await factory.setParams(0, grad, 365 * DAY, 2000)).wait();
+    const coin = await launch(factory, tokenDeployer, founder, WETH, { mode: 1, founderRaiseBps: 0, maxBuyWei: 0 });
+
+    // Fill to just under the trigger: 0.5% fee and 2% tax come off first.
+    const gross = ((grad - ethers.parseEther("0.002")) * 10_000n) / (10_000n - 250n);
+    await (await factory.connect(backer).buy(coin, 0, { value: gross })).wait();
+    expect((await factory.curveState(coin)).finalized).to.equal(false);
+    const loaded = await desk.buybackOf(coin);
+    expect(loaded).to.be.greaterThan(ethers.parseEther("0.003"));
+
+    await (await desk.connect(keeper).fire(coin, 0)).wait();
+    expect((await factory.curveState(coin)).finalized, "the buyback's buy graduates the coin").to.equal(true);
+    expect((await factory.listings(coin)).poolId).to.not.equal(ethers.ZeroHash);
+    // What the curve didn't take is back in the buyback, ready for the pool.
+    expect(await desk.buybackOf(coin)).to.be.greaterThan(0n);
+    await network.provider.send("evm_increaseTime", [20]);
+    await network.provider.send("evm_mine");
+    await (await desk.connect(keeper).fire(coin, 0)).wait();
+    expect(await desk.buybackOf(coin)).to.equal(0n);
+  });
+
   it("graduates inside the filling buy, even when slicing leaves the raise a few wei short", async () => {
     // The live stall: fill in slices from one wallet whose cap equals the
     // target. Each buy books curveCost(q)+1 for the largest whole q its value
@@ -223,7 +283,8 @@ describe("Venture bonding-curve launchpad (fork)", function () {
     const coin = await launch(factory, tokenDeployer, founder, WETH);
     const erc = await ethers.getContractAt("QuiverToken", coin);
 
-    const buyBps = BigInt(await factory.curveBuyFeeBps());
+    // The fee and the coin's 2% buy tax both come off before the curve.
+    const buyBps = BigInt(await factory.curveBuyFeeBps()) + 200n;
     const gross = (TARGET * 10_000n) / (10_000n - buyBps) + 10n;
     const slice = gross / 3n;
     await (await factory.connect(whale).buy(coin, 0, { value: slice })).wait();

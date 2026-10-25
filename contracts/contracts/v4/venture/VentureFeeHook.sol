@@ -168,6 +168,9 @@ contract VentureFeeHook is IHooks, ReentrancyGuard, IUnlockCallback {
     uint64 public immutable potTimer;
     /// @notice The smallest buy (in the pair token) that takes the lead.
     uint256 public immutable potMinBuyWei;
+    /// @notice The curve-phase fee engine (VentureCurveDesk), the only
+    ///         caller allowed to credit dividends before graduation.
+    address public immutable curveDesk;
 
     /// @notice One-time, self-bound referral registry: who recruited whom.
     mapping(address user => address referrer) public referrerOf;
@@ -225,7 +228,8 @@ contract VentureFeeHook is IHooks, ReentrancyGuard, IUnlockCallback {
         uint16 _refShareBps,
         uint16 _potShareBps,
         uint64 _potTimer,
-        uint256 _potMinBuyWei
+        uint256 _potMinBuyWei,
+        address _curveDesk
     ) {
         require(_platformTreasury != address(0) && _launcher != address(0), "zero");
         require(_platformFeeBps >= MIN_PLATFORM_BPS && _platformFeeBps <= MAX_PLATFORM_BPS, "platform bps");
@@ -240,6 +244,15 @@ contract VentureFeeHook is IHooks, ReentrancyGuard, IUnlockCallback {
         potShareBps = _potShareBps;
         potTimer = _potTimer;
         potMinBuyWei = _potMinBuyWei;
+        curveDesk = _curveDesk;
+    }
+
+    /// @notice Credit holders with `amount` of WETH the curve desk has
+    ///         already sent to the coin (curve-phase dividends; the token only
+    ///         takes distributions from its hook).
+    function curveDividends(address coin, uint256 amount) external {
+        if (msg.sender != curveDesk) revert NotLauncher();
+        IQuiverToken(coin).distributeRewards(amount);
     }
 
     // ---------------------------------------------------------------------

@@ -22,21 +22,24 @@ async function main() {
   const placeholder = await weth.getAddress();
   const vestingDeployer = await (await ethers.getContractFactory("VestingDeployer")).deploy();
   await vestingDeployer.waitForDeployment();
+  const desk = await (await ethers.getContractFactory("VentureCurveDesk")).deploy(placeholder);
+  await desk.waitForDeployment();
   const nonce = await ethers.provider.getTransactionCount(admin.address);
   const predictedFactory = ethers.getCreateAddress({ from: admin.address, nonce: nonce + 2 });
-  const hook = await (await ethers.getContractFactory("VentureFeeHook")).deploy(placeholder, admin.address, predictedFactory, 55, 2000, 2000, 3600, ethers.parseEther("0.001"));
+  const hook = await (await ethers.getContractFactory("VentureFeeHook")).deploy(placeholder, admin.address, predictedFactory, 55, 2000, 2000, 3600, ethers.parseEther("0.001"), await desk.getAddress());
   await hook.waitForDeployment();
   const tokenDeployer = await (await ethers.getContractFactory("VentureTokenDeployer")).deploy(predictedFactory);
   await tokenDeployer.waitForDeployment();
   const factory = await (await ethers.getContractFactory("VentureFactory")).deploy(
     admin.address, admin.address, placeholder, await hook.getAddress(), placeholder, placeholder,
-    await vestingDeployer.getAddress(), await tokenDeployer.getAddress(), 50, 100, 1n, 0, 1n, 2n ** 63n, ethers.ZeroAddress,
+    await vestingDeployer.getAddress(), await tokenDeployer.getAddress(), 50, 100, 1n, 0, 1n, 2n ** 63n, ethers.ZeroAddress, await desk.getAddress(),
   );
   await factory.waitForDeployment();
   const router = await (await ethers.getContractFactory("VentureRouter")).deploy(placeholder, await factory.getAddress(), placeholder, placeholder);
   await router.waitForDeployment();
   const updates = await (await ethers.getContractFactory("VentureUpdates")).deploy(await factory.getAddress());
   await updates.waitForDeployment();
+  await (await desk.init(await factory.getAddress(), await hook.getAddress(), await router.getAddress())).wait();
   const startBlock = await ethers.provider.getBlockNumber();
 
   const base = {

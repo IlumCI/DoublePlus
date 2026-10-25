@@ -30,10 +30,12 @@ async function main() {
 
   const vestingDeployer = await (await ethers.getContractFactory("VestingDeployer")).deploy();
   await vestingDeployer.waitForDeployment();
+  const desk = await (await ethers.getContractFactory("VentureCurveDesk")).deploy(placeholder);
+  await desk.waitForDeployment();
   const nonce = await ethers.provider.getTransactionCount(admin.address);
   const predictedFactory = ethers.getCreateAddress({ from: admin.address, nonce: nonce + 2 });
   const hook = await (await ethers.getContractFactory("VentureFeeHook")).deploy(
-    placeholder, admin.address, predictedFactory, 100, 2000, 2000, 3600, ethers.parseEther("0.001"),
+    placeholder, admin.address, predictedFactory, 100, 2000, 2000, 3600, ethers.parseEther("0.001"), await desk.getAddress(),
   );
   await hook.waitForDeployment();
   const tokenDeployer = await (await ethers.getContractFactory("VentureTokenDeployer")).deploy(predictedFactory);
@@ -42,7 +44,7 @@ async function main() {
     admin.address, admin.address, placeholder, await hook.getAddress(), placeholder, placeholder,
     await vestingDeployer.getAddress(), await tokenDeployer.getAddress(), 50, 100, 1n, VANITY,
     1n, 2n ** 63n, // ETH/USD band wide open: local dev passes whatever price it likes
-    ethers.ZeroAddress,
+    ethers.ZeroAddress, await desk.getAddress(),
   );
   await factory.waitForDeployment();
   const router = await (await ethers.getContractFactory("VentureRouter")).deploy(
@@ -51,6 +53,7 @@ async function main() {
   await router.waitForDeployment();
   const updates = await (await ethers.getContractFactory("VentureUpdates")).deploy(await factory.getAddress());
   await updates.waitForDeployment();
+  await (await desk.init(await factory.getAddress(), await hook.getAddress(), await router.getAddress())).wait();
 
   const params = {
     name: "Openkernel", symbol: "KERN",

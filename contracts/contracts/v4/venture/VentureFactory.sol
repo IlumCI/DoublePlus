@@ -24,6 +24,12 @@ import {FounderVesting} from "./FounderVesting.sol";
 import {VestingDeployer} from "./VestingDeployer.sol";
 import {VentureTokenDeployer} from "./VentureTokenDeployer.sol";
 
+/// @dev The curve fee and founder tax engine (VentureCurveDesk).
+interface ICurveDesk {
+    function charge(address coin, address trader, uint256 amount, bool isBuy) external view returns (uint256 fee, uint256 tax);
+    function curveTrade(address coin, address trader, bool isBuy, uint256 fee, uint256 size) external payable;
+}
+
 interface IWETH9V {
     function deposit() external payable;
 }
@@ -120,6 +126,10 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
     VestingDeployer public immutable vestingDeployer;
     VentureTokenDeployer public immutable tokenDeployer;
     address public immutable protocolAdmin;
+    /// @notice Takes every curve trade's fee and founder tax and pays them
+    ///         out (referrer, creator, pot, treasury, dev, dividends,
+    ///         jackpot, buyback).
+    ICurveDesk public immutable desk;
 
     /// @notice Smallest raise the platform will finish, in wei. A floor on both
     ///         modes: a founder's own target in Guaranteed, and the graduation
@@ -143,7 +153,8 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
     uint64 public immutable maxEthUsd8;
 
     /// @notice Protocol fee on curve buys, taken off the incoming value before
-    ///         the curve is quoted, so `spentWei` records net escrow.
+    ///         the curve is quoted (with the founder tax, both paid out by
+    ///         the desk), so `spentWei` records net escrow.
     uint16 public immutable curveBuyFeeBps;
     /// @notice Protocol fee on curve sells, taken out of the proceeds.
     uint16 public immutable curveSellFeeBps;
@@ -249,8 +260,8 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         string symbol;
         string metadataURI; // JSON: description, logo, links + pitch/sector
         address pair;       // trading quote + dividend currency
-        uint16 buyTaxBps;   // 0..400: founder tax on buys after graduation
-        uint16 sellTaxBps;  // 0..400: founder tax on sells after graduation
+        uint16 buyTaxBps;   // 0..400: founder tax on buys, curve and pool
+        uint16 sellTaxBps;  // 0..400: founder tax on sells, curve and pool
         address devWallet;  // dev-fee recipient; 0 => the founder
         uint16 devBps;      // the four buckets split the founder tax and
         uint16 dividendBps; // must sum to 10_000
@@ -331,10 +342,12 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         uint16 vanity_,
         uint64 minEthUsd8_,
         uint64 maxEthUsd8_,
-        address escrow_
+        address escrow_,
+        ICurveDesk desk_
     ) Ownable(owner_) {
         if (protocolAdmin_ == address(0)) revert InvalidParams();
         escrow = escrow_;
+        desk = desk_;
         if (minTargetWei_ == 0 || minTargetWei_ > MAX_TARGET_WEI) revert InvalidParams();
         minTargetWei = minTargetWei_;
         // The trigger is never below the floor, whatever the floor is.
@@ -399,32 +412,6 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         if (amount == 0 || to == address(0)) return;
         feesAccrued[to] += amount;
         emit FeeAccrued(token, to, amount);
-    }
-
-    /// @dev A curve fee, less the hook's referee discount when the caller has a
-    ///      bound referrer: the same rule the hook applies after graduation.
-    function _feeFor(uint256 amount, uint16 bps) internal view returns (uint256 fee) {
-        fee = (amount * bps) / BPS;
-        if (hook.referrerOf(msg.sender) != address(0)) fee -= (fee * hook.REFEREE_DISCOUNT_BPS()) / BPS;
-    }
-
-    /// @dev Referrer first, then the Open-mode creator's share, remainder to
-    ///      the protocol treasury. Nothing here calls out to the recipients.
-    function _splitCurveFee(address token, uint256 fee) internal {
-        if (fee == 0) return;
-        uint256 remaining = fee;
-        address ref = hook.referrerOf(msg.sender);
-        if (ref != address(0) && ref != msg.sender) {
-            uint256 toRef = (fee * hook.refShareBps()) / BPS;
-            _accrue(token, ref, toRef);
-            remaining -= toRef;
-        }
-        if (_curves[token].mode == RaiseMode.Open && creatorCurveShareBps > 0) {
-            uint256 toCreator = (fee * creatorCurveShareBps) / BPS;
-            _accrue(token, listings[token].creator, toCreator);
-            remaining -= toCreator;
-        }
-        _accrue(token, hook.platformTreasury(), remaining);
     }
 
     /// @notice Withdraw everything accrued to the caller.
@@ -626,8 +613,8 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         // The entry fee comes off the incoming value before the curve is
         // quoted, so spentWei records what actually reaches escrow. Booking it
         // gross would leave refund liability above escrow by exactly the take.
-        uint256 feeIn = _feeFor(msg.value, curveBuyFeeBps);
-        uint256 netValue = msg.value - feeIn;
+        (uint256 feeIn, uint256 taxIn) = desk.charge(token, msg.sender, msg.value, true);
+        uint256 netValue = msg.value - feeIn - taxIn;
         if (netValue == 0) revert InvalidParams();
 
         uint256 q = tokensForValue(token, netValue);
@@ -655,7 +642,7 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         boughtTokens[token][msg.sender] += tokensOut;
 
         IERC20(token).safeTransfer(msg.sender, tokensOut);
-        _splitCurveFee(token, feeIn);
+        desk.curveTrade{value: feeIn + taxIn}(token, msg.sender, true, feeIn, spend);
         emit CurveBuy(token, msg.sender, spend, tokensOut, price);
         // The buy that fills the raise graduates it in the same transaction.
         // A separate finalize() left a funded curve frozen — no buys, no
@@ -706,8 +693,8 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
         if (c.mode == RaiseMode.Guaranteed && gross > costBasis) gross = costBasis;
         if (gross > c.raisedWei) gross = c.raisedWei;
 
-        uint256 fee = _feeFor(gross, curveSellFeeBps);
-        ethOut = gross - fee;
+        (uint256 fee, uint256 tax) = desk.charge(token, msg.sender, gross, false);
+        ethOut = gross - fee - tax;
         if (ethOut < minEthOut) revert SlippageExceeded();
 
         spentWei[token][msg.sender] -= costBasis;
@@ -717,7 +704,7 @@ contract VentureFactory is Ownable, ReentrancyGuard, IUnlockCallback {
 
         // Tokens go back to factory inventory so the curve can resell them.
         IERC20(token).safeTransferFrom(msg.sender, address(this), tokenWei);
-        _splitCurveFee(token, fee);
+        desk.curveTrade{value: fee + tax}(token, msg.sender, false, fee, 0);
         (bool ok,) = payable(msg.sender).call{value: ethOut}("");
         if (!ok) revert EthTransferFailed();
         emit CurveSell(token, msg.sender, ethOut, tokenWei, priceNow(token), fee);

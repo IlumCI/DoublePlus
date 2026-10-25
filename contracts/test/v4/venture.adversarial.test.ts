@@ -91,25 +91,21 @@ describe("Venture launchpad (adversarial)", function () {
     await expect(a.exec(fAddr, refundData)).to.be.revertedWithCustomError(factory, "NothingToRefund");
   });
 
-  it("blocks re-entry from withdrawFees, and pays a referrer exactly once", async () => {
+  it("pays a hostile referrer in WETH, once, and it can't block the trade", async () => {
     const [, creator, buyer] = await ethers.getSigners();
-    const { factory, tokenDeployer, weth, hook } = await deployStack();
+    const { factory, tokenDeployer, weth, hook, desk } = await deployStack();
     const coin = await launch(factory, tokenDeployer, creator, await weth.getAddress(), { maxBuyWei: ethers.parseEther("10") });
     const a = await attacker();
     const aAddr = await a.getAddress();
     const fAddr = await factory.getAddress();
     await (await hook.connect(buyer).setReferrer(aAddr)).wait();
-    await (await factory.connect(buyer).buy(coin, 0, { value: ethers.parseEther("1") })).wait();
-    const owed = await factory.feesAccrued(aAddr);
-    expect(owed).to.be.greaterThan(0n);
-
-    const w = factory.interface.encodeFunctionData("withdrawFees");
-    await (await a.arm(Mode.Reenter, fAddr, w)).wait();
-    const before = await ethers.provider.getBalance(aAddr);
-    await (await a.exec(fAddr, w)).wait();
-    expect((await ethers.provider.getBalance(aAddr)) - before).to.equal(owed);
+    // Armed to re-enter the factory on any ETH it receives: WETH sends none.
+    await (await a.arm(Mode.Reenter, fAddr, factory.interface.encodeFunctionData("withdrawFees"))).wait();
+    const value = ethers.parseEther("1");
+    const [fee] = await desk.charge(coin, buyer.address, value, true);
+    await (await factory.connect(buyer).buy(coin, 0, { value })).wait();
+    expect(await weth.balanceOf(aAddr)).to.equal((fee * 2_000n) / 10_000n);
     expect(await a.reentrySuccesses()).to.equal(0n);
-    expect(await factory.feesAccrued(aAddr)).to.equal(0n);
   });
 
   for (const [label, mode] of [["reverts", Mode.Revert], ["burns all gas", Mode.Burn], ["return-bombs", Mode.Bomb]] as const) {
@@ -134,12 +130,12 @@ describe("Venture launchpad (adversarial)", function () {
     });
   }
 
-  it("a creator that cannot take ETH strands only its own fees; backers still refund", async () => {
+  it("a creator that refuses ETH still gets its fees in WETH, and backers trade on", async () => {
     const [, , b1, b2] = await ethers.getSigners();
     const { factory, tokenDeployer, weth } = await deployStack();
     const a = await attacker();
     const fAddr = await factory.getAddress();
-    // Launch as the attacker, in Open mode so it accrues a share of curve fees.
+    // Launch as the attacker, in Open mode so it takes a share of curve fees.
     const params = {
       name: "Hostile", symbol: "HOST", metadataURI: "", pair: await weth.getAddress(),
       buyTaxBps: 300, sellTaxBps: 300, devWallet: ethers.ZeroAddress,
@@ -155,11 +151,7 @@ describe("Venture launchpad (adversarial)", function () {
     await (await a.arm(Mode.Revert, ethers.ZeroAddress, "0x")).wait();
     await (await factory.connect(b1).buy(coin, 0, { value: ethers.parseEther("0.3") })).wait();
     await (await factory.connect(b2).buy(coin, 0, { value: ethers.parseEther("0.2") })).wait();
-    const owed = await factory.feesAccrued(await a.getAddress());
-    expect(owed).to.be.greaterThan(0n);
-    await expect(a.exec(fAddr, factory.interface.encodeFunctionData("withdrawFees"))).to.be.reverted;
-    expect(await factory.feesAccrued(await a.getAddress())).to.equal(owed);
-    // Backers trade on regardless.
+    expect(await weth.balanceOf(await a.getAddress())).to.be.greaterThan(0n);
     const erc = await ethers.getContractAt("QuiverToken", coin);
     await (await erc.connect(b1).approve(fAddr, ethers.MaxUint256)).wait();
     await (await factory.connect(b1).sell(coin, 1_000_000n, 0)).wait();

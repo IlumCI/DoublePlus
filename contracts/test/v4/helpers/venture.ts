@@ -58,10 +58,13 @@ export async function deployStack(
   const vestingDeployer = await (await ethers.getContractFactory("VestingDeployer")).deploy();
   await vestingDeployer.waitForDeployment();
 
+  const desk = await (await ethers.getContractFactory("VentureCurveDesk")).deploy(await weth.getAddress());
+  await desk.waitForDeployment();
+
   const nonce = await ethers.provider.getTransactionCount(admin.address);
   const predictedFactory = ethers.getCreateAddress({ from: admin.address, nonce: nonce + 2 });
   const hook = await (await ethers.getContractFactory("VentureFeeHook")).deploy(
-    placeholder, admin.address, predictedFactory, 100, 2000, 2000, 3600, ethers.parseEther("0.001"),
+    placeholder, admin.address, predictedFactory, 100, 2000, 2000, 3600, ethers.parseEther("0.001"), await desk.getAddress(),
   );
   await hook.waitForDeployment();
   const tokenDeployer = await (await ethers.getContractFactory("VentureTokenDeployer")).deploy(predictedFactory);
@@ -82,10 +85,14 @@ export async function deployStack(
     ethUsdBand8[0],
     ethUsdBand8[1],
     escrow,
+    await desk.getAddress(),
   );
   await factory.waitForDeployment();
   expect(await factory.getAddress()).to.equal(predictedFactory);
-  return { factory, tokenDeployer, weth, hook };
+  // No router in the curve-phase suites: a buyback after graduation is
+  // covered by the fork test.
+  await (await desk.init(predictedFactory, await hook.getAddress(), placeholder)).wait();
+  return { factory, tokenDeployer, weth, hook, desk };
 }
 
 export async function mineSalt(tokenDeployer: any, args: any[]) {

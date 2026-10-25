@@ -217,28 +217,38 @@ describe("Venture bonding-curve launchpad (unit)", function () {
     expect(await ethers.provider.getBalance(factoryAddr)).to.equal(raisedB + (await fees()));
   });
 
-  it("charges the entry fee on the way in and books only what reaches escrow", async () => {
+  it("charges the fee and founder tax on the way in and books only what reaches escrow", async () => {
     const [admin, creator, buyer1] = await ethers.getSigners();
-    const { factory, tokenDeployer, weth } = await deployStack();
+    const { factory, tokenDeployer, weth, desk } = await deployStack();
     const coin = await launch(factory, tokenDeployer, creator, await weth.getAddress());
+    const erc = await ethers.getContractAt("QuiverToken", coin);
 
     const sent = ethers.parseEther("0.4");
     await (await factory.connect(buyer1).buy(coin, 0, { value: sent })).wait();
 
     const fee = (sent * 50n) / 10_000n; // curveBuyFeeBps = 50
-    expect(await factory.feesAccrued(admin.address)).to.equal(fee);
+    const tax = (sent * 300n) / 10_000n; // the helper's 3% buy tax
+    // Fee: 20% to the pot, the rest to the treasury (a target raise has no
+    // creator share). Paid in WETH in the trade itself.
+    const toPot = (fee * 2_000n) / 10_000n;
+    expect(await weth.balanceOf(admin.address)).to.equal(fee - toPot);
+    expect((await desk.potOf(coin)).eth).to.equal(toPot);
+    // Tax, by the 25/25/25/25 policy: dev and dividends now, liquidity and
+    // market-making into the buyback.
+    const quarter = (tax * 2_500n) / 10_000n;
+    expect(await weth.balanceOf(creator.address)).to.equal(quarter);
+    expect(await weth.balanceOf(coin)).to.equal(quarter);
+    expect(await erc.totalRewardsDistributed()).to.equal(quarter);
+    expect(await desk.buybackOf(coin)).to.equal(tax - 2n * quarter);
+    // The buyer leads the pot.
+    expect((await desk.potOf(coin)).leader).to.equal(buyer1.address);
 
-    // spentWei is net of the fee, and the curve total equals the per-user sum.
+    // spentWei is net of fee and tax, and the curve total equals the per-user sum.
     const spent = await factory.spentWei(coin, buyer1.address);
-    expect(spent).to.be.lessThanOrEqual(sent - fee);
+    expect(spent).to.be.lessThanOrEqual(sent - fee - tax);
     expect((await factory.curveState(coin)).raisedWei).to.equal(spent);
-
-    // Fees are pull-payment: nothing was sent to the treasury in the trade path.
-    const before = await ethers.provider.getBalance(admin.address);
-    const rc = await (await factory.withdrawFees()).wait();
-    const got = (await ethers.provider.getBalance(admin.address)) - before + rc!.gasUsed * rc!.gasPrice;
-    expect(got).to.equal(fee);
-    expect(await factory.feesAccrued(admin.address)).to.equal(0n);
+    // Nothing is left in the factory but escrow.
+    expect(await ethers.provider.getBalance(await factory.getAddress())).to.equal(spent);
   });
 
   it("sells back to the curve, caps the payout at cost basis, and stays solvent", async () => {
@@ -262,10 +272,11 @@ describe("Venture bonding-curve launchpad (unit)", function () {
     const out = (await ethers.provider.getBalance(buyer1.address)) - before + rc!.gasUsed * rc!.gasPrice;
 
     // The curve owes buyer1 more than they paid, but Guaranteed mode caps the
-    // gross at their pro-rata cost basis; the 1% sell fee comes out of that.
+    // gross at their pro-rata cost basis; the 1% sell fee and the 3% sell
+    // tax come out of that.
     const tokenWei = half * 10n ** 18n;
     const grossCap = (basis * tokenWei) / held;
-    expect(out).to.equal(grossCap - (grossCap * 100n) / 10_000n);
+    expect(out).to.equal(grossCap - (grossCap * 100n) / 10_000n - (grossCap * 300n) / 10_000n);
 
     // Ledgers move together: the tokens sold and the basis behind them.
     expect(await factory.spentWei(coin, buyer1.address)).to.equal(basis - grossCap);
@@ -276,9 +287,8 @@ describe("Venture bonding-curve launchpad (unit)", function () {
       (await factory.spentWei(coin, buyer1.address)) + (await factory.spentWei(coin, buyer2.address));
     const raised = (await factory.curveState(coin)).raisedWei;
     expect(raised).to.equal(claims);
-    expect(await ethers.provider.getBalance(factoryAddr)).to.equal(
-      raised + (await factory.feesAccrued(admin.address)),
-    );
+    expect(await ethers.provider.getBalance(factoryAddr)).to.equal(raised);
+    void admin;
 
     // And the refund path still pays those claims in full after an abort.
     await network.provider.send("evm_increaseTime", [3 * DAY]);
@@ -297,21 +307,17 @@ describe("Venture bonding-curve launchpad (unit)", function () {
   });
 
   it("charges a referred buyer 10% less curve fee, and still pays the referrer", async () => {
-    const [admin, creator, plain, referred, referrer] = await ethers.getSigners();
-    const { factory, tokenDeployer, weth, hook } = await deployStack();
+    const [, creator, plain, referred, referrer] = await ethers.getSigners();
+    const { factory, tokenDeployer, weth, hook, desk } = await deployStack();
     const coin = await launch(factory, tokenDeployer, creator, await weth.getAddress(), { maxBuyWei: ethers.parseEther("10") });
     await (await hook.connect(referred).setReferrer(referrer.address)).wait();
     const value = ethers.parseEther("0.1");
-    const treasury = await hook.platformTreasury();
-    const fees = async () => (await factory.feesAccrued(treasury)) + (await factory.feesAccrued(referrer.address));
-    const f0 = await fees();
-    await (await factory.connect(plain).buy(coin, 0, { value })).wait();
-    const f1 = await fees();
+    const [plainFee, plainTax] = await desk.charge(coin, plain.address, value, true);
+    const [refFee, refTax] = await desk.charge(coin, referred.address, value, true);
+    expect(refFee).to.equal(plainFee - (plainFee * 1_000n) / 10_000n);
+    expect(refTax).to.equal(plainTax); // the discount is on the fee, not the creator's tax
     await (await factory.connect(referred).buy(coin, 0, { value })).wait();
-    const f2 = await fees();
-    expect(f2 - f1).to.equal(((f1 - f0) * 9_000n) / 10_000n);
-    expect(await factory.feesAccrued(referrer.address)).to.be.greaterThan(0n);
-    void admin;
+    expect(await weth.balanceOf(referrer.address)).to.equal((refFee * 2_000n) / 10_000n);
   });
 
   it("refuses a pair other than WETH", async () => {
@@ -424,6 +430,8 @@ describe("Venture bonding-curve launchpad (unit)", function () {
       mode: 1,
       founderRaiseBps: 0,
       maxBuyWei: ethers.parseEther("10"),
+      buyTaxBps: 0,
+      sellTaxBps: 0,
     });
     const erc = await ethers.getContractAt("QuiverToken", coin);
     expect((await factory.curveState(coin)).targetRaiseWei).to.equal(ethers.parseEther("4"));
@@ -445,16 +453,12 @@ describe("Venture bonding-curve launchpad (unit)", function () {
     const out = (await ethers.provider.getBalance(buyer1.address)) - pre + rc!.gasUsed * rc!.gasPrice;
     expect(out).to.be.greaterThan(basis);
 
-    // The creator takes their share of that sell fee; the rest is the protocol's.
-    expect(await factory.feesAccrued(creator.address)).to.be.greaterThan(0n);
-    expect(await factory.feesAccrued(admin.address)).to.be.greaterThan(
-      await factory.feesAccrued(creator.address),
-    );
-    expect(await ethers.provider.getBalance(factoryAddr)).to.equal(
-      (await factory.curveState(coin)).raisedWei +
-        (await factory.feesAccrued(admin.address)) +
-        (await factory.feesAccrued(creator.address)),
-    );
+    // The creator takes their share of the curve fees; most of the rest is
+    // the protocol's. (This coin has no founder tax, so the creator's WETH is
+    // curve-fee share alone.)
+    expect(await weth.balanceOf(creator.address)).to.be.greaterThan(0n);
+    expect(await weth.balanceOf(admin.address)).to.be.greaterThan(await weth.balanceOf(creator.address));
+    expect(await ethers.provider.getBalance(factoryAddr)).to.equal((await factory.curveState(coin)).raisedWei);
   });
 
   it("takes a creation fee, and sweeps abandoned escrow only after the delay", async () => {

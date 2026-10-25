@@ -1,5 +1,5 @@
 import { ethers, network } from "hardhat";
-import { writeFileSync, mkdirSync } from "fs";
+import { writeFileSync, mkdirSync, existsSync, readFileSync, renameSync } from "fs";
 import { join } from "path";
 
 // Venture (doubleplus) launchpad deploy. Serves both Robinhood Chain
@@ -113,6 +113,14 @@ async function main() {
   const vestingDeployer = await (await ethers.getContractFactory("VestingDeployer")).deploy();
   await vestingDeployer.waitForDeployment();
 
+  // The curve desk takes every curve trade's fee and founder tax; the hook
+  // and the factory bake its address in, and it is wired to them (and the
+  // router) once they exist.
+  const desk = await (await ethers.getContractFactory("VentureCurveDesk")).deploy(infra.weth);
+  await desk.waitForDeployment();
+  const deskAddr = await desk.getAddress();
+  console.log("curveDesk:", deskAddr);
+
   const nonce = await ethers.provider.getTransactionCount(signer.address);
   // nonce n+0: hook deploy tx (CREATE2 via c2 — does not consume a signer create)
   // ...but it IS a tx from the signer, so plain creates land at n+1 and n+2.
@@ -124,8 +132,8 @@ async function main() {
   // 2) Mine + deploy the hook at a flag-matching address, launcher pre-baked.
   const Hook = await ethers.getContractFactory("VentureFeeHook");
   const hookArgs = ethers.AbiCoder.defaultAbiCoder().encode(
-    ["address", "address", "address", "uint16", "uint16", "uint16", "uint64", "uint256"],
-    [infra.poolManager, treasury, predictedFactory, platformFeeBps, refShareBps, potShareBps, potTimerSecs, potMinBuyWei],
+    ["address", "address", "address", "uint16", "uint16", "uint16", "uint64", "uint256", "address"],
+    [infra.poolManager, treasury, predictedFactory, platformFeeBps, refShareBps, potShareBps, potTimerSecs, potMinBuyWei, deskAddr],
   );
   const hookInit = ethers.concat([Hook.bytecode, hookArgs]);
   const hookHash = ethers.keccak256(hookInit);
@@ -146,7 +154,7 @@ async function main() {
   const factory = await (await ethers.getContractFactory("VentureFactory")).deploy(
     signer.address, admin, infra.poolManager, hookAddr, infra.weth, infra.v3Router,
     await vestingDeployer.getAddress(), await tokenDeployer.getAddress(),
-    curveBuyFeeBps, curveSellFeeBps, minTargetWei, VANITY, minEthUsd8, maxEthUsd8, predictedLimitOrders,
+    curveBuyFeeBps, curveSellFeeBps, minTargetWei, VANITY, minEthUsd8, maxEthUsd8, predictedLimitOrders, deskAddr,
   );
   await factory.waitForDeployment();
   const factoryAddr = await factory.getAddress();
@@ -168,6 +176,10 @@ async function main() {
   await limitOrders.waitForDeployment();
   if ((await limitOrders.getAddress()) !== predictedLimitOrders) throw new Error(`limit orders address drift: ${await limitOrders.getAddress()} != ${predictedLimitOrders}`);
   console.log("limitOrders:", await limitOrders.getAddress());
+
+  // After the predicted creates, so wiring the desk can't shift them.
+  await (await desk.init(factoryAddr, hookAddr, routerAddr)).wait();
+  console.log("curveDesk wired to factory, hook and router");
 
   // Converts 5x holders' dividends; the keeper triggers conversions for them.
   const payoutKeeper = process.env.PAYOUT_KEEPER ?? admin;
@@ -221,6 +233,7 @@ async function main() {
     contracts: {
       hookDeployer: c2Addr,
       hook: hookAddr,
+      curveDesk: deskAddr,
       factory: factoryAddr,
       router: routerAddr,
       updates: await updates.getAddress(),
@@ -235,7 +248,16 @@ async function main() {
     },
   };
   mkdirSync(join(__dirname, "../deployments"), { recursive: true });
-  writeFileSync(join(__dirname, `../deployments/${infra.file}`), JSON.stringify(out, null, 2));
+  // A redeploy is a whole new system and the old coins stay on the old one,
+  // so keep the previous record under its factory's address.
+  const outPath = join(__dirname, `../deployments/${infra.file}`);
+  if (existsSync(outPath)) {
+    const prev = JSON.parse(readFileSync(outPath, "utf8"));
+    const keep = outPath.replace(/\.json$/, `.${String(prev.contracts?.factory ?? "prev").slice(0, 10)}.json`);
+    if (!existsSync(keep)) renameSync(outPath, keep);
+    console.log("previous deployment kept as", keep);
+  }
+  writeFileSync(outPath, JSON.stringify(out, null, 2));
   console.log(`saved deployments/${infra.file}  startBlock:`, startBlock);
 }
 main().catch((e) => { console.error(e); process.exit(1); });
