@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
+import { zeroAddress } from "viem";
 import { factoryAbi, VENTURE, venturePc } from "./client";
 import { usePageMeta } from "./seo";
 import { fmtEth } from "./ui";
@@ -11,7 +12,7 @@ const SECTIONS: [string, string][] = [
   ["curve", "Buying on the curve"],
   ["kinds", "Two kinds of launch"],
   ["graduation", "Graduation"],
-  ["fees", "Fees after graduation"],
+  ["fees", "Coin fees"],
   ["referrals", "Referrals and weekly payouts"],
   ["misses", "If a raise misses"],
   ["risks", "Risks"],
@@ -21,7 +22,7 @@ const SECTIONS: [string, string][] = [
  *  either read from the factory or mirrors a contract constant. */
 export function Docs() {
   usePageMeta("How it works");
-  const [p, setP] = useState<{ grad: bigint; floor: bigint; buy: number; sell: number } | null>(null);
+  const [p, setP] = useState<{ grad: bigint; floor: bigint; buy: number; sell: number; creator: number } | null>(null);
   useEffect(() => {
     const f = { address: VENTURE.factory, abi: factoryAbi } as const;
     Promise.all([
@@ -29,8 +30,9 @@ export function Docs() {
       venturePc.readContract({ ...f, functionName: "minTargetWei" }),
       venturePc.readContract({ ...f, functionName: "curveBuyFeeBps" }),
       venturePc.readContract({ ...f, functionName: "curveSellFeeBps" }),
+      venturePc.readContract({ ...f, functionName: "creatorCurveShareBps" }),
     ])
-      .then(([g, f, b, s]) => setP({ grad: g, floor: f, buy: Number(b) / 100, sell: Number(s) / 100 }))
+      .then(([g, f, b, s, c]) => setP({ grad: g, floor: f, buy: Number(b) / 100, sell: Number(s) / 100, creator: Number(c) / 100 }))
       .catch(() => undefined);
   }, []);
   const grad = p ? `${fmtEth(p.grad, 3)} ETH` : "a set amount of ETH";
@@ -39,6 +41,10 @@ export function Docs() {
   const sellFee = p ? `${p.sell}%` : "a small fee";
   const platform = `${(VENTURE.platformFeeBps / 100).toFixed(2)}%`;
   const refShare = `${VENTURE.refShareBps / 100}%`;
+  const creatorShare = p ? `${p.creator}%` : "a share";
+  // With a curve desk, a coin's own fee, its pot and its referral payouts all
+  // start on the curve; before it, they started at graduation.
+  const desk = VENTURE.desk !== zeroAddress;
 
   return (
     <div className="dp-shell" style={{ paddingBottom: 70 }}>
@@ -85,7 +91,7 @@ export function Docs() {
           <p>
             <b>Open curve.</b> No target and no deadline: the coin graduates once {grad} has gone in. You can sell
             back at the curve price at any time, which can be more or less than you paid. There are no refunds.
-            The creator doesn't take a cut of the raise; they get 10% of the curve's fees instead.
+            The creator doesn't take a cut of the raise; they get {creatorShare} of the curve's fees instead.
           </p>
 
           <H id="graduation">Graduation</H>
@@ -97,21 +103,34 @@ export function Docs() {
             price.
           </p>
 
-          <H id="fees">Fees after graduation</H>
-          <p>
-            Each coin has a buy fee and a sell fee of 0 to 4%, set at launch. The creator chooses how it's split:
-            their own wallet, payouts to people holding the coin, extra liquidity in the pool, and buy and sell
-            orders kept near the price. Holder payouts are sent automatically once they're large enough to be worth
-            the gas, or can be claimed from the Portfolio page. The platform charges {platform} per trade on top.
-            Part of that builds a pot on each coin. Every buy restarts its clock, and whoever bought last when the
-            clock runs out takes the pot.
-          </p>
+          <H id="fees">Coin fees</H>
+          {desk ? (
+            <p>
+              Each coin has a buy fee and a sell fee of 0 to 4%, set at launch and charged from its first trade, on
+              the curve and in the pool. The creator chooses how it's split: their own wallet, payouts to people
+              holding the coin, and a buyback. On the curve the buyback buys the coin and burns it; after graduation
+              it adds liquidity to the pool and keeps buy and sell orders near the price. Holder payouts start with
+              the first trade and are sent automatically once they're large enough to be worth the gas, or can be
+              claimed from the Portfolio page. The platform charges {buyFee} per curve buy, {sellFee} per curve
+              sell and {platform} per pool trade on top. Part of it builds a pot on each coin from its first trade.
+              Every buy restarts the pot's clock, and whoever bought last when the clock runs out takes the pot.
+            </p>
+          ) : (
+            <p>
+              Each coin has a buy fee and a sell fee of 0 to 4%, set at launch and charged once it graduates. The
+              creator chooses how it's split: their own wallet, payouts to people holding the coin, extra liquidity
+              in the pool, and buy and sell orders kept near the price. Holder payouts are sent automatically once
+              they're large enough to be worth the gas, or can be claimed from the Portfolio page. The platform
+              charges {platform} per trade on top. Part of that builds a pot on each coin. Every buy restarts its
+              clock, and whoever bought last when the clock runs out takes the pot.
+            </p>
+          )}
 
           <H id="referrals">Referrals and weekly payouts</H>
           <p>
             If someone links up through your link, they pay 10% less in fees, and you get {refShare} of the
             fees on every trade they make, on every coin. Pool trades pay you in the same transaction, in WETH on
-            sells and in the coin on buys; curve trades add to Ready to withdraw on your Portfolio. Each Monday, part of the platform's income buys and burns the
+            sells and in the coin on buys; {desk ? "curve trades pay you in WETH in the same transaction" : "curve trades add to Ready to withdraw on your Portfolio"}. Each Monday, part of the platform's income buys and burns the
             most-traded coins and goes back to the most active traders. The <Link to="/rewards" viewTransition>Rewards</Link> page
             lists every payout.
           </p>

@@ -3,7 +3,7 @@ import { useBalance, useWalletClient } from "wagmi";
 import { formatEther, parseEther, zeroAddress } from "viem";
 
 import { confirmTx, ercAbi, factoryAbi, hookAbi, VENTURE, venturePc, type Venture as VentureT, sendTx } from "../client";
-import { capState, feePct, gradValueWei, grossForNet, priceImpactPct, quoteBuy, quoteSellWei } from "../curve";
+import { capState, feePct, taxPct, gradValueWei, grossForNet, priceImpactPct, quoteBuy, quoteSellWei } from "../curve";
 import { Countdown, fmtEth, fmtTok, fmtUsdV, pct, useEthUsd, useTick } from "../ui";
 import { useWallet, errorText } from "../../lib/useWallet";
 import { useUi } from "../../store";
@@ -27,7 +27,7 @@ export function RaisePanel({ v }: { v: VentureT }) {
 
   useEffect(() => {
     const read = (fn: "curveBuyFeeBps" | "curveSellFeeBps") =>
-      venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: fn });
+      venturePc.readContract({ address: v.sys.factory, abi: factoryAbi, functionName: fn });
     Promise.all([read("curveBuyFeeBps"), read("curveSellFeeBps")])
       .then(([b, sl]) => setFees({ buyBps: Number(b), sellBps: Number(sl) })).catch(() => undefined);
   }, []);
@@ -35,7 +35,7 @@ export function RaisePanel({ v }: { v: VentureT }) {
   useEffect(() => {
     if (!me) return;
     const read = (fn: "spentWei" | "boughtTokens") =>
-      venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: fn, args: [v.address, me] });
+      venturePc.readContract({ address: v.sys.factory, abi: factoryAbi, functionName: fn, args: [v.address, me] });
     read("spentWei").then((x) => setSpent(x)).catch(() => undefined);
     read("boughtTokens").then((x) => setBought(x)).catch(() => undefined);
   }, [me, v.address, busy]);
@@ -51,10 +51,14 @@ export function RaisePanel({ v }: { v: VentureT }) {
   const [referred, setReferred] = useState(false);
   useEffect(() => {
     if (!me) { setReferred(false); return; }
-    venturePc.readContract({ address: VENTURE.hook, abi: hookAbi, functionName: "referrerOf", args: [me] })
+    venturePc.readContract({ address: v.sys.hook, abi: hookAbi, functionName: "referrerOf", args: [me] })
       .then((r) => setReferred(r !== zeroAddress)).catch(() => undefined);
   }, [me, busy]);
-  const { fee: entryFee, tokensOut } = quoteBuy(v, parsed, fees.buyBps, referred);
+  // On a system with a curve desk the founder's tax applies on the curve too.
+  const desk = v.sys.desk !== zeroAddress;
+  const buyTax = desk ? v.policy.buyTaxBps : 0;
+  const sellTax = desk ? v.policy.sellTaxBps : 0;
+  const { fee: entryFee, tokensOut } = quoteBuy(v, parsed, fees.buyBps, referred, buyTax);
   const funded = pct(v.raisedWei, v.targetRaiseWei);
   // Mirrors VentureFactory.LAUNCH_WINDOW_SECS: for the first minute every
   // wallet may put in at most 1% of the target.
@@ -69,7 +73,7 @@ export function RaisePanel({ v }: { v: VentureT }) {
   const { overCap, capLeft } = capState(effectiveCap, spent, parsed - entryFee);
   const toFill = v.targetRaiseWei > v.raisedWei ? v.targetRaiseWei - v.raisedWei : 0n;
   const maxNet = capped && capLeft < toFill ? capLeft : toFill;
-  const maxGross = grossForNet(maxNet, fees.buyBps, referred);
+  const maxGross = grossForNet(maxNet, fees.buyBps, referred, buyTax);
   const shortOnEth = eth.data !== undefined && parsed > eth.data.value;
   const ethUsdInPanel = useEthUsd();
 
@@ -82,8 +86,8 @@ export function RaisePanel({ v }: { v: VentureT }) {
     return n > ownedWhole ? ownedWhole : n < 0n ? 0n : n;
   }, [sellQ, ownedWhole]);
   const sellQuote = useMemo(
-    () => quoteSellWei(v, sellWhole, bought, spent, fees.sellBps, referred),
-    [v, sellWhole, bought, spent, fees.sellBps, referred],
+    () => quoteSellWei(v, sellWhole, bought, spent, fees.sellBps, referred, sellTax),
+    [v, sellWhole, bought, spent, fees.sellBps, referred, sellTax],
   );
 
   const buy = async () => {
@@ -98,9 +102,9 @@ export function RaisePanel({ v }: { v: VentureT }) {
       // Only gas used is charged.
       const left = v.targetRaiseWei > v.raisedWei ? v.targetRaiseWei - v.raisedWei : 0n;
       const mayFill = funded >= 50 || parsed * 2n >= left;
-      await bindReferral(wc, pushToast);
+      await bindReferral(wc, pushToast, v.sys.hook);
       const hash = await sendTx(wc, {
-        address: VENTURE.factory, abi: factoryAbi, functionName: "buy",
+        address: v.sys.factory, abi: factoryAbi, functionName: "buy",
         args: [v.address, (tokensOut * 10n ** 18n * BigInt(10_000 - slipBps)) / 10_000n], value: parsed,
         chain: wc.chain, account: wc.account, ...(mayFill ? { gas: GRADUATING_BUY_GAS } : {}),
       });
@@ -119,15 +123,15 @@ export function RaisePanel({ v }: { v: VentureT }) {
     if (!wc || sellWhole === 0n) return;
     setBusy(true);
     try {
-      await bindReferral(wc, pushToast);
+      await bindReferral(wc, pushToast, v.sys.hook);
       const need = sellWhole * 10n ** 18n;
-      const allowance = (await venturePc.readContract({ address: v.address, abi: ercAbi, functionName: "allowance", args: [wc.account.address, VENTURE.factory] }));
+      const allowance = (await venturePc.readContract({ address: v.address, abi: ercAbi, functionName: "allowance", args: [wc.account.address, v.sys.factory] }));
       if (allowance < need) {
-        const a = await sendTx(wc, { address: v.address, abi: ercAbi, functionName: "approve", args: [VENTURE.factory, 2n ** 256n - 1n], chain: wc.chain, account: wc.account });
+        const a = await sendTx(wc, { address: v.address, abi: ercAbi, functionName: "approve", args: [v.sys.factory, 2n ** 256n - 1n], chain: wc.chain, account: wc.account });
         await confirmTx(a);
       }
       const minOut = (sellQuote.out * BigInt(10_000 - slipBps)) / 10_000n;
-      const hash = await sendTx(wc, { address: VENTURE.factory, abi: factoryAbi, functionName: "sell", args: [v.address, sellWhole, minOut], chain: wc.chain, account: wc.account });
+      const hash = await sendTx(wc, { address: v.sys.factory, abi: factoryAbi, functionName: "sell", args: [v.address, sellWhole, minOut], chain: wc.chain, account: wc.account });
       pushToast({ kind: "info", title: "Sell sent", txHash: hash });
       await confirmTx(hash);
       pushToast({ kind: "success", title: "Sold back to the curve", txHash: hash });
@@ -174,7 +178,7 @@ export function RaisePanel({ v }: { v: VentureT }) {
             <div className="dp-tb-slip">
               <span>balance <b style={{ color: "var(--dim)" }}>{eth.data ? fmtEth(eth.data.value, 4) : "—"} ETH</b></span>
               {capped && <span>{inWindow ? <>first minute, max <b style={{ color: "var(--dim)" }}>{fmtEth(effectiveCap, 6)} ETH</b> · {windowLeft}s</> : <>max per wallet <b style={{ color: "var(--dim)" }}>{fmtEth(effectiveCap, 6)} ETH</b></>}</span>}
-              <span>entry fee {feePct(fees.buyBps)}%{entryFee > 0n ? ` · ${fmtEth(entryFee, 5)} ETH` : ""}</span>
+              <span>entry fee {feePct(fees.buyBps)}%{buyTax > 0 ? ` + ${taxPct(buyTax)}% tax` : ""}{entryFee > 0n ? ` · ${fmtEth(entryFee, 5)} ETH` : ""}</span>
             </div>
           </>
         ) : (
@@ -201,7 +205,7 @@ export function RaisePanel({ v }: { v: VentureT }) {
             </button>
             <div className="dp-tb-slip">
               <span>you hold <b style={{ color: "var(--dim)" }}>{fmtTok(bought)}</b></span>
-              <span>exit fee {feePct(fees.sellBps)}%</span>
+              <span>exit fee {feePct(fees.sellBps)}%{sellTax > 0 ? ` + ${taxPct(sellTax)}% tax` : ""}</span>
             </div>
           </>
         )}

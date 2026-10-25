@@ -32,7 +32,7 @@ export function TradePanel({ v, trades, ethUsd }: { v: VentureT; trades: PoolTra
   const [limit, setLimit] = useState(false);
   const [atMcap, setAtMcap] = useState("");
   const [ordersTick, setOrdersTick] = useState(0);
-  const hasLimit = VENTURE.limitOrders !== zeroAddress;
+  const hasLimit = v.sys.limitOrders !== zeroAddress;
   const eth = useBalance({ address: me });
 
   useEffect(() => {
@@ -59,17 +59,17 @@ export function TradePanel({ v, trades, ethUsd }: { v: VentureT; trades: PoolTra
     let live = true;
     setQuoting(true);
     const id = setTimeout(() => {
-      const account = me ?? VENTURE.router;
+      const account = me ?? v.sys.router;
       const seller = me ?? QUOTE_WALLET;
       const sim = side === "buy"
-        ? venturePc.simulateContract({ address: VENTURE.router, abi: routerAbi, functionName: "buy", args: [v.address, "0x", 0n], value: parsed, account })
+        ? venturePc.simulateContract({ address: v.sys.router, abi: routerAbi, functionName: "buy", args: [v.address, "0x", 0n], value: parsed, account })
         : venturePc.simulateContract({
-          address: VENTURE.router, abi: routerAbi, functionName: "sell", args: [v.address, parsed, "0x", 0n], account: seller,
+          address: v.sys.router, abi: routerAbi, functionName: "sell", args: [v.address, parsed, "0x", 0n], account: seller,
           // Priced as if the router were already approved (and, before a
           // wallet connects, as if the amount were held), so the quote shows
           // before the approval the sell itself asks for.
           stateOverride: [{ address: v.address, stateDiff: [
-            { slot: allowanceSlot(seller, VENTURE.router), value: MAX_ALLOWANCE },
+            { slot: allowanceSlot(seller, v.sys.router), value: MAX_ALLOWANCE },
             ...(me ? [] : [{ slot: balanceSlot(seller), value: pad32(parsed) }]),
           ] }],
         });
@@ -89,17 +89,17 @@ export function TradePanel({ v, trades, ethUsd }: { v: VentureT; trades: PoolTra
     if (!wc || parsed === 0n) return;
     setBusy(true);
     try {
-      await bindReferral(wc, pushToast);
+      await bindReferral(wc, pushToast, v.sys.hook);
       let hash: `0x${string}`;
       if (side === "buy") {
-        hash = await sendTx(wc, { address: VENTURE.router, abi: routerAbi, functionName: "buy", args: [v.address, "0x", minOut], value: parsed, chain: wc.chain, account: wc.account });
+        hash = await sendTx(wc, { address: v.sys.router, abi: routerAbi, functionName: "buy", args: [v.address, "0x", minOut], value: parsed, chain: wc.chain, account: wc.account });
       } else {
-        const allowance = (await venturePc.readContract({ address: v.address, abi: ercAbi, functionName: "allowance", args: [wc.account.address, VENTURE.router] }));
+        const allowance = (await venturePc.readContract({ address: v.address, abi: ercAbi, functionName: "allowance", args: [wc.account.address, v.sys.router] }));
         if (allowance < parsed) {
-          const a = await sendTx(wc, { address: v.address, abi: ercAbi, functionName: "approve", args: [VENTURE.router, 2n ** 256n - 1n], chain: wc.chain, account: wc.account });
+          const a = await sendTx(wc, { address: v.address, abi: ercAbi, functionName: "approve", args: [v.sys.router, 2n ** 256n - 1n], chain: wc.chain, account: wc.account });
           await confirmTx(a);
         }
-        hash = await sendTx(wc, { address: VENTURE.router, abi: routerAbi, functionName: "sell", args: [v.address, parsed, "0x", minOut], chain: wc.chain, account: wc.account });
+        hash = await sendTx(wc, { address: v.sys.router, abi: routerAbi, functionName: "sell", args: [v.address, parsed, "0x", minOut], chain: wc.chain, account: wc.account });
       }
       pushToast({ kind: "info", title: `${side === "buy" ? "Buy" : "Sell"} submitted`, txHash: hash });
       await confirmTx(hash);
@@ -154,16 +154,16 @@ export function TradePanel({ v, trades, ethUsd }: { v: VentureT; trades: PoolTra
     if (!wc || limitMinOut === 0n) return;
     setBusy(true);
     try {
-      await bindReferral(wc, pushToast);
+      await bindReferral(wc, pushToast, v.sys.hook);
       if (side === "sell") {
-        const allowance = await venturePc.readContract({ address: v.address, abi: ercAbi, functionName: "allowance", args: [wc.account.address, VENTURE.limitOrders] });
+        const allowance = await venturePc.readContract({ address: v.address, abi: ercAbi, functionName: "allowance", args: [wc.account.address, v.sys.limitOrders] });
         if (allowance < parsed) {
-          const a = await sendTx(wc, { address: v.address, abi: ercAbi, functionName: "approve", args: [VENTURE.limitOrders, 2n ** 256n - 1n], chain: wc.chain, account: wc.account });
+          const a = await sendTx(wc, { address: v.address, abi: ercAbi, functionName: "approve", args: [v.sys.limitOrders, 2n ** 256n - 1n], chain: wc.chain, account: wc.account });
           await confirmTx(a);
         }
       }
       const hash = await sendTx(wc, {
-        address: VENTURE.limitOrders, abi: limitAbi, functionName: "place",
+        address: v.sys.limitOrders, abi: limitAbi, functionName: "place",
         args: [v.address, side === "buy", side === "buy" ? 0n : parsed, limitMinOut, 25, 0n],
         value: side === "buy" ? parsed : 0n, chain: wc.chain, account: wc.account,
       });
@@ -302,7 +302,7 @@ function TierPyramid({ v, trades, ethUsd, bal }: { v: VentureT; trades: PoolTrad
   return (
     <div className="dp-tiers">
       <div className="dp-tiers-head"><span>tiers</span><span>hold</span><span>/ day</span></div>
-      {mine >= 4 && VENTURE.payouts !== zeroAddress && <PayoutPick v={v} />}
+      {mine >= 4 && v.sys.payouts !== zeroAddress && <PayoutPick v={v} />}
       {rows.map((r, i) => (
         <div key={r.mult} className={`dp-tier${rows.length - 1 - i === mine ? " on" : ""}`}>
           <span className="dp-tier-bar"><i style={{ width: `${34 + i * 11}%` }}>{r.mult}x</i></span>
@@ -323,9 +323,9 @@ function MyOrders({ v, me, tick }: { v: VentureT; me: `0x${string}`; tick: numbe
   useEffect(() => {
     let live = true;
     const load = async () => {
-      const logs = await venturePc.getLogs({ address: VENTURE.limitOrders, event: placedEvent, args: { owner: me, coin: v.address }, fromBlock: VENTURE.startBlock, toBlock: "latest" });
+      const logs = await venturePc.getLogs({ address: v.sys.limitOrders, event: placedEvent, args: { owner: me, coin: v.address }, fromBlock: v.sys.startBlock, toBlock: "latest" });
       const open = await Promise.all(logs.map(async (l) => {
-        const o = await venturePc.readContract({ address: VENTURE.limitOrders, abi: limitAbi, functionName: "order", args: [l.args.id!] });
+        const o = await venturePc.readContract({ address: v.sys.limitOrders, abi: limitAbi, functionName: "order", args: [l.args.id!] });
         return { id: l.args.id!, isBuy: o.isBuy, amountIn: o.amountIn, minOut: o.minOut };
       }));
       if (live) setOrders(open.filter((o) => o.amountIn > 0n));
@@ -339,7 +339,7 @@ function MyOrders({ v, me, tick }: { v: VentureT; me: `0x${string}`; tick: numbe
     if (!wc) return;
     setBusy(true);
     try {
-      const hash = await sendTx(wc, { address: VENTURE.limitOrders, abi: limitAbi, functionName: "cancel", args: [id], chain: wc.chain, account: wc.account });
+      const hash = await sendTx(wc, { address: v.sys.limitOrders, abi: limitAbi, functionName: "cancel", args: [id], chain: wc.chain, account: wc.account });
       await confirmTx(hash);
     } catch (e) {
       pushToast({ kind: "error", title: "Cancel failed", body: errorText(e) });
@@ -372,10 +372,10 @@ function PayoutPick({ v }: { v: VentureT }) {
     let live = true;
     Promise.all([
       venturePc.readContract({ address: v.address, abi: ercAbi, functionName: "payoutAgent", args: [me] }),
-      venturePc.readContract({ address: VENTURE.payouts, abi: payoutsAbi, functionName: "prefOf", args: [me] }),
+      venturePc.readContract({ address: v.sys.payouts, abi: payoutsAbi, functionName: "prefOf", args: [me] }),
     ]).then(([agent, [kind, path]]) => {
       if (!live) return;
-      setCurrent(agent.toLowerCase() === VENTURE.payouts.toLowerCase() ? choiceFor(choices, kind, path as Hex).key : "eth");
+      setCurrent(agent.toLowerCase() === v.sys.payouts.toLowerCase() ? choiceFor(choices, kind, path as Hex).key : "eth");
     }).catch(() => undefined);
     return () => { live = false; };
   }, [me, v.address, choices, busy]);
@@ -385,10 +385,10 @@ function PayoutPick({ v }: { v: VentureT }) {
     setBusy(true);
     try {
       const agent = await venturePc.readContract({ address: v.address, abi: ercAbi, functionName: "payoutAgent", args: [me] });
-      if (agent.toLowerCase() !== VENTURE.payouts.toLowerCase()) {
-        await confirmTx(await sendTx(wc, { address: v.address, abi: ercAbi, functionName: "setPayoutAgent", args: [VENTURE.payouts], chain: wc.chain, account: wc.account }));
+      if (agent.toLowerCase() !== v.sys.payouts.toLowerCase()) {
+        await confirmTx(await sendTx(wc, { address: v.address, abi: ercAbi, functionName: "setPayoutAgent", args: [v.sys.payouts], chain: wc.chain, account: wc.account }));
       }
-      await confirmTx(await sendTx(wc, { address: VENTURE.payouts, abi: payoutsAbi, functionName: "setPref", args: [c.kind, c.path], chain: wc.chain, account: wc.account }));
+      await confirmTx(await sendTx(wc, { address: v.sys.payouts, abi: payoutsAbi, functionName: "setPref", args: [c.kind, c.path], chain: wc.chain, account: wc.account }));
       setCurrent(key);
     } catch (e) {
       pushToast({ kind: "error", title: "Couldn't set payout", body: errorText(e) });

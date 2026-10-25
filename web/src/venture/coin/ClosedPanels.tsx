@@ -18,7 +18,7 @@ export function GraduatePanel({ v }: { v: VentureT }) {
     if (!wc) return;
     setBusy(true);
     try {
-      const hash = await sendTx(wc, { address: VENTURE.factory, abi: factoryAbi, functionName: "finalize", args: [v.address], chain: wc.chain, account: wc.account });
+      const hash = await sendTx(wc, { address: v.sys.factory, abi: factoryAbi, functionName: "finalize", args: [v.address], chain: wc.chain, account: wc.account });
       pushToast({ kind: "info", title: "Graduating…", txHash: hash });
       await confirmTx(hash);
       pushToast({ kind: "success", title: "Graduated. Trading is open.", txHash: hash });
@@ -55,9 +55,9 @@ export function FailPanel({ v }: { v: VentureT }) {
 
   useEffect(() => {
     if (!me) return;
-    venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "spentWei", args: [v.address, me] })
+    venturePc.readContract({ address: v.sys.factory, abi: factoryAbi, functionName: "spentWei", args: [v.address, me] })
       .then((x) => setSpent(x)).catch(() => undefined);
-    venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "boughtTokens", args: [v.address, me] })
+    venturePc.readContract({ address: v.sys.factory, abi: factoryAbi, functionName: "boughtTokens", args: [v.address, me] })
       .then((x) => setBought(x)).catch(() => undefined);
   }, [me, v.address, busy]);
 
@@ -67,13 +67,13 @@ export function FailPanel({ v }: { v: VentureT }) {
     setBusy(true);
     try {
       if (fn === "refund") {
-        const allowance = (await venturePc.readContract({ address: v.address, abi: ercAbi, functionName: "allowance", args: [wc.account.address, VENTURE.factory] }));
+        const allowance = (await venturePc.readContract({ address: v.address, abi: ercAbi, functionName: "allowance", args: [wc.account.address, v.sys.factory] }));
         if (allowance < bought) {
-          const a = await sendTx(wc, { address: v.address, abi: ercAbi, functionName: "approve", args: [VENTURE.factory, 2n ** 256n - 1n], chain: wc.chain, account: wc.account });
+          const a = await sendTx(wc, { address: v.address, abi: ercAbi, functionName: "approve", args: [v.sys.factory, 2n ** 256n - 1n], chain: wc.chain, account: wc.account });
           await confirmTx(a);
         }
       }
-      const hash = await sendTx(wc, { address: VENTURE.factory, abi: factoryAbi, functionName: fn, args: [v.address], chain: wc.chain, account: wc.account });
+      const hash = await sendTx(wc, { address: v.sys.factory, abi: factoryAbi, functionName: fn, args: [v.address], chain: wc.chain, account: wc.account });
       pushToast({ kind: "info", title: fn === "abort" ? "Closing the round…" : "Refunding…", txHash: hash });
       await confirmTx(hash);
       pushToast({ kind: "success", title: fn === "abort" ? "Round closed. Refunds are open." : "Refunded. Your ETH is back in your wallet.", txHash: hash });

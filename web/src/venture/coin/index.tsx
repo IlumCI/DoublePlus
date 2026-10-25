@@ -12,7 +12,7 @@ import { usePageMeta } from "../seo";
 import { ago, CopyButton, safeImageUrl, DexBadge, fmtMcap, Monogram, short, StatusBadge, useEthUsd } from "../ui";
 import { FailPanel, GraduatePanel } from "./ClosedPanels";
 import { CurvePanel } from "./CurvePanel";
-import { AddToWallet, AlertToggle, BoostButton, Socials, StatBar, YourBag } from "./Header";
+import { AddToWallet, AlertToggle, BoostButton, CurveStatBar, Socials, StatBar, YourBag } from "./Header";
 import { RaisePanel } from "./RaisePanel";
 import { TradePanel } from "./TradePanel";
 import { BackersPane, ContractCard, ProjectPane, TermsPane, UpdatesPane, VestingCard, WhoEarns } from "./panes";
@@ -35,9 +35,13 @@ export function VenturePage() {
     let live = true;
     const refresh = () => {
       loadVenture(coin)
-        .then((x) => { if (live) { setV(x); setState("loading"); } })
+        .then((x) => {
+          if (!live) return;
+          setV(x);
+          setState("loading");
+          loadFills(x).then((f) => live && setFills(f)).catch(() => undefined);
+        })
         .catch((e) => { if (live) setState(e instanceof NotListed ? "missing" : "down"); });
-      loadFills(coin).then((f) => live && setFills(f)).catch(() => undefined);
     };
     refresh();
     const id = setInterval(refresh, 10_000);
@@ -120,7 +124,8 @@ function VentureBody({ v, fills, ethUsd }: { v: VentureT; fills: Fill[]; ethUsd:
         </div>
       </div>
 
-      {v.phase === "graduated" && <StatBar coin={v.address} poolId={v.poolId} trades={trades} ethUsd={ethUsd} />}
+      {v.phase === "graduated" && <StatBar v={v} trades={trades} ethUsd={ethUsd} />}
+      {v.phase === "raising" && <CurveStatBar v={v} ethUsd={ethUsd} tradeCount={fills.length} />}
 
       <div className="dp-coingrid">
         {/* LEFT: the market, then everything that justifies it */}

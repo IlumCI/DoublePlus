@@ -187,14 +187,16 @@ async function post(env: Env, c: Ctx, h: Record<string, string>) {
 
   // RPC_URL may list backups, tried in order when one fails.
   const pc = createPublicClient({ transport: fallback(env.RPC_URL.split(",").map((u) => http(u.trim(), { timeout: 5_000 }))) });
-  const factory = env.FACTORY;
-  if (!isAddr(factory)) throw new Error("FACTORY is not an address");
-  const [listing, balance] = await Promise.all([
-    pc.readContract({ address: factory, abi: FACTORY_ABI, functionName: "listings", args: [token] }),
+  // FACTORY lists every system's factory, comma-separated: a redeploy leaves
+  // the old coins on the old factory, and their chats keep working.
+  const factories = env.FACTORY.split(",").map((f) => f.trim());
+  if (factories.length === 0 || !factories.every(isAddr)) throw new Error("FACTORY is not a list of addresses");
+  const [listings, balance] = await Promise.all([
+    Promise.all(factories.map((f) => pc.readContract({ address: f as Address, abi: FACTORY_ABI, functionName: "listings", args: [token] }))),
     pc.readContract({ address: token, abi: ERC20_ABI, functionName: "balanceOf", args: [author] }).catch(() => 0n),
   ]).catch(() => [null, 0n] as const);
-  if (!listing) return json({ error: "chain unavailable, try again" }, 502, h);
-  const creator = listing[0].toLowerCase();
+  if (!listings) return json({ error: "chain unavailable, try again" }, 502, h);
+  const creator = (listings.find((l) => l[0] !== zeroAddress) ?? listings[0])[0].toLowerCase();
   if (creator === zeroAddress) return json({ error: "not a doubleplus coin" }, 404, h);
   const isDev = creator === author;
   const holder = balance > 0n;

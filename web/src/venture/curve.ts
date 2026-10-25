@@ -87,6 +87,8 @@ export function quoteSellWei(
   basisWei: bigint,
   sellFeeBps: number,
   referred = false,
+  /** The founder's sell tax, on a system that charges it on the curve. */
+  taxBps = 0,
 ): SellQuote {
   if (qWhole <= 0n || ownedWei === 0n) return { gross: 0n, fee: 0n, out: 0n, capped: false };
   const q = qWhole > v.soldWhole ? v.soldWhole : qWhole;
@@ -94,7 +96,7 @@ export function quoteSellWei(
   const basis = (basisWei * (q * 10n ** 18n)) / ownedWei;
   const capped = v.mode === GUARANTEED && raw > basis;
   const gross = capped ? basis : raw;
-  const fee = curveFeeWei(gross, sellFeeBps, referred);
+  const fee = curveFeeWei(gross, sellFeeBps, referred) + (gross * BigInt(taxBps)) / 10_000n;
   return { gross, fee, out: gross - fee, capped };
 }
 
@@ -119,11 +121,11 @@ export function entryFeeWei(valueWei: bigint, buyFeeBps: number, referred = fals
 /** The most a wallet can send so that, after the entry fee, at most `netWei`
  *  reaches the curve. Per-wallet caps and the raise target both count what
  *  reaches the curve, so a max button must add the fee on top. */
-export function grossForNet(netWei: bigint, buyFeeBps: number, referred = false): bigint {
+export function grossForNet(netWei: bigint, buyFeeBps: number, referred = false, taxBps = 0): bigint {
   if (netWei <= 0n) return 0n;
   // What reaches the curve never falls as the amount sent rises, so search for
   // the largest amount whose net still fits.
-  const net = (g: bigint) => g - entryFeeWei(g, buyFeeBps, referred);
+  const net = (g: bigint) => g - entryFeeWei(g, buyFeeBps, referred) - (g * BigInt(taxBps)) / 10_000n;
   let lo = netWei, hi = netWei * 2n + 1n;
   while (lo < hi) {
     const mid = (lo + hi + 1n) / 2n;
@@ -133,12 +135,14 @@ export function grossForNet(netWei: bigint, buyFeeBps: number, referred = false)
 }
 
 /** What a buy of `valueWei` actually gets, fee first then curve. */
-export function quoteBuy(v: CurveState, valueWei: bigint, buyFeeBps: number, referred = false): {
+/** `fee` is everything that comes off before the curve: the entry fee, plus
+ *  the founder's buy tax (`taxBps`) on a system that charges it there. */
+export function quoteBuy(v: CurveState, valueWei: bigint, buyFeeBps: number, referred = false, taxBps = 0): {
   fee: bigint;
   net: bigint;
   tokensOut: bigint;
 } {
-  const fee = entryFeeWei(valueWei, buyFeeBps, referred);
+  const fee = entryFeeWei(valueWei, buyFeeBps, referred) + (valueWei * BigInt(taxBps)) / 10_000n;
   const net = valueWei > fee ? valueWei - fee : 0n;
   return { fee, net, tokensOut: quoteTokens(v, net) };
 }

@@ -1,6 +1,6 @@
-import { toEventSelector, zeroAddress, type WalletClient } from "viem";
+import { toEventSelector, zeroAddress, type Address, type WalletClient } from "viem";
 
-import { confirmTx, hookAbi, VENTURE, venturePc, sendTx } from "../client";
+import { confirmTx, hookAbi, venturePc, sendTx } from "../client";
 import { storedRef } from "../referral";
 import { short } from "../ui";
 import type { Toast } from "../../store";
@@ -12,17 +12,18 @@ const DECLINED = "venture.ref.declined";
  *  trade. The hook only takes the binding from the wallet itself, so it is one
  *  extra confirmation before that trade, never a separate step to find. Does
  *  nothing once bound, without a stored link, or after a decline this session;
- *  never throws, so the trade goes ahead either way. */
-export async function bindReferral(wc: WalletClient, pushToast: (t: Omit<Toast, "id">) => void): Promise<void> {
+ *  never throws, so the trade goes ahead either way. Each system's hook keeps
+ *  its own registry, so it binds on the hook of the coin being traded. */
+export async function bindReferral(wc: WalletClient, pushToast: (t: Omit<Toast, "id">) => void, hook: Address): Promise<void> {
   const ref = storedRef();
   const me = wc.account?.address;
   if (!ref || !me || ref.toLowerCase() === me.toLowerCase()) return;
   try { if (sessionStorage.getItem(DECLINED)) return; } catch { /* storage unavailable */ }
   try {
-    const bound = await venturePc.readContract({ address: VENTURE.hook, abi: hookAbi, functionName: "referrerOf", args: [me] });
+    const bound = await venturePc.readContract({ address: hook, abi: hookAbi, functionName: "referrerOf", args: [me] });
     if (bound !== zeroAddress) return;
     pushToast({ kind: "info", title: `Linking ${short(ref)}'s referral: 10% off your fees` });
-    await confirmTx(await sendTx(wc, { address: VENTURE.hook, abi: hookAbi, functionName: "setReferrer", args: [ref], chain: wc.chain, account: wc.account }));
+    await confirmTx(await sendTx(wc, { address: hook, abi: hookAbi, functionName: "setReferrer", args: [ref], chain: wc.chain, account: wc.account }));
   } catch {
     try { sessionStorage.setItem(DECLINED, "1"); } catch { /* storage unavailable */ }
   }

@@ -23,7 +23,8 @@ export function Desk() {
   // ETH credited to this wallet inside the factory: a founder's cut of a
   // graduated raise, referral shares of curve fees, and an Open-mode creator's
   // share of curve fees. Nothing pushes it; it waits for withdrawFees().
-  const [factoryOwed, setFactoryOwed] = useState(0n);
+  const [owed, setOwed] = useState<{ factory: `0x${string}`; wei: bigint }[]>([]);
+  const factoryOwed = owed.reduce((a, o) => a + o.wei, 0n);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -34,7 +35,7 @@ export function Desk() {
       try {
         const sellBps = Number(await venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "curveSellFeeBps" }).catch(() => 100));
         const p = await loadPortfolio(me, sellBps);
-        if (live) { setRows(p.rows); setFactoryOwed(p.factoryOwed); }
+        if (live) { setRows(p.rows); setOwed(p.owed); }
       } catch {
         if (live) setRows([]);
       }
@@ -80,8 +81,12 @@ export function Desk() {
     if (!wc) return;
     setBusy(true);
     try {
-      const hash = await sendTx(wc, { address: VENTURE.factory, abi: factoryAbi, functionName: "withdrawFees", args: [], chain: wc.chain, account: wc.account });
-      await confirmTx(hash);
+      // One withdrawal per system that holds something for this wallet.
+      let hash: `0x${string}` | undefined;
+      for (const o of owed) {
+        hash = await sendTx(wc, { address: o.factory, abi: factoryAbi, functionName: "withdrawFees", args: [], chain: wc.chain, account: wc.account });
+        await confirmTx(hash);
+      }
       pushToast({ kind: "success", title: `${fmtEth(factoryOwed, 6)} ETH withdrawn`, txHash: hash });
     } catch (e) {
       pushToast({ kind: "error", title: "Withdraw failed", body: errorText(e) });
@@ -95,14 +100,14 @@ export function Desk() {
     setBusy(true);
     try {
       const send = async (fn: "abort" | "refund") => {
-        const hash = await sendTx(wc, { address: VENTURE.factory, abi: factoryAbi, functionName: fn, args: [r.v.address], chain: wc.chain, account: wc.account });
+        const hash = await sendTx(wc, { address: r.v.sys.factory, abi: factoryAbi, functionName: fn, args: [r.v.address], chain: wc.chain, account: wc.account });
         await confirmTx(hash);
         return hash;
       };
       if (!r.v.aborted) await send("abort");
-      const allowance = (await venturePc.readContract({ address: r.v.address, abi: ercAbi, functionName: "allowance", args: [wc.account.address, VENTURE.factory] }));
+      const allowance = (await venturePc.readContract({ address: r.v.address, abi: ercAbi, functionName: "allowance", args: [wc.account.address, r.v.sys.factory] }));
       if (allowance < r.bought) {
-        const a = await sendTx(wc, { address: r.v.address, abi: ercAbi, functionName: "approve", args: [VENTURE.factory, r.bought], chain: wc.chain, account: wc.account });
+        const a = await sendTx(wc, { address: r.v.address, abi: ercAbi, functionName: "approve", args: [r.v.sys.factory, r.bought], chain: wc.chain, account: wc.account });
         await confirmTx(a);
       }
       const hash = await send("refund");
@@ -129,7 +134,7 @@ export function Desk() {
     if (!text || !wc) return;
     setBusy(true);
     try {
-      const hash = await sendTx(wc, { address: VENTURE.updates, abi: updatesAbi, functionName: "postUpdate", args: [r.v.address, text], chain: wc.chain, account: wc.account });
+      const hash = await sendTx(wc, { address: r.v.sys.updates, abi: updatesAbi, functionName: "postUpdate", args: [r.v.address, text], chain: wc.chain, account: wc.account });
       await confirmTx(hash);
       pushToast({ kind: "success", title: "Update posted on-chain", txHash: hash });
     } catch (e) {

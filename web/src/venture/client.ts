@@ -25,15 +25,61 @@ function envBps(raw: unknown, fallback: number): number {
   return Number.isInteger(n) && n >= 0 && n <= 10_000 ? n : fallback;
 }
 
+/** One deployed system: a factory and everything bound to it. A redeploy is
+ *  a whole new system and the coins launched before it stay on the old one,
+ *  so the site runs every system it is given. */
+export interface System {
+  factory: Address;
+  tokenDeployer: Address;
+  hook: Address;
+  router: Address;
+  updates: Address;
+  limitOrders: Address;
+  payouts: Address;
+  boosts: Address;
+  /** VentureCurveDesk: takes curve fees and founder taxes from the first
+   *  curve trade. Zero on systems from before it, where curve fees accrue in
+   *  the factory and the founder tax starts at graduation. */
+  desk: Address;
+  startBlock: bigint;
+}
+
+const envSystem = (p: string): System => ({
+  factory: envAddress(vite[`${p}FACTORY`]),
+  tokenDeployer: envAddress(vite[`${p}TOKEN_DEPLOYER`]),
+  hook: envAddress(vite[`${p}HOOK`]),
+  router: envAddress(vite[`${p}ROUTER`]),
+  updates: envAddress(vite[`${p}UPDATES`]),
+  limitOrders: envAddress(vite[`${p}LIMIT_ORDERS`]),
+  payouts: envAddress(vite[`${p}PAYOUTS`]),
+  boosts: envAddress(vite[`${p}BOOSTS`]),
+  desk: envAddress(vite[`${p}DESK`]),
+  startBlock: envBigint(vite[`${p}START_BLOCK`]),
+});
+
+/** The current system (launches go here) from VITE_VENTURE_*, then the
+ *  previous one from VITE_VENTURE_V1_* when set. */
+const CURRENT = envSystem("VITE_VENTURE_");
+export const SYSTEMS: System[] = [CURRENT, envSystem("VITE_VENTURE_V1_")].filter((s) => s.factory !== zeroAddress);
+
+const live = (xs: Address[]) => xs.filter((a) => a !== zeroAddress);
+
+/** Every system at once, for board-wide log scans (getLogs takes a list of
+ *  addresses, and every system emits the same events). */
+export const EVERY = {
+  factory: live(SYSTEMS.map((s) => s.factory)),
+  router: live(SYSTEMS.map((s) => s.router)),
+  boosts: live(SYSTEMS.map((s) => s.boosts)),
+  startBlock: SYSTEMS.reduce((m, s) => (s.startBlock < m ? s.startBlock : m), CURRENT.startBlock),
+};
+
 /** VentureFactory deployment, all from env so one build serves testnet
- *  (46630) and mainnet (4663). Unset contracts read as the zero address. */
+ *  (46630) and mainnet (4663). Unset contracts read as the zero address.
+ *  The contract fields are the current system's; anything about one coin
+ *  goes through that coin's own `v.sys`. */
 export const VENTURE = {
-  factory: envAddress(vite.VITE_VENTURE_FACTORY),
-  tokenDeployer: envAddress(vite.VITE_VENTURE_TOKEN_DEPLOYER),
-  hook: envAddress(vite.VITE_VENTURE_HOOK),
-  router: envAddress(vite.VITE_VENTURE_ROUTER),
+  ...CURRENT,
   weth: envAddress(vite.VITE_WETH_ADDRESS, "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73"),
-  startBlock: envBigint(vite.VITE_VENTURE_START_BLOCK),
   /** Testnet only: the ETH/USD price launches are sized at, scaled up so a
    *  curve's $750 start costs a faucet's worth of ETH. Zero = read it live. */
   launchEthUsd8: envBigint(vite.VITE_LAUNCH_ETH_USD_8),
@@ -41,10 +87,6 @@ export const VENTURE = {
   platformFeeBps: envBps(vite.VITE_PLATFORM_FEE_BPS, 55),
   /** Referrer's cut of the protocol fee, mirrors the hook's immutable value. */
   refShareBps: envBps(vite.VITE_REF_SHARE_BPS, 2000),
-  updates: envAddress(vite.VITE_VENTURE_UPDATES),
-  limitOrders: envAddress(vite.VITE_VENTURE_LIMIT_ORDERS),
-  payouts: envAddress(vite.VITE_VENTURE_PAYOUTS),
-  boosts: envAddress(vite.VITE_VENTURE_BOOSTS),
   poolManager: envAddress(vite.VITE_V4_POOL_MANAGER, "0x8366a39cc670b4001a1121b8f6a443a643e40951"),
 };
 
@@ -120,6 +162,7 @@ export const factoryAbi = [
   { type: "function", name: "sell", stateMutability: "nonpayable", inputs: [{ type: "address" }, { type: "uint256" }, { type: "uint256" }], outputs: [{ type: "uint256" }] },
   { type: "function", name: "curveBuyFeeBps", stateMutability: "view", inputs: [], outputs: [{ type: "uint16" }] },
   { type: "function", name: "curveSellFeeBps", stateMutability: "view", inputs: [], outputs: [{ type: "uint16" }] },
+  { type: "function", name: "creatorCurveShareBps", stateMutability: "view", inputs: [], outputs: [{ type: "uint16" }] },
   { type: "function", name: "creationFeeWei", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
   { type: "function", name: "graduationRaiseWei", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
   { type: "function", name: "minTargetWei", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
@@ -280,6 +323,24 @@ export const hookAbi = [
   },
 ] as const;
 
+export const deskAbi = [
+  {
+    type: "function", name: "charge", stateMutability: "view",
+    inputs: [{ type: "address" }, { type: "address" }, { type: "uint256" }, { type: "bool" }],
+    outputs: [{ name: "fee", type: "uint256" }, { name: "tax", type: "uint256" }],
+  },
+  {
+    type: "function", name: "potOf", stateMutability: "view", inputs: [{ type: "address" }],
+    outputs: [{ name: "eth", type: "uint128" }, { name: "deadline", type: "uint64" }, { name: "leader", type: "address" }],
+  },
+  {
+    type: "function", name: "jackpotOf", stateMutability: "view", inputs: [{ type: "address" }],
+    outputs: [{ name: "eth", type: "uint128" }, { name: "buys", type: "uint64" }],
+  },
+  { type: "function", name: "buybackOf", stateMutability: "view", inputs: [{ type: "address" }], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "claimPot", stateMutability: "nonpayable", inputs: [{ type: "address" }], outputs: [] },
+] as const;
+
 export const updatesAbi = [
   { type: "function", name: "postUpdate", stateMutability: "nonpayable", inputs: [{ type: "address" }, { type: "string" }], outputs: [] },
 ] as const;
@@ -295,6 +356,9 @@ const feeAccruedEvent = parseAbiItem(
 );
 const referrerBoundEvent = parseAbiItem(
   "event ReferrerBound(address indexed user, address indexed referrer)",
+);
+const curveChargedEvent = parseAbiItem(
+  "event CurveCharged(address indexed coin, address indexed trader, address indexed referrer, bool isBuy, uint256 fee, uint256 tax, uint256 toReferrer, uint256 toCreator, uint256 toPot)",
 );
 const treasuryAbi = [
   { type: "function", name: "platformTreasury", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
@@ -373,6 +437,8 @@ export type Phase = "raising" | "expired" | "graduated" | "failed";
 
 export interface Venture {
   address: Address;
+  /** The system this coin was launched on. */
+  sys: System;
   name: string;
   symbol: string;
   creator: Address;
@@ -422,27 +488,51 @@ function phaseOf(v: { finalized: boolean; aborted: boolean; deadline: number; ra
   return "raising";
 }
 
-const allTokensCache: Address[] = [];
+const allTokensCache = new Map<System, Address[]>();
+/** Which system each coin seen so far belongs to. */
+const systemOf = new Map<string, System>();
 
-export async function loadVentures(): Promise<Venture[]> {
+async function systemTokens(sys: System): Promise<Address[]> {
   const total = Number(
-    await venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "totalTokens" }),
+    await venturePc.readContract({ address: sys.factory, abi: factoryAbi, functionName: "totalTokens" }),
   );
   // In parallel: the client batches these into multicalls, where a serial
   // loop paid one round trip per coin and slowed the board with every launch.
   // allTokens is append-only: fetch only the launches since the last poll.
-  const known = allTokensCache.length;
+  const cache = allTokensCache.get(sys) ?? [];
+  allTokensCache.set(sys, cache);
+  const known = cache.length;
   if (total > known) {
     const fresh = await Promise.all(
       Array.from({ length: total - known }, (_, k) => venturePc.readContract({
-        address: VENTURE.factory, abi: factoryAbi, functionName: "allTokens", args: [BigInt(known + k)],
+        address: sys.factory, abi: factoryAbi, functionName: "allTokens", args: [BigInt(known + k)],
       }) as Promise<Address>),
     );
-    allTokensCache.push(...fresh);
+    cache.push(...fresh);
+    for (const a of fresh) systemOf.set(a.toLowerCase(), sys);
   }
-  const addresses = allTokensCache.slice(0, total).reverse();
+  return cache.slice(0, total).reverse();
+}
+
+/** Every coin on every system, newest system first. */
+export async function loadVentures(): Promise<Venture[]> {
+  const addresses = (await Promise.all(SYSTEMS.map(systemTokens))).flat();
   const loaded = await Promise.all(addresses.map((a) => loadVenture(a).catch(() => null))); // skip one that can't be read this pass
   return loaded.filter((v): v is Venture => v !== null);
+}
+
+/** The system a coin was launched on, or null when no factory lists it. */
+async function findSystem(address: Address): Promise<System | null> {
+  const known = systemOf.get(address.toLowerCase());
+  if (known) return known;
+  const listed = await Promise.all(SYSTEMS.map((s) => venturePc.readContract({
+    address: s.factory, abi: factoryAbi, functionName: "listings", args: [address],
+  }).then((l) => l[0] !== zeroAddress).catch(() => null)));
+  if (listed.every((x) => x === false)) return null;
+  const i = listed.findIndex((x) => x === true);
+  if (i < 0) throw new Error("chain unreachable");
+  systemOf.set(address.toLowerCase(), SYSTEMS[i]);
+  return SYSTEMS[i];
 }
 
 const poolTickAbi = [
@@ -452,8 +542,8 @@ const poolTickAbi = [
 /** A graduated coin's live price from its pool, in pair-wei per whole coin,
  *  the unit the curve price uses. The curve's own price freezes at
  *  graduation, so without this a coin's market cap never moved again. */
-async function poolPriceWei(coin: Address, pair: Address): Promise<bigint | null> {
-  const tick = await venturePc.readContract({ address: VENTURE.hook, abi: poolTickAbi, functionName: "poolTick", args: [coin] }).catch(() => null);
+async function poolPriceWei(sys: System, coin: Address, pair: Address): Promise<bigint | null> {
+  const tick = await venturePc.readContract({ address: sys.hook, abi: poolTickAbi, functionName: "poolTick", args: [coin] }).catch(() => null);
   if (tick === null) return null;
   const p01 = Math.pow(1.0001, Number(tick));
   const p = BigInt(coin) < BigInt(pair) ? p01 : 1 / p01;
@@ -467,17 +557,9 @@ export class NotListed extends Error {
 }
 
 export async function loadVenture(address: Address): Promise<Venture> {
-  try {
-    return await readVenture(address);
-  } catch (e) {
-    // A non-coin address fails on its first token read, before the listing
-    // check can say so; tell "not a coin" apart from "chain unreachable".
-    if (e instanceof NotListed) throw e;
-    const listing = await venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "listings", args: [address] })
-      .catch(() => null);
-    if (listing && listing[0] === zeroAddress) throw new NotListed(address);
-    throw e;
-  }
+  const sys = await findSystem(address);
+  if (!sys) throw new NotListed(address);
+  return readVenture(sys, address);
 }
 
 /** What never changes after launch (or changes once and then never again),
@@ -494,11 +576,11 @@ interface Statics {
 const statics = new Map<string, Statics>();
 const ZERO_ID = "0x" + "0".repeat(64);
 
-async function readStatics(address: Address): Promise<Statics> {
+async function readStatics(sys: System, address: Address): Promise<Statics> {
   const [listing, terms, policyRaw, name, symbol, metaRaw] = await Promise.all([
-    venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "listings", args: [address] }),
-    venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "terms", args: [address] }),
-    venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "feePolicyOf", args: [address] }),
+    venturePc.readContract({ address: sys.factory, abi: factoryAbi, functionName: "listings", args: [address] }),
+    venturePc.readContract({ address: sys.factory, abi: factoryAbi, functionName: "terms", args: [address] }),
+    venturePc.readContract({ address: sys.factory, abi: factoryAbi, functionName: "feePolicyOf", args: [address] }),
     venturePc.readContract({ address, abi: ercAbi, functionName: "name" }),
     venturePc.readContract({ address, abi: ercAbi, functionName: "symbol" }),
     venturePc.readContract({ address, abi: ercAbi, functionName: "metadataURI" }).catch(() => ""),
@@ -520,12 +602,12 @@ async function readStatics(address: Address): Promise<Statics> {
   };
 }
 
-async function readVenture(address: Address): Promise<Venture> {
+async function readVenture(sys: System, address: Address): Promise<Venture> {
   const key = address.toLowerCase();
   let st = statics.get(key);
-  const curve = venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "curveState", args: [address] });
+  const curve = venturePc.readContract({ address: sys.factory, abi: factoryAbi, functionName: "curveState", args: [address] });
   if (!st) {
-    st = await readStatics(address);
+    st = await readStatics(sys, address);
     statics.set(key, st);
   }
   const c = await curve;
@@ -533,20 +615,21 @@ async function readVenture(address: Address): Promise<Venture> {
   // swept flag after an aborted raise's claim window. Re-read only while
   // they still can change.
   if (c[6] && st.poolId === ZERO_ID) {
-    const l = await venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "listings", args: [address] });
+    const l = await venturePc.readContract({ address: sys.factory, abi: factoryAbi, functionName: "listings", args: [address] });
     st.poolId = l[4];
   }
   if (c[7] && !st.swept) {
-    const t = await venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "terms", args: [address] });
+    const t = await venturePc.readContract({ address: sys.factory, abi: factoryAbi, functionName: "terms", args: [address] });
     st.swept = Boolean(t[6]);
   }
   const base = { finalized: c[6], aborted: c[7], deadline: Number(c[0]), raisedWei: c[4], targetRaiseWei: c[5], remainingWhole: c[3] };
   return {
     address,
+    sys,
     name: st.name, symbol: st.symbol, creator: st.creator, pair: st.pair, taxBps: st.taxBps, createdAt: st.createdAt,
     poolId: st.poolId, meta: st.meta,
     deadline: base.deadline,
-    priceWei: (c[6] ? await poolPriceWei(address, st.pair) : null) ?? c[1],
+    priceWei: (c[6] ? await poolPriceWei(sys, address, st.pair) : null) ?? c[1],
     soldWhole: c[2], remainingWhole: c[3], raisedWei: c[4], targetRaiseWei: c[5], finalized: c[6], aborted: c[7],
     founderRaiseBps: st.founderRaiseBps, maxBuyWei: st.maxBuyWei, vesting: st.vesting, policy: st.policy,
     basePriceWei: st.basePriceWei, slopeQ: st.slopeQ, mode: st.mode, swept: st.swept,
@@ -563,10 +646,10 @@ export interface Fill {
   blockNumber: number;
 }
 
-export async function loadFills(token: Address): Promise<Fill[]> {
+export async function loadFills(v: Venture): Promise<Fill[]> {
   const latest = await venturePc.getBlockNumber();
   const logs = await venturePc.getLogs({
-    address: VENTURE.factory, event: boughtEvent, args: { token }, fromBlock: VENTURE.startBlock, toBlock: latest, strict: true,
+    address: v.sys.factory, event: boughtEvent, args: { token: v.address }, fromBlock: v.sys.startBlock, toBlock: latest, strict: true,
   });
   return logs
     .map((l) => ({
@@ -610,14 +693,14 @@ export async function loadPoolTrades(v: Venture): Promise<PoolTrade[]> {
     address: VENTURE.poolManager,
     event: poolSwapEvent,
     args: { id: v.poolId },
-    fromBlock: VENTURE.startBlock,
+    fromBlock: v.sys.startBlock,
     toBlock: latest,
     strict: true,
   });
   // Drop the hook's own fee conversions: they are protocol mechanics riding
   // the same transaction as the trade that caused them, not trader activity.
   const swaps = logs.filter((l) => !isProtocolSwap(l.args.sender, {
-    hook: VENTURE.hook, factory: VENTURE.factory,
+    hook: v.sys.hook, factory: v.sys.factory,
   }));
   if (swaps.length === 0) return [];
   const coinIsC0 = BigInt(v.address) < BigInt(v.pair);
@@ -650,7 +733,7 @@ export async function loadPoolTrades(v: Venture): Promise<PoolTrade[]> {
  *  so every point is the price the trade left behind. */
 export async function loadCurveTrades(v: Venture): Promise<PoolTrade[]> {
   const latest = await venturePc.getBlockNumber();
-  const range = { address: VENTURE.factory, args: { token: v.address }, fromBlock: VENTURE.startBlock, toBlock: latest, strict: true } as const;
+  const range = { address: v.sys.factory, args: { token: v.address }, fromBlock: v.sys.startBlock, toBlock: latest, strict: true } as const;
   const [buys, sells] = await Promise.all([
     venturePc.getLogs({ ...range, event: boughtEvent }),
     venturePc.getLogs({ ...range, event: curveSellEvent }),
@@ -678,11 +761,11 @@ export async function loadCurveTrades(v: Venture): Promise<PoolTrade[]> {
 }
 
 /** All updates a founder posted for a venture, oldest first. */
-export async function loadUpdates(token: Address): Promise<{ author: Address; text: string; blockNumber: number; txHash: string }[]> {
-  if (VENTURE.updates === zeroAddress) return [];
+export async function loadUpdates(v: Venture): Promise<{ author: Address; text: string; blockNumber: number; txHash: string }[]> {
+  if (v.sys.updates === zeroAddress) return [];
   const latest = await venturePc.getBlockNumber();
   const logs = await venturePc.getLogs({
-    address: VENTURE.updates, event: updatePostedEvent, args: { token }, fromBlock: VENTURE.startBlock, toBlock: latest, strict: true,
+    address: v.sys.updates, event: updatePostedEvent, args: { token: v.address }, fromBlock: v.sys.startBlock, toBlock: latest, strict: true,
   });
   return logs.map((l) => ({
     author: l.args.author,
@@ -696,43 +779,56 @@ export interface ReferralEarnings {
   /** Paid by the hook inside pool trades, by currency: WETH on sells, the
    *  coin itself on buys. */
   pool: Map<string, bigint>;
-  /** Referral shares of curve fees, credited in the factory and withdrawn
-   *  with withdrawFees(). */
+  /** Referral shares of curve fees: credited in the factory and withdrawn
+   *  with withdrawFees() on a system without a desk, paid in WETH by the
+   *  desk on one with. */
   curveWei: bigint;
-  /** Wallets that bound this referrer. */
+  /** Wallets that bound this referrer (on any system's hook). */
   linked: number;
 }
 
-/** Lifetime referral earnings credited to `referrer`. The factory's
- *  FeeAccrued doesn't say why it paid, but on a coin someone else created the
- *  only thing it credits a non-treasury wallet is a referral share (the
- *  creator share and founder cut go to the creator), so those are counted. */
+/** Lifetime referral earnings credited to `referrer`, over every system.
+ *  Without a desk the factory's FeeAccrued doesn't say why it paid, but on a
+ *  coin someone else created the only thing it credits a non-treasury wallet
+ *  is a referral share (the creator share and founder cut go to the
+ *  creator), so those are counted. The desk's CurveCharged names the
+ *  referrer outright. */
 export async function loadReferralEarnings(referrer: Address): Promise<ReferralEarnings> {
   const latest = await venturePc.getBlockNumber();
-  const range = { fromBlock: VENTURE.startBlock, toBlock: latest, strict: true } as const;
-  const [paid, accrued, bound, treasury] = await Promise.all([
-    venturePc.getLogs({ address: VENTURE.hook, event: referralPaidEvent, args: { referrer }, ...range }),
-    venturePc.getLogs({ address: VENTURE.factory, event: feeAccruedEvent, args: { recipient: referrer }, ...range }),
-    venturePc.getLogs({ address: VENTURE.hook, event: referrerBoundEvent, args: { referrer }, ...range }),
-    venturePc.readContract({ address: VENTURE.hook, abi: treasuryAbi, functionName: "platformTreasury" }),
-  ]);
   const pool = new Map<string, bigint>();
-  for (const l of paid) {
-    const c = l.args.currency.toLowerCase();
-    pool.set(c, (pool.get(c) ?? 0n) + l.args.amount);
-  }
   let curveWei = 0n;
-  if (referrer.toLowerCase() !== treasury.toLowerCase()) {
+  let linked = 0;
+  await Promise.all(SYSTEMS.map(async (sys) => {
+    const range = { fromBlock: sys.startBlock, toBlock: latest, strict: true } as const;
+    const [paid, bound] = await Promise.all([
+      venturePc.getLogs({ address: sys.hook, event: referralPaidEvent, args: { referrer }, ...range }),
+      venturePc.getLogs({ address: sys.hook, event: referrerBoundEvent, args: { referrer }, ...range }),
+    ]);
+    for (const l of paid) {
+      const c = l.args.currency.toLowerCase();
+      pool.set(c, (pool.get(c) ?? 0n) + l.args.amount);
+    }
+    linked += bound.length;
+    if (sys.desk !== zeroAddress) {
+      const charged = await venturePc.getLogs({ address: sys.desk, event: curveChargedEvent, args: { referrer }, ...range });
+      for (const l of charged) curveWei += l.args.toReferrer;
+      return;
+    }
+    const [accrued, treasury] = await Promise.all([
+      venturePc.getLogs({ address: sys.factory, event: feeAccruedEvent, args: { recipient: referrer }, ...range }),
+      venturePc.readContract({ address: sys.hook, abi: treasuryAbi, functionName: "platformTreasury" }),
+    ]);
+    if (referrer.toLowerCase() === treasury.toLowerCase()) return;
     const coins = [...new Set(accrued.map((l) => l.args.token.toLowerCase() as Address))];
     const creators = new Map<string, string>(await Promise.all(coins.map(async (t) => {
-      const l = await venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "listings", args: [t] });
+      const l = await venturePc.readContract({ address: sys.factory, abi: factoryAbi, functionName: "listings", args: [t] });
       return [t, l[0].toLowerCase()] as const;
     })));
     for (const l of accrued) {
       if (creators.get(l.args.token.toLowerCase()) !== referrer.toLowerCase()) curveWei += l.args.amount;
     }
-  }
-  return { pool, curveWei, linked: bound.length };
+  }));
+  return { pool, curveWei, linked };
 }
 
 /** Wait for a transaction and insist it succeeded. waitForTransactionReceipt

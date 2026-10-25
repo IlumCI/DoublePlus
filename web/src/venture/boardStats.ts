@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { parseAbiItem } from "viem";
 
-import { boughtEvent, VENTURE, venturePc } from "./client";
+import { boughtEvent, EVERY, venturePc } from "./client";
 import { computeStats, type CurveStats, type LaunchLog, type TradeLog } from "./curveStats";
 
 export type { CurveStats } from "./curveStats";
@@ -32,9 +32,9 @@ async function refresh() {
     const [a, b] = await Promise.all([venturePc.getBlock({ blockNumber: head }), venturePc.getBlock({ blockNumber: back })]);
     if (head > back) secsPerBlock = Math.max(0.05, (Number(a.timestamp) - Number(b.timestamp)) / Number(head - back));
   }
-  const from = lastBlock === 0n ? VENTURE.startBlock : lastBlock + 1n;
+  const from = lastBlock === 0n ? EVERY.startBlock : lastBlock + 1n;
   if (from > head) return;
-  const f = VENTURE.factory;
+  const f = EVERY.factory;
   const [l, bo, so] = await Promise.all([
     venturePc.getLogs({ address: f, event: launchedEvent, fromBlock: from, toBlock: head, strict: true }),
     venturePc.getLogs({ address: f, event: boughtEvent, fromBlock: from, toBlock: head, strict: true }),

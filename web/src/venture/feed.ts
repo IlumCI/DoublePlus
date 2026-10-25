@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { parseAbiItem, type Address } from "viem";
 
-import { boughtEvent, routedEvent, VENTURE, venturePc } from "./client";
+import { boughtEvent, routedEvent, EVERY, venturePc } from "./client";
 import { chainNowSecs } from "./clock";
 
 /**
@@ -57,13 +57,13 @@ async function calibrate(head: bigint) {
 }
 
 async function read(from: bigint, to: bigint): Promise<FeedItem[]> {
-  const f = VENTURE.factory;
+  const f = EVERY.factory;
   const [launched, bought, sold, grads, routed] = await Promise.all([
     venturePc.getLogs({ address: f, event: launchedEvent, fromBlock: from, toBlock: to, strict: true }),
     venturePc.getLogs({ address: f, event: boughtEvent, fromBlock: from, toBlock: to, strict: true }),
     venturePc.getLogs({ address: f, event: soldEvent, fromBlock: from, toBlock: to, strict: true }),
     venturePc.getLogs({ address: f, event: graduatedEvent, fromBlock: from, toBlock: to, strict: true }),
-    venturePc.getLogs({ address: VENTURE.router, event: routedEvent, fromBlock: from, toBlock: to, strict: true }),
+    venturePc.getLogs({ address: EVERY.router, event: routedEvent, fromBlock: from, toBlock: to, strict: true }),
   ]);
   const out: FeedItem[] = [];
   const key = (l: { transactionHash: string | null; logIndex: number | null }) => `${l.transactionHash}:${l.logIndex}`;
@@ -84,8 +84,8 @@ async function refresh() {
     await calibrate(head);
     let found: FeedItem[] = [];
     for (const span of LOOKBACKS) {
-      const from = span === null ? VENTURE.startBlock : head > span ? head - span : 0n;
-      found = await read(from < VENTURE.startBlock ? VENTURE.startBlock : from, head);
+      const from = span === null ? EVERY.startBlock : head > span ? head - span : 0n;
+      found = await read(from < EVERY.startBlock ? EVERY.startBlock : from, head);
       if (found.length > 0) break;
     }
     items = found.sort((a, b) => b.block - a.block).slice(0, KEEP);

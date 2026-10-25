@@ -56,6 +56,7 @@ const values = {
   VITE_VENTURE_LIMIT_ORDERS: d.contracts.limitOrders ?? "",
   VITE_VENTURE_PAYOUTS: d.contracts.payouts ?? "",
   VITE_VENTURE_BOOSTS: d.contracts.boosts ?? "",
+  VITE_VENTURE_DESK: d.contracts.curveDesk ?? "",
   VITE_VENTURE_START_BLOCK: String(d.startBlock),
   VITE_WETH_ADDRESS: d.contracts.weth,
   VITE_PLATFORM_FEE_BPS: String(d.platformFeeBps),
@@ -64,6 +65,25 @@ const values = {
   // start costs ~0.0002 ETH instead of ~0.25; mainnet always reads it live.
   VITE_LAUNCH_ETH_USD_8: which === "testnet" ? "186500000000000" : "0",
 };
+
+// A redeploy keeps the previous system's record as <file>.<factory>.json
+// (deploy-venture.ts), and its coins stay live there: the site runs it as
+// VITE_VENTURE_V1_*, and the chat API takes both factories.
+const prev = fs.readdirSync(path.dirname(depPath))
+  .filter((f) => f.startsWith(NET.file.replace(/\.json$/, ".")) && f !== NET.file)
+  .map((f) => JSON.parse(fs.readFileSync(path.join(path.dirname(depPath), f), "utf8")))
+  .filter((p) => p.chainId === NET.chainId && p.contracts?.factory !== d.contracts.factory)
+  .sort((x, y) => y.startBlock - x.startBlock)[0];
+if (prev) {
+  const c = prev.contracts;
+  Object.assign(values, {
+    VITE_VENTURE_V1_FACTORY: c.factory, VITE_VENTURE_V1_TOKEN_DEPLOYER: c.tokenDeployer, VITE_VENTURE_V1_HOOK: c.hook,
+    VITE_VENTURE_V1_ROUTER: c.router, VITE_VENTURE_V1_UPDATES: c.updates, VITE_VENTURE_V1_LIMIT_ORDERS: c.limitOrders ?? "",
+    VITE_VENTURE_V1_PAYOUTS: c.payouts ?? "", VITE_VENTURE_V1_BOOSTS: c.boosts ?? "", VITE_VENTURE_V1_DESK: c.curveDesk ?? "",
+    VITE_VENTURE_V1_START_BLOCK: String(prev.startBlock),
+  });
+}
+const factories = [d.contracts.factory, ...(prev ? [prev.contracts.factory] : [])].join(",");
 
 function patchEnv(file) {
   if (!fs.existsSync(file)) return;
@@ -82,7 +102,7 @@ patchEnv(path.join(root, "web", ".env.venture.example"));
 const wrangler = path.join(root, "api", "wrangler.toml");
 if (fs.existsSync(wrangler)) {
   let s = fs.readFileSync(wrangler, "utf8");
-  s = s.replace(/^FACTORY\s*=.*$/m, `FACTORY = "${d.contracts.factory}"`);
+  s = s.replace(/^FACTORY\s*=.*$/m, `FACTORY = "${factories}"`);
   s = s.replace(/^RPC_URL\s*=.*$/m, `RPC_URL = "${NET.rpc}"`);
   fs.writeFileSync(wrangler, s);
   console.log("updated api/wrangler.toml (redeploy: cd api && npx wrangler deploy)");

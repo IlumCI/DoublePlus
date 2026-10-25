@@ -28,7 +28,7 @@ export function UpdatesPane({ v }: { v: VentureT }) {
   const [updates, setUpdates] = useState<{ author: string; text: string; txHash: string }[] | null>(null);
   useEffect(() => {
     let live = true;
-    loadUpdates(v.address).then((u) => live && setUpdates(u)).catch(() => live && setUpdates([]));
+    loadUpdates(v).then((u) => live && setUpdates(u)).catch(() => live && setUpdates([]));
     return () => { live = false; };
   }, [v.address]);
 
@@ -123,7 +123,7 @@ export function TermsPane({ v }: { v: VentureT }) {
 
 export function ContractCard({ v }: { v: VentureT }) {
   const vested = v.vesting !== zeroAddress;
-  const mods = useModules(v.address);
+  const mods = useModules(v);
   const extras = mods?.set ? [
     mods.burnBps ? `burn ${mods.burnBps / 100}%` : "",
     mods.surgeBps ? `surge up to ${mods.surgeBps / 100}%` : "",

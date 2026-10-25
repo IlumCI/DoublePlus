@@ -169,6 +169,37 @@ describe("quoteBuy", () => {
   });
 });
 
+describe("founder tax on the curve (systems with a curve desk)", () => {
+  // VentureCurveDesk.charge: fee = amount*feeBps (less the referee discount),
+  // tax = amount*taxBps, both off the amount sent (buy) or the gross (sell).
+  it("takes fee and tax off a buy before the curve is quoted", () => {
+    const v = curve();
+    const sent = ETH / 2n;
+    const q = quoteBuy(v, sent, 100, false, 300);
+    expect(q.fee).toBe((sent * 100n) / 10_000n + (sent * 300n) / 10_000n);
+    expect(q.net).toBe(sent - q.fee);
+    expect(q.tokensOut).toBe(quoteTokens(v, q.net));
+  });
+
+  it("discounts only the fee for a referred wallet, never the creator's tax", () => {
+    const sent = ETH;
+    const plain = quoteBuy(curve(), sent, 100, false, 300).fee;
+    const referred = quoteBuy(curve(), sent, 100, true, 300).fee;
+    expect(plain - referred).toBe((((sent * 100n) / 10_000n) * 1_000n) / 10_000n);
+  });
+
+  it("takes fee and tax out of a sale's gross", () => {
+    const v = curve({ mode: OPEN, soldWhole: 100_000_000n, remainingWhole: 500_000_000n });
+    const q = quoteSellWei(v, 1_000_000n, 1_000_000n * ETH, ETH, 100, false, 400);
+    expect(q.fee).toBe((q.gross * 100n) / 10_000n + (q.gross * 400n) / 10_000n);
+    expect(q.out).toBe(q.gross - q.fee);
+  });
+
+  it("is the old quote when the tax is zero", () => {
+    expect(quoteBuy(curve(), ETH, 100, false, 0)).toEqual(quoteBuy(curve(), ETH, 100));
+  });
+});
+
 describe("quoteSellWei — the Guaranteed cost-basis cap", () => {
   // The solvency constraint from the design doc: refunds stay funded if and
   // only if gross sell proceeds never exceed the basis of the tokens sold.

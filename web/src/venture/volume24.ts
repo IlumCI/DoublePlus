@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { parseAbiItem } from "viem";
 
-import { boughtEvent, routedEvent, VENTURE, venturePc } from "./client";
+import { boughtEvent, routedEvent, EVERY, venturePc } from "./client";
 
 // Platform volume over the last 24h, in ETH: curve buys and sells on the
 // factory, plus pool trades through the router (Routed is ETH-denominated
@@ -29,9 +29,9 @@ async function read(from: bigint, to: bigint): Promise<Trade[]> {
   for (let a = from; a <= to; a += CHUNK) {
     const b = a + CHUNK - 1n < to ? a + CHUNK - 1n : to;
     const [bought, sold, routed] = await Promise.all([
-      venturePc.getLogs({ address: VENTURE.factory, event: boughtEvent, fromBlock: a, toBlock: b, strict: true }),
-      venturePc.getLogs({ address: VENTURE.factory, event: soldEvent, fromBlock: a, toBlock: b, strict: true }),
-      venturePc.getLogs({ address: VENTURE.router, event: routedEvent, fromBlock: a, toBlock: b, strict: true }),
+      venturePc.getLogs({ address: EVERY.factory, event: boughtEvent, fromBlock: a, toBlock: b, strict: true }),
+      venturePc.getLogs({ address: EVERY.factory, event: soldEvent, fromBlock: a, toBlock: b, strict: true }),
+      venturePc.getLogs({ address: EVERY.router, event: routedEvent, fromBlock: a, toBlock: b, strict: true }),
     ]);
     for (const l of bought) out.push({ block: l.blockNumber, wei: l.args.ethIn });
     for (const l of sold) out.push({ block: l.blockNumber, wei: l.args.ethOut });
@@ -51,7 +51,7 @@ async function refresh() {
     blocksPerDay = BigInt(Math.ceil(DAY_SECS / Math.max(0.05, secs)));
   }
   const dayStart = head > blocksPerDay ? head - blocksPerDay : 0n;
-  const floor = dayStart > VENTURE.startBlock ? dayStart : VENTURE.startBlock;
+  const floor = dayStart > EVERY.startBlock ? dayStart : EVERY.startBlock;
   const from = lastBlock === 0n ? floor : lastBlock + 1n;
   if (from <= head) trades = trades.concat(await read(from, head));
   trades = trades.filter((t) => t.block >= floor);

@@ -1,6 +1,6 @@
 import { parseAbiItem, zeroAddress, type Address } from "viem";
 
-import { boughtEvent, ercAbi, factoryAbi, loadVentures, routedEvent, VENTURE, venturePc, vestingAbi, type Venture } from "./client";
+import { boughtEvent, ercAbi, EVERY, factoryAbi, loadVentures, routedEvent, VENTURE, venturePc, vestingAbi, type Venture } from "./client";
 import { curveValue, marketValue, position, type Flows, type Position } from "./pnl";
 
 /**
@@ -32,8 +32,9 @@ export interface Holding {
 
 export interface Portfolio {
   rows: Holding[];
-  /** ETH credited inside the factory: founder cuts, curve-fee shares. */
-  factoryOwed: bigint;
+  /** ETH credited inside each system's factory (founder cuts, and curve-fee
+   *  shares on a system without a desk), for withdrawFees() on that factory. */
+  owed: { factory: Address; wei: bigint }[];
 }
 
 
@@ -44,11 +45,11 @@ const emptyFlows = (): Flow => ({ curveIn: 0n, curveOut: 0n, routerIn: 0n, route
  *  `token` narrows the read to one coin (the coin page). */
 async function loadFlows(me: Address, token?: Address): Promise<Map<string, Flow>> {
   const head = await venturePc.getBlockNumber();
-  const range = { fromBlock: VENTURE.startBlock, toBlock: head };
+  const range = { fromBlock: EVERY.startBlock, toBlock: head };
   const [cBuys, cSells, routed] = await Promise.all([
-    venturePc.getLogs({ address: VENTURE.factory, event: boughtEvent, args: { buyer: me, ...(token ? { token } : {}) }, ...range }).catch(() => []),
-    venturePc.getLogs({ address: VENTURE.factory, event: soldEvent, args: { seller: me, ...(token ? { token } : {}) }, ...range }).catch(() => []),
-    venturePc.getLogs({ address: VENTURE.router, event: routedEvent, args: { trader: me, ...(token ? { coin: token } : {}) }, ...range }).catch(() => []),
+    venturePc.getLogs({ address: EVERY.factory, event: boughtEvent, args: { buyer: me, ...(token ? { token } : {}) }, ...range }).catch(() => []),
+    venturePc.getLogs({ address: EVERY.factory, event: soldEvent, args: { seller: me, ...(token ? { token } : {}) }, ...range }).catch(() => []),
+    venturePc.getLogs({ address: EVERY.router, event: routedEvent, args: { trader: me, ...(token ? { coin: token } : {}) }, ...range }).catch(() => []),
   ]);
   const flows = new Map<string, Flow>();
   const f = (t: string) => {
@@ -73,8 +74,8 @@ async function holding(me: Address, v: Venture, fl: Flow | undefined, sellFeeBps
   const [balance, pending, spent, bought] = await Promise.all([
     venturePc.readContract({ address: v.address, abi: ercAbi, functionName: "balanceOf", args: [me] }).catch(() => 0n) as Promise<bigint>,
     venturePc.readContract({ address: v.address, abi: ercAbi, functionName: "pendingRewards", args: [me] }).catch(() => 0n) as Promise<bigint>,
-    venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "spentWei", args: [v.address, me] }).catch(() => 0n) as Promise<bigint>,
-    venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "boughtTokens", args: [v.address, me] }).catch(() => 0n) as Promise<bigint>,
+    venturePc.readContract({ address: v.sys.factory, abi: factoryAbi, functionName: "spentWei", args: [v.address, me] }).catch(() => 0n) as Promise<bigint>,
+    venturePc.readContract({ address: v.sys.factory, abi: factoryAbi, functionName: "boughtTokens", args: [v.address, me] }).catch(() => 0n) as Promise<bigint>,
   ]);
   if (balance === 0n && pending === 0n && spent === 0n && !isCreator && !fl) return null;
 
@@ -93,7 +94,7 @@ async function holding(me: Address, v: Venture, fl: Flow | undefined, sellFeeBps
     value = refundable; basis = "refund";
   } else if (v.phase === "graduated") {
     if (v.pair.toLowerCase() === VENTURE.weth.toLowerCase()) {
-      const tick = await venturePc.readContract({ address: VENTURE.hook, abi: poolTickAbi, functionName: "poolTick", args: [v.address] }).catch(() => null);
+      const tick = await venturePc.readContract({ address: v.sys.hook, abi: poolTickAbi, functionName: "poolTick", args: [v.address] }).catch(() => null);
       if (tick !== null) {
         const coinIsC0 = BigInt(v.address) < BigInt(v.pair);
         value = marketValue(balance, Number(tick), coinIsC0, v.policy.sellTaxBps + VENTURE.platformFeeBps);
@@ -101,8 +102,10 @@ async function holding(me: Address, v: Venture, fl: Flow | undefined, sellFeeBps
       }
     }
   } else {
-    // Raising: the curve buys back only what this wallet bought on it.
-    value = curveValue(v, bought < balance ? bought : balance, spent, sellFeeBps);
+    // Raising: the curve buys back only what this wallet bought on it, less
+    // the exit fee and, on a system with a desk, the founder's sell tax.
+    const tax = v.sys.desk !== zeroAddress ? v.policy.sellTaxBps : 0;
+    value = curveValue(v, bought < balance ? bought : balance, spent, sellFeeBps + tax);
     basis = "curve";
   }
   return { v, balance, pending, spent, bought, vestingClaimable, refundable, pos: position(fl ?? emptyFlows(), value, basis) };
@@ -114,11 +117,12 @@ export async function loadHolding(me: Address, v: Venture, sellFeeBps: number): 
 }
 
 export async function loadPortfolio(me: Address, sellFeeBps: number): Promise<Portfolio> {
-  const [ventures, flows, factoryOwed] = await Promise.all([
+  const [ventures, flows, owedEach] = await Promise.all([
     loadVentures(),
     loadFlows(me),
-    venturePc.readContract({ address: VENTURE.factory, abi: factoryAbi, functionName: "feesAccrued", args: [me] }).catch(() => 0n) as Promise<bigint>,
+    Promise.all(EVERY.factory.map((factory) => (venturePc.readContract({ address: factory, abi: factoryAbi, functionName: "feesAccrued", args: [me] })
+      .catch(() => 0n) as Promise<bigint>).then((wei) => ({ factory, wei })))),
   ]);
   const rows = await Promise.all(ventures.map((v) => holding(me, v, flows.get(v.address.toLowerCase()), sellFeeBps)));
-  return { rows: rows.filter((r): r is Holding => r !== null), factoryOwed };
+  return { rows: rows.filter((r): r is Holding => r !== null), owed: owedEach.filter((o) => o.wei > 0n) };
 }
