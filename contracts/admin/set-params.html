@@ -34,7 +34,7 @@
 <body>
 <main>
   <h1>VentureFactory · setParams</h1>
-  <div class="dim">Robinhood Chain mainnet (4663) · factory <span class="mono">0x60e0DD86327F1dA36565c79aAe9f87070415963b</span></div>
+  <div class="dim">Robinhood Chain mainnet (4663) · factory <span class="mono" id="factory"></span></div>
 
   <section>
     <label class="dim" for="wallet">Wallet</label>
@@ -63,7 +63,10 @@
 </main>
 
 <script>
-const FACTORY = "0x60e0DD86327F1dA36565c79aAe9f87070415963b";
+// ?factory= picks the system to set (the newest one, after a redeploy).
+const FACTORY = /^0x[0-9a-fA-F]{40}$/.test(new URLSearchParams(location.search).get("factory") ?? "")
+  ? new URLSearchParams(location.search).get("factory") : "0x60e0DD86327F1dA36565c79aAe9f87070415963b";
+document.getElementById("factory").textContent = FACTORY;
 const CHAIN_ID = 4663n;
 // ?rpc= points reads and receipts at another node (a local fork, for testing).
 const RPC = new URLSearchParams(location.search).get("rpc") || "https://rpc.mainnet.chain.robinhood.com";

@@ -16,7 +16,7 @@ The business in this repo is **DoublePlus** (doubleplus.fun), the `venture` flav
   - Compact: no new cards or boxes; fold information into the existing market screen.
   - No warnings, disclaimers or explainers in the copy. A blocked action still states its real number and cause.
   - No UK geofence, and nothing framed as "risk management".
-- **Before adding to VentureFactory, check its size**: 24,395 of 24,576 bytes, 181 spare. Use `node scripts/size-ablate.cjs factory` in `contracts/`.
+- **Before adding to VentureFactory, check its size**: 23,993 of 24,576 bytes in the v2 source, 583 spare (the hook is 20,850). Use `node scripts/size-ablate.cjs factory` (or `hook`) in `contracts/`.
 
 ## What is live
 
@@ -26,7 +26,7 @@ The business in this repo is **DoublePlus** (doubleplus.fun), the `venture` flav
 | Chat API | Worker `doubleplus-api` on api.doubleplus.fun (`api/`), backed by Supabase `dzqrdtgjddxaacipbbjk`. Secrets: `SUPABASE_SERVICE_KEY`, `SESSION_SECRET`. | `cd api && npx wrangler deploy` |
 | Keeper | Worker `doubleplus-keeper` (`keeper/worker.mjs`), cron every minute; a Durable Object holds the lease and memory. Details below. | `cd keeper && npx wrangler deploy` |
 | GeckoTerminal adapter | Worker `doubleplus-gecko` on gecko.doubleplus.fun (`gecko/`): `/latest-block`, `/asset`, `/pair`, `/events` for every curve, per GeckoTerminal's Integration API Standards. Log queries go dRPC (10k blocks), then Daybreak (2k), then Robinhood. Application: `docs/listings/geckoterminal.md`. | `cd gecko && ../api/node_modules/.bin/wrangler deploy` |
-| Contracts | `contracts/deployments/venture-robinhood.json` (authoritative), start block 94774769, all verified on Sourcify. | redeploy only (see below) |
+| Contracts | v1: `contracts/deployments/venture-robinhood.json` (authoritative), start block 94774769, all verified on Sourcify. v2 (commit `0dc8576`, adds VentureCurveDesk) is built and tested but **not deployed yet**: runbook in `docs/deploy-v2.md`. After it, v2 is `venture-robinhood.json` and v1 is kept as `venture-robinhood.0x60e0DD86.json`. | redeploy only (see below) |
 
 What the keeper does on each run:
 - graduates filled curves and refunds missed raises;
@@ -54,6 +54,20 @@ Main addresses:
 
 Coins so far: **$DOUBLEPLUS** `0xc44cFd968A38C6B16A8Be4677bbB87d0eBB42add`, an open curve. The only backer is the user, so it isn't expected to graduate on its own.
 
+## Two systems (v1 live, v2 ready)
+
+A redeploy can't move coins, so the site, keeper, chat API and GeckoTerminal adapter run every system:
+- **Site:** `VITE_VENTURE_*` is the current system, where launches go; `VITE_VENTURE_V1_*` is the previous one. Each coin carries its own system as `v.sys`, and board-wide log scans use `EVERY` (`web/src/venture/client.ts`). `node web/scripts/venture-env.mjs mainnet` writes both, plus both factories into the chat API's `FACTORY`.
+- **Keeper:** its build bundles every `deployments/venture-robinhood*.json` (`keeper/make-deployments.mjs`) and runs each system under the same gas caps.
+- **Adapter:** v2 needs `V2_FACTORY`, `V2_CURVE_DESK` and `V2_START_BLOCK` in `gecko/wrangler.toml`.
+
+What v2 adds (VentureCurveDesk), from a coin's first curve trade:
+- the founder tax on curve trades: dev and dividends paid in the trade, a jackpot share, and the liquidity and market-making shares loading a buyback that the keeper fires in random bursts (buy the coin and burn it);
+- a last-buyer pot (20% of the curve fee) and the every-Nth-buy jackpot;
+- every curve payout in WETH, inside the trade.
+
+On v1 all of that starts at graduation.
+
 ## How the product works (facts for copy and support)
 
 - **Every coin opens at a $750 market cap.** That's `START_MCAP_USD_8`, fixed in the contract. The price then rises in a straight line until the curve's target is reached.
@@ -71,7 +85,7 @@ Coins so far: **$DOUBLEPLUS** `0xc44cFd968A38C6B16A8Be4677bbB87d0eBB42add`, an o
 ## How the business makes money
 
 - **Platform fee:** 0.75% of every pool trade, in the hook. Of that, 20% goes to the trader's referrer (if they have one), 20% to the coin's last-buyer pot, and the rest to the treasury.
-- **Curve fees:** 1% on buys and 1% on sells. The trader's referrer takes 20% first, then on open curves the creator gets 20%, and the treasury the rest. These collect in the factory until the treasury calls `withdrawFees()`.
+- **Curve fees:** 1% on buys and 1% on sells. The trader's referrer takes 20% first, then on open curves the creator gets 20%, and the treasury the rest. On v1 these collect in the factory until the treasury calls `withdrawFees()`. On v2 the pot also takes 20%, and everything is paid in WETH in the trade (the treasury receives WETH).
 - **Referee discount:** a trader with a referrer pays 10% less of both the platform fee and the curve fees.
 - **Creation fee:** 0.0003 ETH per launch.
 - **Boosts:** paid placement at 0.001 ETH an hour (`VentureBoosts`, price fixed at deploy), paid straight to the treasury.
@@ -110,6 +124,7 @@ Coins so far: **$DOUBLEPLUS** `0xc44cFd968A38C6B16A8Be4677bbB87d0eBB42add`, an o
 
 ## Traps
 
+- **Referrals are per hook.** A wallet bound to a referrer on v1's hook has no referrer on v2's; the site binds again on the first v2 trade from a stored `?ref=` link.
 - **A new factory means a whole new system.** The hook, router, limit orders, payouts, boosts, updates and both deployers are bound to the factory's address. Existing coins stay on the old contracts. `setParams` values don't carry over, so re-run them after every deploy.
 - **If QuiverToken or its imports change,** run `node make-token-source.mjs` in `keeper/` before redeploying the keeper. It picks the build that matches the on-chain TokenDeployer; the newest build-info on disk isn't necessarily it.
 - **The venture build drops every public file not on the allowlist** in `web/vite.config.ts` (`ventureDist`). Add a new public file there, or it won't ship.
