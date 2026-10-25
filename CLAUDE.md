@@ -25,6 +25,7 @@ The business in this repo is **DoublePlus** (doubleplus.fun), the `venture` flav
 | Site | Cloudflare Worker `doubleplus-site` on doubleplus.fun and www (`web/wrangler.toml`, `web/worker.mjs`). Static SPA; the Worker answers `/venture/0x…` with per-coin link previews, `/og/0x….<ext>` with coin logos, and `/sitemap.xml`. | `cd web && ../api/node_modules/.bin/wrangler deploy` |
 | Chat API | Worker `doubleplus-api` on api.doubleplus.fun (`api/`), backed by Supabase `dzqrdtgjddxaacipbbjk`. Secrets: `SUPABASE_SERVICE_KEY`, `SESSION_SECRET`. | `cd api && npx wrangler deploy` |
 | Keeper | Worker `doubleplus-keeper` (`keeper/worker.mjs`), cron every minute; a Durable Object holds the lease and memory. Details below. | `cd keeper && npx wrangler deploy` |
+| GeckoTerminal adapter | Worker `doubleplus-gecko` on gecko.doubleplus.fun (`gecko/`): `/latest-block`, `/asset`, `/pair`, `/events` for every curve, per GeckoTerminal's Integration API Standards. Log queries go dRPC (10k blocks), then Daybreak (2k), then Robinhood. Application: `docs/listings/geckoterminal.md`. | `cd gecko && ../api/node_modules/.bin/wrangler deploy` |
 | Contracts | `contracts/deployments/venture-robinhood.json` (authoritative), start block 94774769, all verified on Sourcify. | redeploy only (see below) |
 
 What the keeper does on each run:
