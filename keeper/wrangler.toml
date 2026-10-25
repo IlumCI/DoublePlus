@@ -27,9 +27,11 @@ class_name = "RunLock"
 tag = "v1"
 new_sqlite_classes = ["RunLock"]
 
-# The deployment the Worker bundles; worker.mjs checks it matches CHAIN_ID.
+# Every system on the chain, bundled as deployments.gen.json (the current
+# deployment file plus the predecessors deploy-venture.ts keeps beside it);
+# worker.mjs checks each matches CHAIN_ID and runs them all.
 [build]
-command = "cp ../contracts/deployments/venture-robinhood.json deployment.gen.json"
+command = "node make-deployments.mjs venture-robinhood.json"
 
 [vars]
 CHAIN_ID = "4663"
@@ -45,6 +47,10 @@ SYNC_MAX_BLOCKS = "200000"
 # ~125 txs a run and ~500 a day. Raise them as volume grows.
 MAX_SPEND_ETH = "0.0005"
 MAX_DAILY_SPEND_ETH = "0.002"
+# Curve desk buybacks (systems with a desk): fire once a coin's buyback holds
+# this much, at a random moment up to the jitter later.
+BUYBACK_MIN_ETH = "0.002"
+BUYBACK_JITTER_SECS = "900"
 
 # Local testing only (`npx wrangler dev --env testnet --test-scheduled`):
 # no cron, testnet contracts.
@@ -55,4 +61,4 @@ durable_objects.bindings = [{ name = "LOCK", class_name = "RunLock" }]
 vars = { CHAIN_ID = "46630", RPC_URL = "https://rpc.testnet.chain.robinhood.com" }
 
 [env.testnet.build]
-command = "cp ../contracts/deployments/venture-testnet.json deployment.gen.json"
+command = "node make-deployments.mjs venture-testnet.json"

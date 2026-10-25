@@ -1,5 +1,6 @@
-// The launch feed: every new coin, and every coin that graduates to its
-// pool, posted to a Telegram channel and a Discord channel with its link
+// The launch feed: every new coin, every coin that graduates to its pool,
+// and every curve-desk buyback (queued in state.buybacks by the keeper's
+// index), posted to a Telegram channel and a Discord channel with its link
 // (which previews the coin, see web/worker.mjs). Free; no transaction. Each
 // destination is optional and off until its secret is set.
 const SITE = "https://doubleplus.fun";
@@ -19,7 +20,8 @@ function clean(v, max) {
 
 /** Posts what's new since the last run to each destination configured in
  *  `feed`. `state` ({ [destination]: { launched: [address], graduated:
- *  [address], fails: { key: n } } }) is kept by the caller between runs;
+ *  [address], buybackAt: [block, logIndex], fails: { key: n } },
+ *  buybacks: [{ block, log, coin, burned }] }) is kept by the caller between runs;
  *  each destination keeps its own, so one failing never re-posts to the
  *  other. Returns how many posts went out. */
 export async function postFeed({ coins, factory, ethers, provider, feed, state, pastDeadline }) {
@@ -42,7 +44,7 @@ export async function postFeed({ coins, factory, ethers, provider, feed, state, 
       const [name, symbol, metaRaw] = await Promise.all([t.name(), t.symbol(), t.metadataURI().catch(() => "")]);
       let pitch = "";
       try { pitch = clean(JSON.parse(metaRaw)?.pitch, 200); } catch { /* no metadata */ }
-      texts.set(coin, { head: `${clean(name, 64)} ($${clean(symbol, 16)})`, pitch, url: `${SITE}/venture/${ethers.getAddress(coin)}` });
+      texts.set(coin, { head: `${clean(name, 64)} ($${clean(symbol, 16)})`, symbol: clean(symbol, 16), pitch, url: `${SITE}/venture/${ethers.getAddress(coin)}` });
     }
     const { head, pitch, url } = texts.get(coin);
     return kind === "launch"
@@ -73,10 +75,34 @@ export async function postFeed({ coins, factory, ethers, provider, feed, state, 
       delete fails[key];
       (kind === "launch" ? launched : graduated).add(coin);
     }
+    // Buybacks, oldest first, each once per destination.
+    for (const b of state.buybacks ?? []) {
+      if (sent >= PER_RUN || pastDeadline()) break;
+      const at = st.buybackAt ?? [-1, -1];
+      if (b.block < at[0] || (b.block === at[0] && b.log <= at[1])) continue;
+      const key = `buyback:${b.block}:${b.log}`;
+      try {
+        await textFor(b.coin, "launch"); // fills texts with the coin's name and link
+        const { symbol, url } = texts.get(b.coin);
+        await send(`🔥 buyback on $${symbol}: ${wholeCoins(BigInt(b.burned))} coins burned\n${url}`);
+        sent++;
+      } catch (e) {
+        fails[key] = (fails[key] ?? 0) + 1;
+        console.log(`feed ${id}: ${key} failed (${fails[key]}/${GIVE_UP}): ${String(e?.message ?? e).slice(0, 160)}`);
+        if (fails[key] < GIVE_UP) break;
+      }
+      delete fails[key];
+      st.buybackAt = [b.block, b.log];
+    }
     posted += sent;
     Object.assign(st, { launched: [...launched], graduated: [...graduated], fails });
   }
   return posted;
+}
+
+/** Whole coins from token-wei, with thousands separators. */
+function wholeCoins(wei) {
+  return (wei / 10n ** 18n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
 async function post(url, body) {

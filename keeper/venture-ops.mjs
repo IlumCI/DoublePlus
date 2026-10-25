@@ -42,15 +42,24 @@
 //                       enforced by the Worker, which remembers earlier runs
 //   DELIVER_GAS_MULT    (default 4) a payout is only pushed when it is worth at
 //                       least this many times the gas it costs to push
-import { cfg, loadDeployment } from "./venture-config.mjs";
+import { cfg, loadDeployments } from "./venture-config.mjs";
 import { ConfigError } from "./venture-config-core.mjs";
 import { readFileSync } from "node:fs";
 import { runOps } from "./venture-ops-core.mjs";
 
-// The run itself is in venture-ops-core.mjs (shared with the Worker). An
-// insolvent factory exits 2, which fails the workflow and notifies the owner.
-const { dep, depPath } = loadDeployment();
+// The run itself is in venture-ops-core.mjs (shared with the Worker), once
+// per system on the chain, oldest first, under one spend cap. An insolvent
+// factory exits 2, which fails the workflow and notifies the owner.
 const tokenSource = JSON.parse(readFileSync(new URL("token-source.json", import.meta.url), "utf8"));
-runOps({ cfg, dep, depPath, tokenSource })
-  .then((s) => { if (s.solvency.ok === false) process.exitCode = 2; })
-  .catch((e) => { console.error(e instanceof ConfigError ? e.message : e); process.exit(1); });
+let runSpentWei = 0n;
+for (const { dep, depPath } of loadDeployments()) {
+  const memory = { runSpentWei };
+  try {
+    const s = await runOps({ cfg, dep, depPath, memory, tokenSource });
+    if (s.solvency.ok === false) process.exitCode = 2;
+  } catch (e) {
+    console.error(e instanceof ConfigError ? e.message : e);
+    process.exitCode ||= 1;
+  }
+  runSpentWei += memory.spentWei ?? 0n;
+}

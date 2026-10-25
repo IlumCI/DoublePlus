@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { checkDeployment, ConfigError, DEPLOYMENTS, readConfig } from "./venture-config-core.mjs";
+import { listDeployments } from "./deployments.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -30,4 +31,19 @@ export function loadDeployment() {
   let dep;
   try { dep = JSON.parse(readFileSync(path, "utf8")); } catch (e) { console.error(`can't read ${path}: ${e.message}`); process.exit(1); }
   return { dep: guard(() => checkDeployment(dep, cfg.CHAIN_ID, path, !!explicit)), depPath: path };
+}
+
+/** Every system on CHAIN_ID, oldest first: the deployment file and the
+ *  predecessors kept beside it (see deployments.mjs). DEPLOYMENT_FILE may
+ *  name one file or a comma-separated list instead. */
+export function loadDeployments() {
+  const explicit = cfg.raw("DEPLOYMENT_FILE");
+  if (!explicit && !DEPLOYMENTS[cfg.CHAIN_ID]) guard(() => { throw new ConfigError(`CHAIN_ID=${cfg.CHAIN_ID} has no deployment; set DEPLOYMENT_FILE`); });
+  let all;
+  try {
+    all = explicit
+      ? explicit.split(",").map((p) => p.trim()).filter(Boolean).map((path) => ({ path, dep: JSON.parse(readFileSync(path, "utf8")) }))
+      : listDeployments(join(here, "../contracts/deployments"), DEPLOYMENTS[cfg.CHAIN_ID]);
+  } catch (e) { console.error(`can't read deployments: ${e.message}`); process.exit(1); }
+  return all.map(({ dep, path }) => ({ dep: guard(() => checkDeployment(dep, cfg.CHAIN_ID, path, !!explicit)), depPath: path }));
 }

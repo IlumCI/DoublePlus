@@ -21,7 +21,15 @@ export class SpendCap extends Error {}
  *  and spentWei out, kept current after every tx so a run that throws still
  *  reports what it spent. tokenSource is token-source.json, or null to skip
  *  source verification. feed ({ telegramToken, telegramChat, discordWebhook })
- *  turns on the launch feed, whose progress is memory.feed. */
+ *  turns on the launch feed, whose progress is memory.feed.
+ *
+ *  A chain can carry several systems (a redeploy leaves the old coins on the
+ *  old one), and each entry runs this once per system: memory.runSpentWei in
+ *  is what this run already spent on the systems before it, so all of them
+ *  share the per-run cap. A system with a curve desk (dep.contracts.curveDesk)
+ *  also gets the desk's jobs: buybacks, curve pots and dividends paid from
+ *  the curve; memory.frenzy (coin -> chain secs) holds when each loaded
+ *  buyback fires, and a caller that keeps no memory fires them at once. */
 export async function runOps({ cfg, dep, depPath, memory = {}, tokenSource = null, feed = null }) {
   const { DRY_RUN, envEth, envInt, envWei, KEY, RPC } = cfg;
   const MIN_DELIVER = envWei("MIN_DELIVER", 1_000_000_000_000n);
@@ -34,7 +42,8 @@ export async function runOps({ cfg, dep, depPath, memory = {}, tokenSource = nul
   // fallback, one run at a time, under the per-run cap alone.
   const MAX_DAILY_SPEND_WEI = envEth("MAX_DAILY_SPEND_ETH", "0.02");
   const dayLeft = MAX_DAILY_SPEND_WEI - (memory.spentTodayWei ?? 0n);
-  const runCap = dayLeft < MAX_SPEND_WEI ? dayLeft : MAX_SPEND_WEI;
+  const runLeft = MAX_SPEND_WEI - (memory.runSpentWei ?? 0n);
+  const runCap = dayLeft < runLeft ? dayLeft : runLeft;
   // Blocks of history one run may index (the rest waits for the next run), so
   // catching up after a deploy is spread over runs instead of stalling one.
   const SYNC_MAX_BLOCKS = envInt("SYNC_MAX_BLOCKS", 1_000_000_000, 1, 1_000_000_000);
@@ -45,10 +54,18 @@ export async function runOps({ cfg, dep, depPath, memory = {}, tokenSource = nul
   const DELIVER_GAS_MULT = BigInt(envInt("DELIVER_GAS_MULT", 4, 1, 1000));
   // Gas one holder adds to a claimForMany batch, measured on testnet, with room.
   const GAS_PER_DELIVERY = 60_000n;
+  // Curve desk buybacks: one fires once it holds this much, at a random time
+  // up to BUYBACK_JITTER_SECS later, so nobody can time the buy; the minimum
+  // out is a simulation taken just before sending, less BUYBACK_SLIPPAGE_BPS.
+  const BUYBACK_MIN_WEI = envEth("BUYBACK_MIN_ETH", "0.002");
+  const BUYBACK_JITTER_SECS = envInt("BUYBACK_JITTER_SECS", 900, 0, 86_400);
+  const BUYBACK_SLIPPAGE_BPS = BigInt(envInt("BUYBACK_SLIPPAGE_BPS", 300, 0, 5_000));
+  // A graduated pool's first 15 seconds charge a sniper fee; a buyback waits.
+  const SNIPER_SECS = 20;
 
   // Every tx goes through send(): it counts what the run has spent and refuses
   // to go past runCap, so spam can cost a run (and a day) at most that much.
-  const stats = { stoppedAtDeadline: false, payoutsConverted: 0, limitFilled: 0, sent: 0, spentWei: 0n, graduated: 0, aborted: 0, skippedEmptyAborts: 0, refunded: 0, delivered: 0, recentered: 0, potsPaid: 0, stoppedAtCap: false, failed: 0 };
+  const stats = { stoppedAtDeadline: false, payoutsConverted: 0, limitFilled: 0, sent: 0, spentWei: 0n, graduated: 0, aborted: 0, skippedEmptyAborts: 0, refunded: 0, delivered: 0, recentered: 0, potsPaid: 0, buybacks: 0, stoppedAtCap: false, failed: 0 };
   async function send(label, fn) {
     if (DRY_RUN) return;
     if (stats.spentWei >= runCap) { stats.stoppedAtCap = true; throw new SpendCap(label); }
@@ -172,6 +189,16 @@ export async function runOps({ cfg, dep, depPath, memory = {}, tokenSource = nul
     "event WallRemoved(bytes32 indexed id, int24 tickLower, int24 tickUpper, uint128 liquidity)",
   ];
   const LISTINGS_ABI = ["function listings(address) view returns (address creator, address pair, uint16 taxBps, uint64 createdAt, bytes32 poolId)"];
+  const DESK_ABI = [
+    "function potOf(address) view returns (uint128 eth, uint64 deadline, address leader)",
+    "function jackpotOf(address) view returns (uint128 eth, uint64 buys)",
+    "function buybackOf(address) view returns (uint256)",
+    "function weth() view returns (address)",
+    "function claimPot(address coin)",
+    "function fire(address coin, uint256 minOut) returns (uint256)",
+    "event Buyback(address indexed coin, uint256 ethIn, uint256 burned)",
+  ];
+  const POLICY_ABI = ["function policyOf(address) view returns ((address devWallet, uint16 buyTaxBps, uint16 sellTaxBps, uint16 devBps, uint16 dividendBps, uint16 liquidityBps, uint16 mmBps) policy, uint64 launchTime)"];
 
   // RPC_URL may list backups after the primary. The primary serves every
   // call; a call it keeps failing on transiently is tried once on each
@@ -240,6 +267,12 @@ export async function runOps({ cfg, dep, depPath, memory = {}, tokenSource = nul
   const hook = new ethers.Contract(dep.contracts.hook, HOOK_ABI, wallet);
   const payouts = dep.contracts.payouts ? new ethers.Contract(dep.contracts.payouts, PAYOUTS_ABI, wallet) : null;
   const limitOrders = dep.contracts.limitOrders ? new ethers.Contract(dep.contracts.limitOrders, LIMIT_ABI, wallet) : null;
+  const desk = dep.contracts.curveDesk ? new ethers.Contract(dep.contracts.curveDesk, DESK_ABI, wallet) : null;
+  const hookPolicy = new ethers.Contract(dep.contracts.hook, POLICY_ABI, wallet);
+  // A caller that keeps no memory between runs (the Node entry) can't hold a
+  // buyback for later, so it fires them as soon as they're loaded.
+  const frenzy = memory.frenzy ?? {};
+  const jitterSecs = memory.frenzy ? BUYBACK_JITTER_SECS : 0;
 
   // The event history the keeper acts on: each coin's holder balances (from
   // Transfer) and curve backers (CurveBuy), each pool's quote-wall bands
@@ -265,11 +298,19 @@ export async function runOps({ cfg, dep, depPath, memory = {}, tokenSource = nul
       // One topic per query (the RPC limits OR-lists), every query for the
       // range answered before any is applied, so a failed range is redone whole.
       const q = (address, topic) => provider.getLogs({ address, topics: [topic], fromBlock: a, toBlock: b });
-      const [buys, accrued, withdrawn, adds, removes, ...transfers] = await Promise.all([
+      // Buybacks are read only for the feed, which only a caller with memory runs.
+      const feedQueue = desk && feed ? ((memory.feed ??= {}).buybacks ??= []) : null;
+      const [buys, accrued, withdrawn, adds, removes, buybacks, ...transfers] = await Promise.all([
         q(dep.contracts.factory, T.buy), q(dep.contracts.factory, T.accrued), q(dep.contracts.factory, T.withdrawn),
         q(dep.contracts.hook, T.add), q(dep.contracts.hook, T.remove),
+        feedQueue ? q(dep.contracts.curveDesk, desk.interface.getEvent("Buyback").topicHash) : [],
         ...groups.map((g) => q(g, TRANSFER_TOPIC)),
       ]);
+      for (const l of buybacks) {
+        const { coin, burned } = desk.interface.parseLog(l).args;
+        if (burned > 0n) feedQueue.push({ block: l.blockNumber, log: l.index, coin, burned: burned.toString() });
+      }
+      if (feedQueue && feedQueue.length > 100) feedQueue.splice(0, feedQueue.length - 100);
       for (const l of buys) {
         const { token, buyer } = factory.interface.parseLog(l).args;
         coinIndex(token).backers[buyer] = 1;
@@ -408,13 +449,65 @@ export async function runOps({ cfg, dep, depPath, memory = {}, tokenSource = nul
     if (await attempt(key, `claimPot ${coin}`, () => hook.claimPot(coin))) stats.potsPaid++;
   }
 
+  /** The curve desk's jobs for one coin: pay a curve pot whose clock ran out
+   *  with no trade since, and fire its buyback once loaded (an open curve's
+   *  or a graduated coin's; a target raise's waits for graduation and a
+   *  failed raise's goes to the dev wallet, which fire() does itself). */
+  async function deskJobs(coin, st, now) {
+    const p = await desk.potOf(coin);
+    if (p.leader !== ZERO && now >= Number(p.deadline)) {
+      const key = `deskpot:${coin}`;
+      if (!waiting(key)) {
+        try {
+          await desk.claimPot.staticCall(coin);
+          console.log(`pay curve pot on ${coin} to ${p.leader}`);
+          if (await attempt(key, `claimPot ${coin}`, () => desk.claimPot(coin))) stats.potsPaid++;
+        } catch (e) {
+          if (e instanceof SpendCap) throw e;
+          failed(key);
+        }
+      }
+    }
+
+    const over = st.finalized || st.aborted;
+    if (!over && Number((await factory.terms(coin)).mode) !== 1) return; // a raise in progress
+    let loaded = await desk.buybackOf(coin);
+    if (over) loaded += (await desk.jackpotOf(coin)).eth; // fire() adds what nobody won
+    const k = coin.toLowerCase();
+    if (loaded === 0n || loaded < (st.aborted ? 1n : BUYBACK_MIN_WEI)) { delete frenzy[k]; return; }
+    if (st.finalized && now < Number((await hookPolicy.policyOf(coin)).launchTime) + SNIPER_SECS) return;
+    frenzy[k] ??= now + Math.floor(Math.random() * (jitterSecs + 1));
+    if (now < frenzy[k]) return;
+    const key = `fire:${coin}`;
+    if (waiting(key)) return;
+    let quoted;
+    try { quoted = await desk.fire.staticCall(coin, 0n); } catch { failed(key); return; }
+    const minOut = (quoted * (10_000n - BUYBACK_SLIPPAGE_BPS)) / 10_000n;
+    console.log(`buyback on ${coin}: ${ethers.formatEther(loaded)} ETH${st.aborted ? " to the dev (raise failed)" : `, ~${quoted / 10n ** 18n} coins to burn`}`);
+    if (await attempt(key, `fire ${coin}`, () => desk.fire(coin, minOut))) {
+      delete frenzy[k];
+      stats.buybacks++;
+    }
+  }
+
+  /** deskJobs, with a failure logged instead of stopping the coin. */
+  async function tryDeskJobs(coin, st, now) {
+    if (!desk) return;
+    try {
+      await deskJobs(coin, st, now);
+    } catch (e) {
+      if (e instanceof SpendCap) throw e;
+      console.log(`desk jobs failed for ${coin}: ${String(e?.shortMessage ?? e?.message ?? e).slice(0, 120)}`);
+    }
+  }
+
   function holdersOf(coin) {
     const balances = Object.entries(coinIndex(coin).bal);
     const system = new Set(
       // The order book and payout router only hold coins in passing; pushing
       // rewards to them would strand WETH they have no way to pass on.
       [ZERO, DEAD, dep.contracts.poolManager, dep.contracts.factory, dep.contracts.router, dep.contracts.hook, coin,
-        dep.contracts.limitOrders ?? ZERO, dep.contracts.payouts ?? ZERO]
+        dep.contracts.limitOrders ?? ZERO, dep.contracts.payouts ?? ZERO, dep.contracts.curveDesk ?? ZERO]
         .map((a) => a.toLowerCase()),
     );
     return balances
@@ -515,11 +608,28 @@ export async function runOps({ cfg, dep, depPath, memory = {}, tokenSource = nul
     const accrued = BigInt(index.meta.accrued), withdrawn = BigInt(index.meta.withdrawn);
     const owed = escrow + (accrued - withdrawn);
     const balance = await provider.getBalance(dep.contracts.factory, head);
-    const ok = balance >= owed;
+    let ok = balance >= owed;
     if (!ok) {
       console.error(`CRITICAL factory insolvent: holds ${ethers.formatEther(balance)} ETH, owes ${ethers.formatEther(owed)} (escrow ${ethers.formatEther(escrow)}, fees ${ethers.formatEther(accrued - withdrawn)})`);
     }
-    return { ok, balanceWei: balance.toString(), owedWei: owed.toString(), escrowWei: escrow.toString(), feesOwedWei: (accrued - withdrawn).toString() };
+    const out = { ok, balanceWei: balance.toString(), owedWei: owed.toString(), escrowWei: escrow.toString(), feesOwedWei: (accrued - withdrawn).toString() };
+    if (desk) {
+      // The desk holds every coin's pot, jackpot and buyback in WETH (curve
+      // fees and taxes never sit in the factory); its WETH must cover them.
+      let held = 0n;
+      for (const coin of coins) {
+        const [p, j, b] = await Promise.all([desk.potOf(coin, { blockTag: head }), desk.jackpotOf(coin, { blockTag: head }), desk.buybackOf(coin, { blockTag: head })]);
+        held += p.eth + j.eth + b;
+      }
+      const weth = new ethers.Contract(await desk.weth(), TOKEN_ABI, provider);
+      const deskBalance = await weth.balanceOf(dep.contracts.curveDesk, { blockTag: head });
+      if (deskBalance < held) {
+        ok = false;
+        console.error(`CRITICAL curve desk short: holds ${ethers.formatEther(deskBalance)} WETH, owes ${ethers.formatEther(held)}`);
+      }
+      Object.assign(out, { ok, deskBalanceWei: deskBalance.toString(), deskOwedWei: held.toString() });
+    }
+    return out;
   }
 
   async function processCoin(coin, now, minDeliver) {
@@ -542,12 +652,17 @@ export async function runOps({ cfg, dep, depPath, memory = {}, tokenSource = nul
           if (!(await attempt(`abort:${coin}`, `abort ${coin}`, () => factory.abort(coin)))) return;
           stats.aborted++;
           if (!DRY_RUN) await pushRefunds(coin, minDeliver);
+        } else if (desk) {
+          // A desk pays dividends from the first curve trade.
+          await tryDeskJobs(coin, st, now);
+          await deliverDividends(coin, minDeliver);
         }
-        return; // dividends only exist after graduation
+        return; // without a desk, dividends only exist after graduation
       }
       if (!st.finalized) {
         // Aborted: refunds go out until the escrow is swept.
         if (!(await factory.terms(coin)).swept) await pushRefunds(coin, minDeliver);
+        await tryDeskJobs(coin, st, now);
         return;
       }
 
@@ -566,6 +681,14 @@ export async function runOps({ cfg, dep, depPath, memory = {}, tokenSource = nul
         console.log(`recenter check failed for ${coin}: ${String(e?.message ?? e).slice(0, 120)}`);
       }
 
+      await tryDeskJobs(coin, st, now);
+      await deliverDividends(coin, minDeliver);
+    }
+  }
+
+  /** Push every holder's dividends that beat the gas to push them. */
+  async function deliverDividends(coin, minDeliver) {
+    {
       const token = new ethers.Contract(coin, TOKEN_ABI, wallet);
       const holders = holdersOf(coin);
       const due = [];
@@ -607,6 +730,7 @@ export async function runOps({ cfg, dep, depPath, memory = {}, tokenSource = nul
   try {
     return await main();
   } finally {
+    if (memory.frenzy) memory.frenzy = frenzy;
     for (const p of [provider, ...backupProviders]) p.destroy();
   }
 }

@@ -14,3 +14,9 @@ RPC_URL = "https://robinhood.daybreak-rpc.network,https://rpc.mainnet.chain.robi
 # (dRPC's free plan allows 10,000; Daybreak 2,000; Robinhood's own has no cap
 # but throttles Cloudflare).
 LOG_RPC = "https://robinhood.drpc.org|10000,https://robinhood.daybreak-rpc.network|2000,https://rpc.mainnet.chain.robinhood.com|100000"
+# The second DoublePlus system (curve desk), once deployed: its factory, curve
+# desk and start block from contracts/deployments/venture-robinhood.json.
+# Empty = only the v1 system above is indexed.
+V2_FACTORY = ""
+V2_CURVE_DESK = ""
+V2_START_BLOCK = ""
