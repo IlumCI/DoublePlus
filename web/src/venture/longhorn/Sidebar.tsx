@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 
 import { env } from "../../lib/env";
 import type { Venture } from "../client";
+import { HOUSE, useHouseCoin } from "../house";
 import { fmtEth, pct, useTick } from "../ui";
 import { useVolume24 } from "../volume24";
 
@@ -40,19 +41,28 @@ export function Sidebar({ ventures }: { ventures: Venture[] | null }) {
   const now = useTick();
   const volume24 = useVolume24();
   const live = (ventures ?? []).filter((v) => v.phase === "raising");
-  const hot = [...live].sort((a, b) => pct(b.raisedWei, b.targetRaiseWei) - pct(a.raisedWei, a.targetRaiseWei)).slice(0, 4);
+  const hot = [...live].sort((a, b) => pct(b.raisedWei, b.targetRaiseWei) - pct(a.raisedWei, a.targetRaiseWei)).slice(0, 3);
+  const house = useHouseCoin();
+  const houseFilling = house !== null && !house.listed;
 
   return (
     <aside className="lh-sidebar" aria-label="Market sidebar">
       <Tile title="Market">
         <div className="lh-kv"><span>24h volume</span><b>{volume24 === null ? "—" : `${fmtEth(volume24, 3)} ETH`}</b></div>
-        <div className="lh-kv"><span>Filling</span><b>{ventures ? live.length : "—"}</b></div>
-        <div className="lh-kv"><span>Trading</span><b>{ventures ? ventures.filter((v) => v.phase === "graduated").length : "—"}</b></div>
+        <div className="lh-kv"><span>Filling</span><b>{ventures ? live.length + (houseFilling ? 1 : 0) : "—"}</b></div>
+        <div className="lh-kv"><span>Trading</span><b>{ventures ? ventures.filter((v) => v.phase === "graduated").length + (house?.listed ? 1 : 0) : "—"}</b></div>
         <div className="lh-sub"><i className="lh-dot" /> {env.chainName}</div>
       </Tile>
 
       <Tile title="Closest to graduating" to="/?sort=progress">
-        {hot.length === 0 && <div className="lh-sub">{ventures ? "Nothing is filling right now." : "Loading…"}</div>}
+        {houseFilling && (
+          <a className="lh-row" href={HOUSE.url} target="_blank" rel="noopener">
+            <span className="lh-sym">${HOUSE.symbol}</span>
+            <span className="lh-num">{house.progressPct < 1 ? house.progressPct.toFixed(2) : house.progressPct.toFixed(0)}%</span>
+            <span className="lh-meter"><i style={{ width: `${Math.min(100, house.progressPct)}%` }} /></span>
+          </a>
+        )}
+        {hot.length === 0 && !houseFilling && <div className="lh-sub">{ventures ? "Nothing is filling right now." : "Loading…"}</div>}
         {hot.map((v) => {
           const p = pct(v.raisedWei, v.targetRaiseWei);
           return (

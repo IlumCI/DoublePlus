@@ -3,13 +3,14 @@ import { Link, useSearchParams } from "react-router-dom";
 
 import { type Venture } from "./client";
 import { usePageMeta } from "./seo";
-import { ago, CardSkeletons, fmtEth, fmtMcap, Monogram, pct, short, useEthUsd } from "./ui";
+import { ago, CardSkeletons, fmtEth, fmtMcap, fmtUsdV, Monogram, pct, short, useEthUsd } from "./ui";
 import { useUi } from "../store";
 import { useVentures } from "./useVentures";
 import { useLiveFeed, type FeedItem } from "./feed";
 import { useCurveStats, type CurveStats } from "./boardStats";
 import { chainNowSecs } from "./clock";
 import { useBoosts, type LiveBoost } from "./boosts";
+import { HOUSE, useHouseCoin } from "./house";
 
 type Filter = "all" | "raising" | "soon" | "graduated";
 type Col = "age" | "mcap" | "progress" | "bought" | "buyers";
@@ -79,6 +80,9 @@ export function Board() {
     }
     return list;
   }, [ventures, filter, col, asc, q, bought1h, curve, boosts]);
+  const needle = q.trim().toLowerCase();
+  const showHouse = (filter === "all" || filter === "raising") &&
+    (!needle || HOUSE.name.toLowerCase().includes(needle) || HOUSE.symbol.toLowerCase().includes(needle) || HOUSE.token.includes(needle));
 
   const Th = ({ c, children, num }: { c?: Col; children: React.ReactNode; num?: boolean }) => (
     <span role="columnheader" className={`${num ? "n" : ""}${c === col ? " on" : ""}`}
@@ -116,7 +120,7 @@ export function Board() {
         </div>
       ) : ventures === null ? (
         <CardSkeletons />
-      ) : shown.length === 0 ? (
+      ) : shown.length === 0 && !showHouse ? (
         <EmptyBoard any={ventures.length > 0} onClear={() => setParams(new URLSearchParams(), { replace: true })} />
       ) : (
         <div className="lh-list" role="table" aria-label="Coins">
@@ -130,6 +134,7 @@ export function Board() {
             <Th num>Dev</Th>
             <Th c="age" num>Age</Th>
           </div>
+          {showHouse && <HouseRow ethUsd={ethUsd} />}
           {shown.map((v) => (
             <Row key={v.address} v={v} ethUsd={ethUsd} bought={bought1h.get(v.address.toLowerCase()) ?? 0n} stats={curve.get(v.address.toLowerCase())} boost={boosts.get(v.address.toLowerCase())} />
           ))}
@@ -226,6 +231,37 @@ function Row({ v, ethUsd, bought, stats: curveStats, boost }: { v: Venture; ethU
       </span>
       <span role="cell" className="n">{ago(v.createdAt)}</span>
     </Link>
+  );
+}
+
+/** $DOUBLEPLUS lives on Flap: same row, opening its Flap page. */
+function HouseRow({ ethUsd }: { ethUsd: number }) {
+  const h = useHouseCoin();
+  return (
+    <a role="row" className="lh-drow" href={HOUSE.url} target="_blank" rel="noopener">
+      <span role="cell" className="lh-dname">
+        <span className="dp-monogram" style={{ padding: 0, overflow: "hidden", background: "var(--panel-2)" }}>
+          <img src={HOUSE.logo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+        </span>
+        <span>
+          <b>{HOUSE.name}</b>
+          <small>${HOUSE.symbol} · on Flap</small>
+        </span>
+      </span>
+      <span role="cell" className="lh-dstage">
+        {h?.listed ? <span className="lh-st lh-st-trade">Trading</span>
+          : h ? <>
+              <span className="lh-dmeter"><i style={{ width: `${Math.min(100, h.progressPct)}%` }} /></span>
+              <span className="lh-st">{h.progressPct < 1 ? h.progressPct.toFixed(2) : h.progressPct.toFixed(0)}%</span>
+            </> : null}
+      </span>
+      <span role="cell" className="n">{h ? (ethUsd > 0 ? fmtUsdV(h.mcapEth * ethUsd) : `${h.mcapEth.toFixed(3)} ETH`) : ""}</span>
+      <span role="cell" className="n" />
+      <span role="cell" className="n" />
+      <span role="cell" className="n" />
+      <span role="cell" className="n" />
+      <span role="cell" className="n">{ago(HOUSE.createdAt)}</span>
+    </a>
   );
 }
 

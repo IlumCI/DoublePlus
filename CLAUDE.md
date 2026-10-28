@@ -52,7 +52,7 @@ Main addresses:
 
 `setParams` as set: creation fee 0.0003 ETH, graduation 1.8 ETH (lowered from 4 on 2026-10-25, tx `0x281834c3…a35320`), sweep 365 days, creator curve share 20%. Change them with the local page `contracts/admin/set-params.html` (serve it with `python3 -m http.server 8790` from `contracts/admin/`, pick the admin wallet, send).
 
-Coins so far: **$DOUBLEPLUS** `0xc44cFd968A38C6B16A8Be4677bbB87d0eBB42add`, an open curve. The only backer is the user, so it isn't expected to graduate on its own.
+**$DOUBLEPLUS** was relaunched on Flap (2026-10-28): `0xc40f1686f7252a372ea98164dd750897f83c7777`, Flap Portal `0x26605f322f7fF986f381bB9A6e3f5DAb0bEaEb09`, page https://flap.sh/robinhood/0xc40f1686f7252a372ea98164dd750897f83c7777. The board and sidebar pin it and link out to Flap (`web/src/venture/house.ts`). The first launch, `0xc44cFd968A38C6B16A8Be4677bbB87d0eBB42add` (v1 open curve, only the user backed it), is off every list but its page still opens by address.
 
 ## Two systems (v1 live, v2 ready)
 
