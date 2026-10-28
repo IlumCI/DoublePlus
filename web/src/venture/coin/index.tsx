@@ -15,12 +15,18 @@ import { CurvePanel } from "./CurvePanel";
 import { AddToWallet, AlertToggle, BoostButton, CurveStatBar, Socials, StatBar, YourBag } from "./Header";
 import { RaisePanel } from "./RaisePanel";
 import { TradePanel } from "./TradePanel";
+import { HousePage } from "./HousePage";
+import { isHouse } from "../house";
 import { BackersPane, ContractCard, ProjectPane, TermsPane, UpdatesPane, VestingCard, WhoEarns } from "./panes";
 
 type Tab = "project" | "chat" | "updates" | "trades" | "backers" | "terms";
 
 export function VenturePage() {
   const { address } = useParams<{ address: string }>();
+  return address && isHouse(address) ? <HousePage /> : <CoinPage address={address} />;
+}
+
+function CoinPage({ address }: { address?: string }) {
   const [v, setV] = useState<VentureT | null>(null);
   const [fills, setFills] = useState<Fill[]>([]);
   // "missing": not an address, or not a coin from this factory. "down": the

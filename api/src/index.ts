@@ -32,6 +32,8 @@ export interface Env {
   SESSION_SECRET: string;
   RPC_URL: string;
   FACTORY: string;
+  /** Coins launched elsewhere that get a chat anyway, as `token=creator` pairs, comma-separated. */
+  EXTRA_COINS?: string;
   ALLOWED_ORIGINS: string;
   GUARD: KVNamespace;
   RL_READ: RateLimiter;
@@ -196,7 +198,8 @@ async function post(env: Env, c: Ctx, h: Record<string, string>) {
     pc.readContract({ address: token, abi: ERC20_ABI, functionName: "balanceOf", args: [author] }).catch(() => 0n),
   ]).catch(() => [null, 0n] as const);
   if (!listings) return json({ error: "chain unavailable, try again" }, 502, h);
-  const creator = (listings.find((l) => l[0] !== zeroAddress) ?? listings[0])[0].toLowerCase();
+  const extra = new Map((env.EXTRA_COINS ?? "").split(",").map((p) => p.trim().toLowerCase().split("=") as [string, string]).filter(([t, c]) => isAddr(t) && isAddr(c)));
+  const creator = extra.get(token) ?? (listings.find((l) => l[0] !== zeroAddress) ?? listings[0])[0].toLowerCase();
   if (creator === zeroAddress) return json({ error: "not a doubleplus coin" }, 404, h);
   const isDev = creator === author;
   const holder = balance > 0n;

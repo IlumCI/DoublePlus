@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 import { loadVentures, venturePc, type Venture } from "./client";
 import { syncChainClock } from "./clock";
-import { HOUSE } from "./house";
+import { HOUSE, loadHouseVenture } from "./house";
 
 /** One shared, polled copy of the board so the chrome, the activity strip and
  *  every page read the same list instead of each hitting the RPC on its own.
@@ -17,10 +17,13 @@ function emit() { subs.forEach((f) => f()); }
 
 function refreshVentures(): Promise<void> {
   if (inflight) return inflight;
-  inflight = Promise.all([loadVentures(), venturePc.getBlock().then((b) => syncChainClock(Number(b.timestamp))).catch(() => undefined)])
-    // The first $DOUBLEPLUS stays reachable by its address (and in portfolios) but
-    // is off every list: the coin now lives on Flap (house.ts).
-    .then(([v]) => { cache = v.filter((x) => x.address.toLowerCase() !== HOUSE.replaces); lastError = null; })
+  inflight = Promise.all([loadVentures(), loadHouseVenture().catch(() => null), venturePc.getBlock().then((b) => syncChainClock(Number(b.timestamp))).catch(() => undefined)])
+    // $DOUBLEPLUS lives on Flap now (house.ts): the relaunch joins the list
+    // and the first launch leaves it, though its page still opens by address.
+    .then(([v, house]) => {
+      cache = [...(house ? [house] : []), ...v.filter((x) => x.address.toLowerCase() !== HOUSE.replaces)];
+      lastError = null;
+    })
     .catch((e: unknown) => { lastError = e instanceof Error ? e.message : String(e); })
     .finally(() => { inflight = null; emit(); });
   return inflight;

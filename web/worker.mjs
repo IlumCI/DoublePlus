@@ -14,6 +14,10 @@ const SITE = "https://doubleplus.fun";
 // Daybreak first: Robinhood's own RPC throttles Cloudflare's shared egress.
 const RPCS = ["https://robinhood.daybreak-rpc.network", "https://rpc.mainnet.chain.robinhood.com"];
 const FACTORY = dep.contracts.factory;
+// $DOUBLEPLUS, relaunched on Flap (src/venture/house.ts): it keeps the first
+// launch's pitch, and the first launch leaves the sitemap.
+const HOUSE = "0xc40f1686f7252a372ea98164dd750897f83c7777";
+const HOUSE_FIRST = "0xc44cfd968a38c6b16a8be4677bbb87d0ebb42add";
 const PAGE_TTL = 300; // coin previews: a name never changes, a logo never does
 const MAP_TTL = 3600;
 
@@ -36,6 +40,10 @@ const client = () => createPublicClient({
  *  sets a target, and the factory holds none for a token it never launched),
  *  so a page can't dress an arbitrary contract up as a DoublePlus coin. */
 async function readCoin(address) {
+  if (address.toLowerCase() === HOUSE) {
+    const first = await readCoin(HOUSE_FIRST).catch(() => null);
+    return { name: "DoublePlusFun", symbol: "DOUBLEPLUS", pitch: first?.pitch ?? "", logo: `${SITE}/doubleplus-logo.png` };
+  }
   const pc = client();
   const st = await pc.readContract({ address: FACTORY, abi: factoryAbi, functionName: "curveState", args: [address] }).catch(() => null);
   if (!st || st[5] === 0n) return null;
@@ -119,7 +127,8 @@ async function sitemap() {
     const ids = Array.from({ length: Math.min(50, total - i) }, (_, k) => BigInt(i + k));
     coins.push(...await Promise.all(ids.map((n) => pc.readContract({ address: FACTORY, abi: factoryAbi, functionName: "allTokens", args: [n] }))));
   }
-  const paths = ["/", "/launch", "/docs", "/stats", "/stocks", "/rewards", ...coins.reverse().map((c) => `/venture/${c}`)];
+  const paths = ["/", "/launch", "/docs", "/stats", "/stocks", "/rewards", `/venture/${HOUSE}`,
+    ...coins.reverse().filter((c) => c.toLowerCase() !== HOUSE_FIRST).map((c) => `/venture/${c}`)];
   const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
     paths.map((p) => `  <url><loc>${SITE}${p}</loc></url>`).join("\n") + `\n</urlset>\n`;
   return new Response(xml, { headers: { "content-type": "application/xml; charset=utf-8", "cache-control": `public, max-age=${MAP_TTL}` } });
